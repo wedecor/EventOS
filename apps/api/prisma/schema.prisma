@@ -1,0 +1,300 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Platform (seed only — auth wiring added in Sprint 1 application layer)
+// ---------------------------------------------------------------------------
+
+model Tenant {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  users      User[]
+  customers  Customer[]
+  leads      Lead[]
+  quotations Quotation[]
+  events     Event[]
+
+  @@map("tenants")
+}
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  email        String
+  name         String
+  role         String   @default("admin")
+  passwordHash String?  @map("password_hash")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  version      Int      @default(1)
+
+  tenant              Tenant              @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  assignedLeads       Lead[]              @relation("LeadAssignee")
+  leadStageChanges    LeadStageHistory[]  @relation("LeadStageChangedBy")
+  executionOwnedEvents Event[]             @relation("EventExecutionOwner")
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+  @@map("users")
+}
+
+// ---------------------------------------------------------------------------
+// Sprint 1 — W5 Lead → Booking
+// ---------------------------------------------------------------------------
+
+enum CustomerStatus {
+  active
+  inactive
+  blocked
+
+  @@map("customer_status")
+}
+
+enum CustomerType {
+  individual
+  organization
+
+  @@map("customer_type")
+}
+
+enum LeadSource {
+  website
+  instagram
+  whatsapp
+  referral
+  walk_in
+  phone
+  manual
+  other
+
+  @@map("lead_source")
+}
+
+enum LeadStage {
+  new
+  in_talks
+  approved
+  completed
+  lost
+  cancelled
+
+  @@map("lead_stage")
+}
+
+enum FollowUpStatus {
+  pending
+  done
+  cancelled
+
+  @@map("follow_up_status")
+}
+
+enum QuotationStatus {
+  draft
+  sent
+  approved
+  rejected
+  expired
+  superseded
+
+  @@map("quotation_status")
+}
+
+enum EventStatus {
+  approved
+  in_preparation
+  in_execution
+  completed
+  cancelled
+
+  @@map("event_status")
+}
+
+enum PreparationStatus {
+  pending
+  ready
+  needs_attention
+
+  @@map("preparation_status")
+}
+
+model Customer {
+  id           String         @id @default(uuid()) @db.Uuid
+  tenantId     String         @map("tenant_id") @db.Uuid
+  displayName  String         @map("display_name")
+  type         CustomerType   @default(individual)
+  status       CustomerStatus @default(active)
+  primaryPhone String?        @map("primary_phone")
+  primaryEmail String?        @map("primary_email")
+  notes        String?
+  createdAt    DateTime       @default(now()) @map("created_at")
+  updatedAt    DateTime       @updatedAt @map("updated_at")
+  version      Int            @default(1)
+
+  tenant     Tenant      @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  leads      Lead[]
+  quotations Quotation[]
+  events     Event[]
+
+  @@unique([tenantId, displayName])
+  @@index([tenantId, status])
+  @@map("customers")
+}
+
+model Lead {
+  id                      String     @id @default(uuid()) @db.Uuid
+  tenantId                String     @map("tenant_id") @db.Uuid
+  customerId              String?    @map("customer_id") @db.Uuid
+  assignedToId            String?    @map("assigned_to_id") @db.Uuid
+  source                  LeadSource
+  sourceDetail            String?    @map("source_detail")
+  stage                   LeadStage  @default(new)
+  lostReason              String?    @map("lost_reason")
+  eventType               String?    @map("event_type")
+  eventStartDate          DateTime?  @map("event_start_date") @db.Date
+  eventEndDate            DateTime?  @map("event_end_date") @db.Date
+  venue                   String?
+  estimatedBudgetAmount   Decimal?   @map("estimated_budget_amount") @db.Decimal(12, 2)
+  estimatedBudgetCurrency String     @default("INR") @map("estimated_budget_currency")
+  guestCount              Int?       @map("guest_count")
+  notes                   String?
+  createdAt               DateTime   @default(now()) @map("created_at")
+  updatedAt               DateTime   @updatedAt @map("updated_at")
+  version                 Int        @default(1)
+
+  tenant        Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  customer      Customer?          @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  assignedTo    User?              @relation("LeadAssignee", fields: [assignedToId], references: [id], onDelete: Restrict)
+  event         Event?
+  followUps     FollowUp[]
+  stageHistory  LeadStageHistory[]
+  quotations    Quotation[]
+
+  @@index([tenantId, stage])
+  @@index([tenantId, assignedToId])
+  @@index([tenantId, source])
+  @@index([tenantId, customerId])
+  @@map("leads")
+}
+
+model LeadStageHistory {
+  id          String     @id @default(uuid()) @db.Uuid
+  tenantId    String     @map("tenant_id") @db.Uuid
+  leadId      String     @map("lead_id") @db.Uuid
+  fromStage   LeadStage? @map("from_stage")
+  toStage     LeadStage  @map("to_stage")
+  reason      String?
+  changedById String?    @map("changed_by_id") @db.Uuid
+  changedAt   DateTime   @default(now()) @map("changed_at")
+  createdAt   DateTime   @default(now()) @map("created_at")
+
+  lead      Lead  @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  changedBy User? @relation("LeadStageChangedBy", fields: [changedById], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, leadId])
+  @@index([leadId, changedAt])
+  @@map("lead_stage_history")
+}
+
+model FollowUp {
+  id        String         @id @default(uuid()) @db.Uuid
+  tenantId  String         @map("tenant_id") @db.Uuid
+  leadId    String         @map("lead_id") @db.Uuid
+  dueAt     DateTime       @map("due_at")
+  notes     String?
+  status    FollowUpStatus @default(pending)
+  createdAt DateTime       @default(now()) @map("created_at")
+  updatedAt DateTime       @updatedAt @map("updated_at")
+  version   Int            @default(1)
+
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, leadId])
+  @@index([tenantId, status, dueAt])
+  @@map("follow_ups")
+}
+
+model Quotation {
+  id              String          @id @default(uuid()) @db.Uuid
+  tenantId        String          @map("tenant_id") @db.Uuid
+  customerId      String          @map("customer_id") @db.Uuid
+  leadId          String?         @map("lead_id") @db.Uuid
+  quotationNumber Int             @map("quotation_number")
+  revisionNumber  Int             @default(1) @map("revision_number")
+  status          QuotationStatus @default(draft)
+  eventType       String?         @map("event_type")
+  eventStartDate  DateTime?       @map("event_start_date") @db.Date
+  eventEndDate    DateTime?       @map("event_end_date") @db.Date
+  venue           String?
+  validUntil      DateTime?       @map("valid_until") @db.Date
+  terms           String?
+  notes           String?
+  subtotalAmount  Decimal         @default(0) @map("subtotal_amount") @db.Decimal(12, 2)
+  discountAmount  Decimal         @default(0) @map("discount_amount") @db.Decimal(12, 2)
+  taxAmount       Decimal         @default(0) @map("tax_amount") @db.Decimal(12, 2)
+  totalAmount     Decimal         @default(0) @map("total_amount") @db.Decimal(12, 2)
+  currency        String          @default("INR")
+  supersededById  String?         @unique @map("superseded_by_id") @db.Uuid
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+  version         Int             @default(1)
+
+  tenant     Tenant    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  customer   Customer  @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  lead       Lead?     @relation(fields: [leadId], references: [id], onDelete: Restrict)
+  event      Event?
+  superseded Quotation? @relation("QuotationRevision", fields: [supersededById], references: [id], onDelete: SetNull)
+  supersedes Quotation? @relation("QuotationRevision")
+
+  @@unique([tenantId, quotationNumber, revisionNumber])
+  @@index([tenantId, status])
+  @@index([tenantId, customerId])
+  @@index([tenantId, leadId])
+  @@map("quotations")
+}
+
+/// Unified event record (Booking module). Maps to domain aggregate "Event".
+model Event {
+  id                  String            @id @default(uuid()) @db.Uuid
+  tenantId            String            @map("tenant_id") @db.Uuid
+  customerId          String            @map("customer_id") @db.Uuid
+  leadId              String?           @unique @map("lead_id") @db.Uuid
+  quotationId         String            @unique @map("quotation_id") @db.Uuid
+  bookingNumber       Int               @map("booking_number")
+  status              EventStatus       @default(approved)
+  eventType           String?           @map("event_type")
+  eventStartDate      DateTime?         @map("event_start_date") @db.Date
+  eventEndDate        DateTime?         @map("event_end_date") @db.Date
+  venueName           String?           @map("venue_name")
+  guestCount          Int?              @map("guest_count")
+  requirementsNotes   String?           @map("requirements_notes")
+  preparationStatus   PreparationStatus @default(pending) @map("preparation_status")
+  operationalMilestone String?          @map("operational_milestone")
+  executionOwnerId    String?           @map("execution_owner_id") @db.Uuid
+  cancellationReason  String?           @map("cancellation_reason")
+  completedAt         DateTime?         @map("completed_at")
+  createdAt           DateTime          @default(now()) @map("created_at")
+  updatedAt           DateTime          @updatedAt @map("updated_at")
+  version             Int               @default(1)
+
+  tenant         Tenant    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  customer       Customer  @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  quotation      Quotation @relation(fields: [quotationId], references: [id], onDelete: Restrict)
+  lead           Lead?     @relation(fields: [leadId], references: [id], onDelete: Restrict)
+  executionOwner User?     @relation("EventExecutionOwner", fields: [executionOwnerId], references: [id], onDelete: SetNull)
+
+  @@unique([tenantId, bookingNumber])
+  @@index([tenantId, status, eventStartDate])
+  @@index([tenantId, executionOwnerId])
+  @@index([tenantId, customerId])
+  @@map("events")
+}

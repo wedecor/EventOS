@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+
+# Environment (never commit secrets)
+.env
+.env.local
+.env.*.local
+
+# Build and test output
+dist/
+coverage/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Prisma
+**/node_modules/.prisma/
+
+# Local reference clones (separate git repos — not vendored in EventOS)
+current-systems/lead-management-app/
+current-systems/quotation-billing-app/
+current-systems/wedecor-website/
+reference-systems/autoparts-erp-django/
+reference-systems/crm-system/
+reference-systems/inventory-system/

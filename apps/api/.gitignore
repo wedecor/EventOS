@@ -1,0 +1,11 @@
+node_modules
+# Keep environment variables out of version control
+.env
+.env.local
+
+# Prisma generated client (Prisma 7 with prisma-client-js)
+/node_modules/.prisma
+
+# Build output
+/dist
+/coverage
