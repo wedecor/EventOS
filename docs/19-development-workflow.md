@@ -12,8 +12,8 @@ This document defines the day-to-day engineering workflow for Event OS: environm
 
 | Tool | Version | Purpose |
 |------|---------|---------|
-| Node.js | 20 LTS | Runtime |
-| pnpm | 8+ | Package manager |
+| Node.js | 22 LTS | Runtime |
+| pnpm | 10.13+ | Package manager |
 | Docker | Latest | Local PostgreSQL and Redis |
 | Git | Latest | Version control |
 | VS Code or Cursor | Latest | IDE |

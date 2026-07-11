@@ -9,18 +9,28 @@ import { DomainEventPublisher } from '../../../../shared/events/domain-event.bas
 import {
   QuotationApprovedEvent,
   QuotationCreatedEvent,
+  QuotationRejectedEvent,
+  QuotationSentEvent,
   QuotationSupersededEvent,
 } from '../../../../shared/events/sprint1-domain.events';
 import {
   QuotationRepository,
   type CreateQuotationData,
 } from '../../domain/repositories/quotation.repository';
+import { QuotationLineItemRepository } from '../../domain/repositories/quotation-line-item.repository';
 import { toQuotationDto, type QuotationDto } from '../dtos/quotation.dto';
 
 export type CreateQuotationInput = Omit<
   CreateQuotationData,
   'quotationNumber' | 'revisionNumber' | 'status'
 >;
+
+export type UpdateQuotationInput = {
+  validUntil?: Date;
+  notes?: string;
+  discountAmount?: number;
+  taxAmount?: number;
+};
 
 const REVISIONABLE_STATUSES = new Set([
   'draft',
@@ -34,6 +44,7 @@ const REVISIONABLE_STATUSES = new Set([
 export class QuotationApplicationService {
   constructor(
     private readonly quotationRepository: QuotationRepository,
+    private readonly lineItemRepository: QuotationLineItemRepository,
     private readonly eventPublisher: DomainEventPublisher,
   ) {}
 
@@ -62,6 +73,67 @@ export class QuotationApplicationService {
     this.eventPublisher.publish(new QuotationCreatedEvent(tenantId, quotation));
 
     return success(toQuotationDto(quotation));
+  }
+
+  async getQuotationById(
+    tenantId: string,
+    quotationId: string,
+  ): Promise<Result<QuotationDto>> {
+    const quotation = await this.quotationRepository.findById(
+      tenantId,
+      quotationId,
+    );
+    if (!quotation) {
+      return failure('NOT_FOUND', 'Quotation not found.');
+    }
+
+    return success(toQuotationDto(quotation));
+  }
+
+  async updateQuotation(
+    tenantId: string,
+    quotationId: string,
+    input: UpdateQuotationInput,
+    version: number,
+  ): Promise<Result<QuotationDto>> {
+    const existing = await this.quotationRepository.findById(
+      tenantId,
+      quotationId,
+    );
+    if (!existing) {
+      return failure('NOT_FOUND', 'Quotation not found.');
+    }
+
+    if (existing.status !== 'draft') {
+      return failure('INVALID_STATE', 'Only draft quotations can be updated.', {
+        status: existing.status,
+      });
+    }
+
+    try {
+      const quotation = await this.quotationRepository.update(
+        tenantId,
+        quotationId,
+        {
+          validUntil: input.validUntil,
+          notes: input.notes,
+          discountAmount: input.discountAmount,
+          taxAmount: input.taxAmount,
+        },
+        version,
+      );
+
+      return success(toQuotationDto(quotation));
+    } catch (error: unknown) {
+      if (error instanceof ConcurrentModificationError) {
+        return failure(
+          'CONCURRENT_MODIFICATION',
+          'Quotation was modified by another request. Reload and retry.',
+          { quotationId },
+        );
+      }
+      throw error;
+    }
   }
 
   async createNewRevision(
@@ -185,6 +257,112 @@ export class QuotationApplicationService {
 
       this.eventPublisher.publish(
         new QuotationApprovedEvent(tenantId, quotation),
+      );
+
+      return success(toQuotationDto(quotation));
+    } catch (error: unknown) {
+      if (error instanceof ConcurrentModificationError) {
+        return failure(
+          'CONCURRENT_MODIFICATION',
+          'Quotation was modified by another request. Reload and retry.',
+          { quotationId },
+        );
+      }
+      throw error;
+    }
+  }
+
+  async sendQuotation(
+    tenantId: string,
+    quotationId: string,
+    version: number,
+    _channel?: string,
+    _recipient?: string,
+  ): Promise<Result<QuotationDto>> {
+    const existing = await this.quotationRepository.findById(
+      tenantId,
+      quotationId,
+    );
+    if (!existing) {
+      return failure('NOT_FOUND', 'Quotation not found.');
+    }
+
+    if (existing.status !== 'draft') {
+      return failure('INVALID_STATE', 'Only draft quotations can be sent.', {
+        status: existing.status,
+      });
+    }
+
+    const lineItemCount = await this.lineItemRepository.countByQuotationId(
+      tenantId,
+      quotationId,
+    );
+    if (lineItemCount === 0) {
+      return failure(
+        'VALIDATION_ERROR',
+        'Quotation must have at least one line item before sending.',
+      );
+    }
+
+    if (existing.totalAmount <= 0) {
+      return failure(
+        'VALIDATION_ERROR',
+        'Quotation total must be greater than zero before sending.',
+      );
+    }
+
+    try {
+      const quotation = await this.quotationRepository.update(
+        tenantId,
+        quotationId,
+        { status: 'sent' },
+        version,
+      );
+
+      this.eventPublisher.publish(new QuotationSentEvent(tenantId, quotation));
+
+      return success(toQuotationDto(quotation));
+    } catch (error: unknown) {
+      if (error instanceof ConcurrentModificationError) {
+        return failure(
+          'CONCURRENT_MODIFICATION',
+          'Quotation was modified by another request. Reload and retry.',
+          { quotationId },
+        );
+      }
+      throw error;
+    }
+  }
+
+  async rejectQuotation(
+    tenantId: string,
+    quotationId: string,
+    version: number,
+  ): Promise<Result<QuotationDto>> {
+    const existing = await this.quotationRepository.findById(
+      tenantId,
+      quotationId,
+    );
+    if (!existing) {
+      return failure('NOT_FOUND', 'Quotation not found.');
+    }
+
+    if (existing.status !== 'sent') {
+      return failure('INVALID_STATE', 'Only sent quotations can be rejected.', {
+        status: existing.status,
+      });
+    }
+
+    try {
+      const quotation = await this.quotationRepository.update(
+        tenantId,
+        quotationId,
+        { status: 'rejected' },
+        version,
+      );
+
+      this.eventPublisher.publish(
+        new QuotationRejectedEvent(tenantId, quotation),
       );
 
       return success(toQuotationDto(quotation));

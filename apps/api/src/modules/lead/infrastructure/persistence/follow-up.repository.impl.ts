@@ -6,6 +6,7 @@ import type {
   CreateFollowUpData,
   FollowUpRecord,
   FollowUpRepository,
+  UpdateFollowUpData,
 } from '../../domain/repositories/follow-up.repository';
 
 @Injectable()
@@ -31,6 +32,39 @@ export class FollowUpRepositoryImpl
     });
 
     return this.mapFollowUp(followUp);
+  }
+
+  async findById(tenantId: string, id: string): Promise<FollowUpRecord | null> {
+    const followUp = await this.prisma.followUp.findFirst({
+      where: { id, tenantId },
+    });
+
+    return followUp ? this.mapFollowUp(followUp) : null;
+  }
+
+  async update(
+    tenantId: string,
+    id: string,
+    data: UpdateFollowUpData,
+    version: number,
+  ): Promise<FollowUpRecord> {
+    try {
+      const followUp = await this.prisma.followUp.update({
+        where: { id, tenantId, version },
+        data: {
+          status: data.status,
+          ...(data.dueAt !== undefined && data.dueAt !== null
+            ? { dueAt: data.dueAt }
+            : {}),
+          notes: data.notes,
+          version: { increment: 1 },
+        },
+      });
+
+      return this.mapFollowUp(followUp);
+    } catch (error: unknown) {
+      return this.toConcurrentModification('FollowUp', id, error);
+    }
   }
 
   private mapFollowUp(followUp: FollowUp): FollowUpRecord {

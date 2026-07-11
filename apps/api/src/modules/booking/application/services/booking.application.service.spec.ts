@@ -4,6 +4,7 @@ import {
   BookingStatusChangedEvent,
   EventCreatedEvent,
 } from '../../../../shared/events/sprint1-domain.events';
+import { BookingCancelledEvent } from '../../../../shared/events/sprint2-domain.events';
 import { AdvancePaymentQuery } from '../../../../shared/application/ports/advance-payment.query';
 import { BookingApplicationService } from './booking.application.service';
 import type {
@@ -60,6 +61,7 @@ describe('BookingApplicationService', () => {
     venueName: 'Bangalore',
     guestCount: 200,
     requirementsNotes: null,
+    workspaceStatus: 'inactive',
     preparationStatus: 'pending',
     operationalMilestone: null,
     executionOwnerId: null,
@@ -266,6 +268,146 @@ describe('BookingApplicationService', () => {
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.code).toBe('CONCURRENT_MODIFICATION');
+    }
+  });
+
+  // --- cancelBooking ---
+
+  it('rejects cancel when booking is not found', async () => {
+    eventRepository.findById.mockResolvedValue(null);
+
+    const result = await service.cancelBooking(tenantId, bookingId, {
+      reason: 'Changed plans',
+      version: 1,
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('NOT_FOUND');
+    }
+  });
+
+  it('rejects cancel when booking is already cancelled', async () => {
+    eventRepository.findById.mockResolvedValue({
+      ...baseEvent,
+      status: 'cancelled',
+    });
+
+    const result = await service.cancelBooking(tenantId, bookingId, {
+      reason: 'Changed plans',
+      version: 1,
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('INVALID_STATE');
+    }
+  });
+
+  it('rejects cancel when booking is already completed', async () => {
+    eventRepository.findById.mockResolvedValue({
+      ...baseEvent,
+      status: 'completed',
+    });
+
+    const result = await service.cancelBooking(tenantId, bookingId, {
+      reason: 'Changed plans',
+      version: 1,
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('INVALID_STATE');
+    }
+  });
+
+  it('cancels a booking and publishes BookingCancelledEvent', async () => {
+    eventRepository.findById.mockResolvedValue(baseEvent);
+    eventRepository.update.mockResolvedValue({
+      ...baseEvent,
+      status: 'cancelled',
+      cancellationReason: 'Changed plans',
+      workspaceStatus: 'archived',
+      version: 2,
+    });
+
+    const result = await service.cancelBooking(tenantId, bookingId, {
+      reason: 'Changed plans',
+      version: 1,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(publish).toHaveBeenCalledWith(expect.any(BookingCancelledEvent));
+    expect(eventRepository.update).toHaveBeenCalledWith(
+      tenantId,
+      bookingId,
+      expect.objectContaining({
+        status: 'cancelled',
+        cancellationReason: 'Changed plans',
+        workspaceStatus: 'archived',
+      }),
+      1,
+    );
+  });
+
+  it('maps concurrent modification failures on cancel', async () => {
+    eventRepository.findById.mockResolvedValue(baseEvent);
+    eventRepository.update.mockRejectedValue(
+      new ConcurrentModificationError('Event', bookingId),
+    );
+
+    const result = await service.cancelBooking(tenantId, bookingId, {
+      reason: 'Changed plans',
+      version: 1,
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('CONCURRENT_MODIFICATION');
+    }
+  });
+
+  // --- completeBooking ---
+
+  it('rejects complete when booking is not found', async () => {
+    eventRepository.findById.mockResolvedValue(null);
+
+    const result = await service.completeBooking(tenantId, bookingId, {
+      version: 1,
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('NOT_FOUND');
+    }
+  });
+
+  it('rejects complete when booking is not in_execution', async () => {
+    eventRepository.findById.mockResolvedValue(baseEvent);
+
+    const result = await service.completeBooking(tenantId, bookingId, {
+      version: 1,
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('INVALID_STATE');
+    }
+  });
+
+  it('returns EP1-BR-002 stub when completing an in-execution booking', async () => {
+    eventRepository.findById.mockResolvedValue({
+      ...baseEvent,
+      status: 'in_execution',
+    });
+
+    const result = await service.completeBooking(tenantId, bookingId, {
+      version: 1,
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('EP1-BR-002');
     }
   });
 });

@@ -4,6 +4,7 @@ import type { FollowUpRecord } from '../../modules/lead/domain/repositories/foll
 import type { CustomerRecord } from '../../modules/customer/domain/repositories/customer.repository';
 import type { QuotationRecord } from '../../modules/quotation/domain/repositories/quotation.repository';
 import type { EventRecord } from '../../modules/booking/domain/repositories/event.repository';
+import type { PaymentRecord } from '../../modules/payment/domain/repositories/payment.repository';
 
 export class LeadCreatedEvent extends DomainEvent {
   readonly eventName = 'LeadCreated';
@@ -114,6 +115,39 @@ export class BookingStatusChangedEvent extends DomainEvent {
     readonly tenantId: string,
     readonly event: EventRecord,
     readonly previousStatus: EventRecord['status'],
+  ) {
+    super();
+  }
+}
+
+export class PaymentRecordedEvent extends DomainEvent {
+  readonly eventName = 'PaymentRecorded';
+
+  constructor(
+    readonly tenantId: string,
+    readonly payment: PaymentRecord,
+  ) {
+    super();
+  }
+}
+
+export class QuotationSentEvent extends DomainEvent {
+  readonly eventName = 'QuotationSent';
+
+  constructor(
+    readonly tenantId: string,
+    readonly quotation: QuotationRecord,
+  ) {
+    super();
+  }
+}
+
+export class QuotationRejectedEvent extends DomainEvent {
+  readonly eventName = 'QuotationRejected';
+
+  constructor(
+    readonly tenantId: string,
+    readonly quotation: QuotationRecord,
   ) {
     super();
   }

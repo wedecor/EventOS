@@ -1,4 +1,8 @@
-import type { EventStatus, PreparationStatus } from '@prisma/client';
+import type {
+  EventStatus,
+  PreparationStatus,
+  WorkspaceStatus,
+} from '@prisma/client';
 
 export type EventRecord = {
   id: string;
@@ -14,6 +18,7 @@ export type EventRecord = {
   venueName: string | null;
   guestCount: number | null;
   requirementsNotes: string | null;
+  workspaceStatus: WorkspaceStatus;
   preparationStatus: PreparationStatus;
   operationalMilestone: string | null;
   executionOwnerId: string | null;
@@ -36,6 +41,7 @@ export type CreateEventData = {
   venueName?: string | null;
   guestCount?: number | null;
   requirementsNotes?: string | null;
+  workspaceStatus?: WorkspaceStatus;
   preparationStatus?: PreparationStatus;
   operationalMilestone?: string | null;
   executionOwnerId?: string | null;
@@ -49,6 +55,7 @@ export type UpdateEventData = {
   venueName?: string | null;
   guestCount?: number | null;
   requirementsNotes?: string | null;
+  workspaceStatus?: WorkspaceStatus;
   preparationStatus?: PreparationStatus;
   operationalMilestone?: string | null;
   executionOwnerId?: string | null;

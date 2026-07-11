@@ -11,11 +11,21 @@ import {
   BookingStatusChangedEvent,
   EventCreatedEvent,
 } from '../../../../shared/events/sprint1-domain.events';
+import { BookingCancelledEvent } from '../../../../shared/events/sprint2-domain.events';
 import { QuotationRepository } from '../../../quotation/domain/repositories/quotation.repository';
 import { EventRepository } from '../../domain/repositories/event.repository';
 import { toBookingDto, type BookingDto } from '../dtos/booking.dto';
 
 export type ActivateBookingInput = {
+  version: number;
+};
+
+export type CancelBookingInput = {
+  reason: string;
+  version: number;
+};
+
+export type CompleteBookingInput = {
   version: number;
 };
 
@@ -145,5 +155,77 @@ export class BookingApplicationService {
     }
 
     return success(toBookingDto(event));
+  }
+
+  async cancelBooking(
+    tenantId: string,
+    bookingId: string,
+    input: CancelBookingInput,
+  ): Promise<Result<BookingDto>> {
+    const existing = await this.eventRepository.findById(tenantId, bookingId);
+    if (!existing) {
+      return failure('NOT_FOUND', 'Booking not found.');
+    }
+
+    if (existing.status === 'cancelled' || existing.status === 'completed') {
+      return failure(
+        'INVALID_STATE',
+        'Cannot cancel a booking that is already cancelled or completed.',
+        { status: existing.status },
+      );
+    }
+
+    try {
+      const event = await this.eventRepository.update(
+        tenantId,
+        bookingId,
+        {
+          status: 'cancelled',
+          cancellationReason: input.reason,
+          workspaceStatus: 'archived',
+        },
+        input.version,
+      );
+
+      this.eventPublisher.publish(new BookingCancelledEvent(tenantId, event));
+
+      return success(toBookingDto(event));
+    } catch (error: unknown) {
+      if (error instanceof ConcurrentModificationError) {
+        return failure(
+          'CONCURRENT_MODIFICATION',
+          'Booking was modified by another request. Reload and retry.',
+          { bookingId },
+        );
+      }
+      throw error;
+    }
+  }
+
+  // EP1-BR-002: Financial review required before completion (stub — always fails until Finance module)
+  async completeBooking(
+    tenantId: string,
+    bookingId: string,
+    _input: CompleteBookingInput,
+  ): Promise<Result<BookingDto>> {
+    const existing = await this.eventRepository.findById(tenantId, bookingId);
+    if (!existing) {
+      return failure('NOT_FOUND', 'Booking not found.');
+    }
+
+    if (existing.status !== 'in_execution') {
+      return failure(
+        'INVALID_STATE',
+        'Only in-execution bookings can be completed.',
+        { status: existing.status },
+      );
+    }
+
+    // EP1-BR-002: Stub — financial review not yet available
+    return failure(
+      'EP1-BR-002',
+      'Financial review must be completed before marking an event as completed. Finance module not yet available.',
+      { bookingId },
+    );
   }
 }

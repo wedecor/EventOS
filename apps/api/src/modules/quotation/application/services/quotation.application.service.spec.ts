@@ -3,6 +3,8 @@ import { DomainEventPublisher } from '../../../../shared/events/domain-event.bas
 import {
   QuotationApprovedEvent,
   QuotationCreatedEvent,
+  QuotationRejectedEvent,
+  QuotationSentEvent,
   QuotationSupersededEvent,
 } from '../../../../shared/events/sprint1-domain.events';
 import { QuotationApplicationService } from './quotation.application.service';
@@ -10,6 +12,7 @@ import type {
   QuotationRecord,
   QuotationRepository,
 } from '../../domain/repositories/quotation.repository';
+import type { QuotationLineItemRepository } from '../../domain/repositories/quotation-line-item.repository';
 
 describe('QuotationApplicationService', () => {
   const tenantId = 'tenant-1';
@@ -42,6 +45,7 @@ describe('QuotationApplicationService', () => {
   };
 
   let quotationRepository: jest.Mocked<QuotationRepository>;
+  let lineItemRepository: jest.Mocked<QuotationLineItemRepository>;
   let eventPublisher: jest.Mocked<DomainEventPublisher>;
   let service: QuotationApplicationService;
 
@@ -58,12 +62,126 @@ describe('QuotationApplicationService', () => {
       findMaxQuotationNumber: jest.fn(),
       update: jest.fn(),
     };
+    lineItemRepository = {
+      create: jest.fn(),
+      findById: jest.fn(),
+      findByQuotationId: jest.fn(),
+      update: jest.fn(),
+      remove: jest.fn(),
+      countByQuotationId: jest.fn(),
+    };
     eventPublisher = { publish };
 
     service = new QuotationApplicationService(
       quotationRepository,
+      lineItemRepository,
       eventPublisher,
     );
+  });
+
+  it('returns not found when getting a missing quotation', async () => {
+    quotationRepository.findById.mockResolvedValue(null);
+
+    const result = await service.getQuotationById(tenantId, quotationId);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('NOT_FOUND');
+    }
+  });
+
+  it('retrieves a quotation by id', async () => {
+    quotationRepository.findById.mockResolvedValue(baseQuotation);
+
+    const result = await service.getQuotationById(tenantId, quotationId);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.id).toBe(quotationId);
+    }
+  });
+
+  // --- updateQuotation ---
+
+  it('rejects update when quotation is not found', async () => {
+    quotationRepository.findById.mockResolvedValue(null);
+
+    const result = await service.updateQuotation(
+      tenantId,
+      quotationId,
+      { notes: 'Updated notes' },
+      1,
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('NOT_FOUND');
+    }
+  });
+
+  it('rejects update when quotation is not draft', async () => {
+    quotationRepository.findById.mockResolvedValue({
+      ...baseQuotation,
+      status: 'sent',
+    });
+
+    const result = await service.updateQuotation(
+      tenantId,
+      quotationId,
+      { notes: 'Updated notes' },
+      1,
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('INVALID_STATE');
+    }
+  });
+
+  it('updates a draft quotation', async () => {
+    quotationRepository.findById.mockResolvedValue(baseQuotation);
+    quotationRepository.update.mockResolvedValue({
+      ...baseQuotation,
+      notes: 'Updated notes',
+      version: 2,
+    });
+
+    const result = await service.updateQuotation(
+      tenantId,
+      quotationId,
+      { notes: 'Updated notes' },
+      1,
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.notes).toBe('Updated notes');
+    }
+    expect(quotationRepository.update).toHaveBeenCalledWith(
+      tenantId,
+      quotationId,
+      expect.objectContaining({ notes: 'Updated notes' }),
+      1,
+    );
+  });
+
+  it('maps concurrent modification failures on update', async () => {
+    quotationRepository.findById.mockResolvedValue(baseQuotation);
+    quotationRepository.update.mockRejectedValue(
+      new ConcurrentModificationError('Quotation', quotationId),
+    );
+
+    const result = await service.updateQuotation(
+      tenantId,
+      quotationId,
+      { notes: 'Updated notes' },
+      1,
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('CONCURRENT_MODIFICATION');
+    }
   });
 
   it('rejects create when quotation dates are invalid', async () => {
@@ -248,6 +366,148 @@ describe('QuotationApplicationService', () => {
     );
 
     const result = await service.approveQuotation(tenantId, quotationId, 1);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('CONCURRENT_MODIFICATION');
+    }
+  });
+
+  // --- sendQuotation ---
+
+  it('rejects sending a quotation that is not found', async () => {
+    quotationRepository.findById.mockResolvedValue(null);
+
+    const result = await service.sendQuotation(tenantId, quotationId, 1);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('NOT_FOUND');
+    }
+  });
+
+  it('rejects sending a quotation not in draft status', async () => {
+    quotationRepository.findById.mockResolvedValue({
+      ...baseQuotation,
+      status: 'sent',
+    });
+
+    const result = await service.sendQuotation(tenantId, quotationId, 1);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('INVALID_STATE');
+    }
+  });
+
+  it('rejects sending a quotation with no line items', async () => {
+    quotationRepository.findById.mockResolvedValue(baseQuotation);
+    lineItemRepository.countByQuotationId.mockResolvedValue(0);
+
+    const result = await service.sendQuotation(tenantId, quotationId, 1);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('VALIDATION_ERROR');
+    }
+  });
+
+  it('rejects sending a quotation with zero total amount', async () => {
+    quotationRepository.findById.mockResolvedValue({
+      ...baseQuotation,
+      totalAmount: 0,
+    });
+    lineItemRepository.countByQuotationId.mockResolvedValue(3);
+
+    const result = await service.sendQuotation(tenantId, quotationId, 1);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('VALIDATION_ERROR');
+    }
+  });
+
+  it('sends a draft quotation and publishes QuotationSent', async () => {
+    quotationRepository.findById.mockResolvedValue(baseQuotation);
+    lineItemRepository.countByQuotationId.mockResolvedValue(3);
+    quotationRepository.update.mockResolvedValue({
+      ...baseQuotation,
+      status: 'sent',
+      version: 2,
+    });
+
+    const result = await service.sendQuotation(tenantId, quotationId, 1);
+
+    expect(result.ok).toBe(true);
+    expect(publish).toHaveBeenCalledWith(expect.any(QuotationSentEvent));
+  });
+
+  it('maps concurrent modification failures on send', async () => {
+    quotationRepository.findById.mockResolvedValue(baseQuotation);
+    lineItemRepository.countByQuotationId.mockResolvedValue(3);
+    quotationRepository.update.mockRejectedValue(
+      new ConcurrentModificationError('Quotation', quotationId),
+    );
+
+    const result = await service.sendQuotation(tenantId, quotationId, 1);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('CONCURRENT_MODIFICATION');
+    }
+  });
+
+  // --- rejectQuotation ---
+
+  it('rejects rejecting a quotation that is not found', async () => {
+    quotationRepository.findById.mockResolvedValue(null);
+
+    const result = await service.rejectQuotation(tenantId, quotationId, 1);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('NOT_FOUND');
+    }
+  });
+
+  it('rejects rejecting a quotation not in sent status', async () => {
+    quotationRepository.findById.mockResolvedValue(baseQuotation);
+
+    const result = await service.rejectQuotation(tenantId, quotationId, 1);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('INVALID_STATE');
+    }
+  });
+
+  it('rejects a sent quotation and publishes QuotationRejected', async () => {
+    quotationRepository.findById.mockResolvedValue({
+      ...baseQuotation,
+      status: 'sent',
+    });
+    quotationRepository.update.mockResolvedValue({
+      ...baseQuotation,
+      status: 'rejected',
+      version: 2,
+    });
+
+    const result = await service.rejectQuotation(tenantId, quotationId, 1);
+
+    expect(result.ok).toBe(true);
+    expect(publish).toHaveBeenCalledWith(expect.any(QuotationRejectedEvent));
+  });
+
+  it('maps concurrent modification failures on reject', async () => {
+    quotationRepository.findById.mockResolvedValue({
+      ...baseQuotation,
+      status: 'sent',
+    });
+    quotationRepository.update.mockRejectedValue(
+      new ConcurrentModificationError('Quotation', quotationId),
+    );
+
+    const result = await service.rejectQuotation(tenantId, quotationId, 1);
 
     expect(result.ok).toBe(false);
     if (!result.ok) {

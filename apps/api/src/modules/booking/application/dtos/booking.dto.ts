@@ -14,6 +14,7 @@ export type BookingDto = {
   venueName: string | null;
   guestCount: number | null;
   requirementsNotes: string | null;
+  workspaceStatus: EventRecord['workspaceStatus'];
   preparationStatus: EventRecord['preparationStatus'];
   operationalMilestone: string | null;
   executionOwnerId: string | null;

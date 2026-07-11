@@ -55,6 +55,7 @@ describe('LeadApplicationService', () => {
     leadRepository = {
       create: jest.fn(),
       findById: jest.fn(),
+      findAll: jest.fn(),
       findByPhone: jest.fn(),
       findByStage: jest.fn(),
       update: updateLead,
@@ -62,6 +63,8 @@ describe('LeadApplicationService', () => {
     };
     followUpRepository = {
       create: jest.fn(),
+      findById: jest.fn(),
+      update: jest.fn(),
     };
     advancePaymentQuery = {
       hasConfirmedAdvance: jest.fn(),
@@ -76,6 +79,40 @@ describe('LeadApplicationService', () => {
       advancePaymentQuery,
       eventPublisher,
     );
+  });
+
+  it('lists all leads for the tenant', async () => {
+    leadRepository.findAll.mockResolvedValue([baseLead]);
+
+    const result = await service.listLeads(tenantId);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toHaveLength(1);
+      expect(result.value[0].id).toBe(leadId);
+    }
+  });
+
+  it('returns not found when getting a missing lead', async () => {
+    leadRepository.findById.mockResolvedValue(null);
+
+    const result = await service.getLeadById(tenantId, leadId);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('NOT_FOUND');
+    }
+  });
+
+  it('retrieves a lead by id', async () => {
+    leadRepository.findById.mockResolvedValue(baseLead);
+
+    const result = await service.getLeadById(tenantId, leadId);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.id).toBe(leadId);
+    }
   });
 
   it('creates a lead and publishes LeadCreated', async () => {

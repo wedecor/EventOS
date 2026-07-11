@@ -4,8 +4,8 @@ Production-ready NestJS backend for Event OS (We Decor Phase 1). Prisma persiste
 
 ## Prerequisites
 
-- Node.js 20+
-- [pnpm](https://pnpm.io/) 9+
+- Node.js 22 LTS (`22.12+`)
+- [pnpm](https://pnpm.io/) 10.13+
 - Docker and Docker Compose (for local PostgreSQL and Redis)
 
 ## Quick start

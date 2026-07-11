@@ -1007,8 +1007,13 @@ Per `docs/09-api-design.md`. Endpoint paths below are sprint-bound for W1 implem
 
 **State-changing (commands):**
 
-- Workspace activation and suggestions (ADR-017):
-  - `POST /api/v1/suggestions/:id/accept` (accept `workspace.create`)
+- Workspace activation (ADR-017 — two valid entry points invoking the identical
+  `WorkspaceService.activateWorkspace()` use case):
+  - `POST /api/v1/bookings/:id/activate-workspace` (direct human command; primary path for this
+    sprint, independent of Suggestion subsystem delivery status)
+  - `POST /api/v1/suggestions/:id/accept` (accept `workspace.create`; optional, once the Suggestion
+    subsystem exists)
+- Suggestions (ADR-017, for `checklist.generate` and `staff.assign`):
   - `POST /api/v1/suggestions/:id/accept` (accept `checklist.generate`)
   - `POST /api/v1/suggestions/:id/accept` (accept `staff.assign`)
   - `POST /api/v1/suggestions/:id/dismiss`
@@ -1062,7 +1067,13 @@ Per `docs/09-api-design.md`. Endpoint paths below are sprint-bound for W1 implem
 
 6) **Dependencies**
 
-- Suggestion persistence and accept/dismiss routing is already in place from Sprint 1
+- Suggestion persistence and accept/dismiss routing is **not** yet built as of Sprint 1 and must be
+  delivered within this sprint for the `checklist.generate` and `staff.assign` suggestion flows.
+- Workspace activation (EP1-OPS-001, EP1-AUT-002) does **not** depend on the Suggestion subsystem:
+  `POST /api/v1/bookings/:id/activate-workspace` is a direct human command per ADR-017 and is usable
+  independent of Suggestion delivery status. Suggestion acceptance (`workspace.create`) remains an
+  optional future entry point into the same `WorkspaceService.activateWorkspace()` use case once the
+  Suggestion subsystem is built — it is not a prerequisite for this workflow.
 - Staff master CRUD for EP1-STF-001 exists by end of Sprint 2
 
 7) **Risks**

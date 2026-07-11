@@ -118,6 +118,7 @@ export class EventRepositoryImpl
       venueName: data.venueName ?? null,
       guestCount: data.guestCount ?? null,
       requirementsNotes: data.requirementsNotes ?? null,
+      workspaceStatus: data.workspaceStatus ?? 'inactive',
       preparationStatus: data.preparationStatus ?? 'pending',
       operationalMilestone: data.operationalMilestone ?? null,
       executionOwner: data.executionOwnerId
@@ -135,6 +136,7 @@ export class EventRepositoryImpl
       venueName: data.venueName,
       guestCount: data.guestCount,
       requirementsNotes: data.requirementsNotes,
+      workspaceStatus: data.workspaceStatus,
       preparationStatus: data.preparationStatus,
       operationalMilestone: data.operationalMilestone,
       executionOwner:
@@ -163,6 +165,7 @@ export class EventRepositoryImpl
       venueName: event.venueName,
       guestCount: event.guestCount,
       requirementsNotes: event.requirementsNotes,
+      workspaceStatus: event.workspaceStatus,
       preparationStatus: event.preparationStatus,
       operationalMilestone: event.operationalMilestone,
       executionOwnerId: event.executionOwnerId,

@@ -62,6 +62,21 @@ export class CustomerApplicationService {
     return success(toCustomerDto(customer));
   }
 
+  async getCustomerById(
+    tenantId: string,
+    customerId: string,
+  ): Promise<Result<CustomerDto>> {
+    const customer = await this.customerRepository.findById(
+      tenantId,
+      customerId,
+    );
+    if (!customer) {
+      return failure('NOT_FOUND', 'Customer not found.');
+    }
+
+    return success(toCustomerDto(customer));
+  }
+
   async updateCustomer(
     tenantId: string,
     customerId: string,

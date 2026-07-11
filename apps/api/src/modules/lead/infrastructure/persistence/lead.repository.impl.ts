@@ -52,6 +52,15 @@ export class LeadRepositoryImpl
     return leads.map((lead) => this.mapLead(lead));
   }
 
+  async findAll(tenantId: string): Promise<LeadRecord[]> {
+    const leads = await this.prisma.lead.findMany({
+      where: { tenantId },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return leads.map((lead) => this.mapLead(lead));
+  }
+
   async findByStage(tenantId: string, stage: LeadStage): Promise<LeadRecord[]> {
     const leads = await this.prisma.lead.findMany({
       where: { tenantId, stage },

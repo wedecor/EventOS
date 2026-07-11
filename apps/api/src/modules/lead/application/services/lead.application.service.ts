@@ -17,7 +17,10 @@ import {
   isAllowedLeadStageTransition,
   isTerminalLeadStage,
 } from '../../domain/lead-stage.rules';
-import { FollowUpRepository } from '../../domain/repositories/follow-up.repository';
+import {
+  FollowUpRepository,
+  type UpdateFollowUpData,
+} from '../../domain/repositories/follow-up.repository';
 import {
   LeadRepository,
   type CreateLeadData,
@@ -48,6 +51,8 @@ export type ScheduleFollowUpInput = {
   notes?: string | null;
 };
 
+export type UpdateFollowUpInput = UpdateFollowUpData;
+
 @Injectable()
 export class LeadApplicationService {
   constructor(
@@ -56,6 +61,23 @@ export class LeadApplicationService {
     private readonly advancePaymentQuery: AdvancePaymentQuery,
     private readonly eventPublisher: DomainEventPublisher,
   ) {}
+
+  async listLeads(tenantId: string): Promise<Result<LeadDto[]>> {
+    const leads = await this.leadRepository.findAll(tenantId);
+    return success(leads.map(toLeadDto));
+  }
+
+  async getLeadById(
+    tenantId: string,
+    leadId: string,
+  ): Promise<Result<LeadDto>> {
+    const lead = await this.leadRepository.findById(tenantId, leadId);
+    if (!lead) {
+      return failure('NOT_FOUND', 'Lead not found.');
+    }
+
+    return success(toLeadDto(lead));
+  }
 
   async createLead(
     tenantId: string,
@@ -262,6 +284,42 @@ export class LeadApplicationService {
     this.eventPublisher.publish(new FollowUpCreatedEvent(tenantId, followUp));
 
     return success(toFollowUpDto(followUp));
+  }
+
+  async updateFollowUp(
+    tenantId: string,
+    followUpId: string,
+    input: UpdateFollowUpInput,
+    version: number,
+  ): Promise<Result<FollowUpDto>> {
+    const existing = await this.followUpRepository.findById(
+      tenantId,
+      followUpId,
+    );
+    if (!existing) {
+      return failure('NOT_FOUND', 'Follow-up not found.');
+    }
+
+    try {
+      const followUp = await this.followUpRepository.update(
+        tenantId,
+        followUpId,
+        input,
+        version,
+      );
+
+      return success(toFollowUpDto(followUp));
+    } catch (error: unknown) {
+      if (error instanceof ConcurrentModificationError) {
+        return failure(
+          'CONCURRENT_MODIFICATION',
+          'Follow-up was modified by another request. Reload and retry.',
+          { followUpId },
+        );
+      }
+
+      throw error;
+    }
   }
 
   private validateLeadDates(

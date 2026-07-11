@@ -8,6 +8,10 @@ import { FollowUpRepository } from './lead/domain/repositories/follow-up.reposit
 import { FollowUpRepositoryImpl } from './lead/infrastructure/persistence/follow-up.repository.impl';
 import { LeadRepository } from './lead/domain/repositories/lead.repository';
 import { LeadRepositoryImpl } from './lead/infrastructure/persistence/lead.repository.impl';
+import { PaymentRepository } from './payment/domain/repositories/payment.repository';
+import { PaymentRepositoryImpl } from './payment/infrastructure/persistence/payment.repository.impl';
+import { QuotationLineItemRepository } from './quotation/domain/repositories/quotation-line-item.repository';
+import { QuotationLineItemRepositoryImpl } from './quotation/infrastructure/persistence/quotation-line-item.repository.impl';
 import { QuotationRepository } from './quotation/domain/repositories/quotation.repository';
 import { QuotationRepositoryImpl } from './quotation/infrastructure/persistence/quotation.repository.impl';
 
@@ -18,14 +22,21 @@ import { QuotationRepositoryImpl } from './quotation/infrastructure/persistence/
     { provide: FollowUpRepository, useClass: FollowUpRepositoryImpl },
     { provide: CustomerRepository, useClass: CustomerRepositoryImpl },
     { provide: QuotationRepository, useClass: QuotationRepositoryImpl },
+    {
+      provide: QuotationLineItemRepository,
+      useClass: QuotationLineItemRepositoryImpl,
+    },
     { provide: EventRepository, useClass: EventRepositoryImpl },
+    { provide: PaymentRepository, useClass: PaymentRepositoryImpl },
   ],
   exports: [
     LeadRepository,
     FollowUpRepository,
     CustomerRepository,
     QuotationRepository,
+    QuotationLineItemRepository,
     EventRepository,
+    PaymentRepository,
   ],
 })
 export class RepositoriesModule {}
