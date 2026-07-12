@@ -52,6 +52,9 @@ export abstract class InvoiceRepository {
 
   abstract findMaxInvoiceNumber(tenantId: string): Promise<number>;
 
+  // EP1-FIN-002 — Dashboard: tenant-wide invoice read for finance summary
+  abstract findAll(tenantId: string): Promise<InvoiceRecord[]>;
+
   // EP1-BR-002 — Financial review gate: an unreviewed (draft) invoice blocks booking completion.
   abstract hasDraftInvoiceForBooking(
     tenantId: string,

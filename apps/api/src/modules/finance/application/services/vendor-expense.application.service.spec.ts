@@ -130,6 +130,7 @@ describe('VendorExpenseApplicationService', () => {
       create: jest.fn(),
       findById: jest.fn(),
       findByBookingId: jest.fn(),
+      findAll: jest.fn(),
       update: jest.fn(),
     };
     eventRepository = {
@@ -150,6 +151,7 @@ describe('VendorExpenseApplicationService', () => {
       create: jest.fn(),
       findById: jest.fn(),
       findByVendorProcurementId: jest.fn(),
+      findAll: jest.fn(),
       update: jest.fn(),
     };
     eventPublisher = { publish };

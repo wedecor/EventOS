@@ -87,6 +87,7 @@ describe('ProcurementLineApplicationService', () => {
       create: jest.fn(),
       findById: jest.fn(),
       findByVendorProcurementId: jest.fn(),
+      findAll: jest.fn(),
       update: jest.fn(),
     };
     vendorProcurementRepository = {

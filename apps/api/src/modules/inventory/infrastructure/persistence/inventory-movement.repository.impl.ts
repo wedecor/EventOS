@@ -58,6 +58,15 @@ export class InventoryMovementRepositoryImpl
     return movements.map((movement) => this.mapRecord(movement));
   }
 
+  async findAll(tenantId: string): Promise<InventoryMovementRecord[]> {
+    const movements = await this.prisma.inventoryMovement.findMany({
+      where: { tenantId },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return movements.map((movement) => this.mapRecord(movement));
+  }
+
   async update(
     tenantId: string,
     id: string,

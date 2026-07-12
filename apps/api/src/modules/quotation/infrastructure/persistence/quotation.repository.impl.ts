@@ -61,6 +61,18 @@ export class QuotationRepositoryImpl
     return result._max.quotationNumber ?? 0;
   }
 
+  async findByIds(tenantId: string, ids: string[]): Promise<QuotationRecord[]> {
+    if (ids.length === 0) {
+      return [];
+    }
+
+    const quotations = await this.prisma.quotation.findMany({
+      where: { tenantId, id: { in: ids } },
+    });
+
+    return quotations.map((quotation) => this.mapQuotation(quotation));
+  }
+
   async update(
     tenantId: string,
     id: string,

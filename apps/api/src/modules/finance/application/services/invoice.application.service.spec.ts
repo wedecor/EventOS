@@ -116,6 +116,7 @@ describe('InvoiceApplicationService', () => {
       findById: jest.fn(),
       findByBookingId: jest.fn(),
       findMaxInvoiceNumber: jest.fn(),
+      findAll: jest.fn(),
       hasDraftInvoiceForBooking: jest.fn(),
       update: jest.fn(),
     };

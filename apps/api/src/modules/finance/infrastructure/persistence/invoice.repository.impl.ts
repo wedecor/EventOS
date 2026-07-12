@@ -68,6 +68,15 @@ export class InvoiceRepositoryImpl
     return result._max.invoiceNumber ?? 0;
   }
 
+  async findAll(tenantId: string): Promise<InvoiceRecord[]> {
+    const invoices = await this.prisma.invoice.findMany({
+      where: { tenantId },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return invoices.map((invoice) => this.mapInvoice(invoice));
+  }
+
   async hasDraftInvoiceForBooking(
     tenantId: string,
     bookingId: string,

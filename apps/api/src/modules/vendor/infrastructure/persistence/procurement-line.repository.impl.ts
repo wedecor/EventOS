@@ -65,6 +65,15 @@ export class ProcurementLineRepositoryImpl
     return lines.map((line) => this.mapRecord(line));
   }
 
+  async findAll(tenantId: string): Promise<ProcurementLineRecord[]> {
+    const lines = await this.prisma.procurementLine.findMany({
+      where: { tenantId },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return lines.map((line) => this.mapRecord(line));
+  }
+
   async update(
     tenantId: string,
     id: string,

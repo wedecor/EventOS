@@ -92,6 +92,7 @@ describe('InventoryMovementApplicationService', () => {
       create: jest.fn(),
       findById: jest.fn(),
       findByBookingId: jest.fn(),
+      findAll: jest.fn(),
       update: jest.fn(),
     };
     damageNoteRepository = {

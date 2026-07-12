@@ -64,6 +64,7 @@ describe('QuotationLineItemApplicationService', () => {
       findById: jest.fn(),
       findLatestRevision: jest.fn(),
       findMaxQuotationNumber: jest.fn(),
+      findByIds: jest.fn(),
       update: jest.fn(),
     };
     lineItemRepository = {

@@ -50,6 +50,9 @@ export abstract class VendorExpenseRepository {
     bookingId: string,
   ): Promise<VendorExpenseRecord[]>;
 
+  // EP1-KPI-004, EP1-FIN-005 — Dashboard: tenant-wide expense read for margin/finance aggregation
+  abstract findAll(tenantId: string): Promise<VendorExpenseRecord[]>;
+
   abstract update(
     tenantId: string,
     id: string,

@@ -68,6 +68,7 @@ describe('PaymentApplicationService', () => {
       create: jest.fn(),
       findById: jest.fn(),
       findByBookingId: jest.fn(),
+      findAll: jest.fn(),
       hasConfirmedAdvanceForLead: jest.fn(),
       hasConfirmedAdvanceForQuotation: jest.fn(),
       update: jest.fn(),
@@ -77,6 +78,7 @@ describe('PaymentApplicationService', () => {
       findById: jest.fn(),
       findByBookingId: jest.fn(),
       findMaxInvoiceNumber: jest.fn(),
+      findAll: jest.fn(),
       hasDraftInvoiceForBooking: jest.fn(),
       update: jest.fn(),
     };

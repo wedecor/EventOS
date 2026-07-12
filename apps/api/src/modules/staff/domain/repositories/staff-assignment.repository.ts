@@ -56,6 +56,9 @@ export abstract class StaffAssignmentRepository {
     bookingId: string,
   ): Promise<StaffAssignmentRecord[]>;
 
+  // EP1-STF-002 — Dashboard: tenant-wide assignment read for staff summary
+  abstract findAll(tenantId: string): Promise<StaffAssignmentRecord[]>;
+
   abstract update(
     tenantId: string,
     id: string,

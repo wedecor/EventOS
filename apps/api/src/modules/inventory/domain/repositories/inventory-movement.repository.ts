@@ -53,6 +53,9 @@ export abstract class InventoryMovementRepository {
     bookingId: string,
   ): Promise<InventoryMovementRecord[]>;
 
+  // EP1-INV-003, EP1-INV-005 — Dashboard: tenant-wide movement read for inventory summary
+  abstract findAll(tenantId: string): Promise<InventoryMovementRecord[]>;
+
   abstract update(
     tenantId: string,
     id: string,

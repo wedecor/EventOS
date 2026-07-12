@@ -124,6 +124,7 @@ describe('VendorProcurementApplicationService', () => {
       create: jest.fn(),
       findById: jest.fn(),
       findByVendorProcurementId: jest.fn(),
+      findAll: jest.fn(),
       update: jest.fn(),
     };
     vendorRepository = {

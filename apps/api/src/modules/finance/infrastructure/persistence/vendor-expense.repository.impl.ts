@@ -65,6 +65,15 @@ export class VendorExpenseRepositoryImpl
     return expenses.map((expense) => this.mapExpense(expense));
   }
 
+  async findAll(tenantId: string): Promise<VendorExpenseRecord[]> {
+    const expenses = await this.prisma.vendorExpense.findMany({
+      where: { tenantId },
+      orderBy: { paidAt: 'desc' },
+    });
+
+    return expenses.map((expense) => this.mapExpense(expense));
+  }
+
   async update(
     tenantId: string,
     id: string,

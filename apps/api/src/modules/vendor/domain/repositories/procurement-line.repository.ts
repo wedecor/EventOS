@@ -65,6 +65,9 @@ export abstract class ProcurementLineRepository {
     vendorProcurementId: string,
   ): Promise<ProcurementLineRecord[]>;
 
+  // EP1-VEN-003, EP1-VEN-005 — Dashboard: tenant-wide procurement line read for vendor summary
+  abstract findAll(tenantId: string): Promise<ProcurementLineRecord[]>;
+
   abstract update(
     tenantId: string,
     id: string,

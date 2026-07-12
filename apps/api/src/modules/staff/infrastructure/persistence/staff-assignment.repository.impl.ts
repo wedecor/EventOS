@@ -60,6 +60,15 @@ export class StaffAssignmentRepositoryImpl
     return assignments.map((assignment) => this.mapRecord(assignment));
   }
 
+  async findAll(tenantId: string): Promise<StaffAssignmentRecord[]> {
+    const assignments = await this.prisma.staffAssignment.findMany({
+      where: { tenantId },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return assignments.map((assignment) => this.mapRecord(assignment));
+  }
+
   async update(
     tenantId: string,
     id: string,

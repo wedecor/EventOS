@@ -100,6 +100,7 @@ describe('BookingApplicationService', () => {
       findById: jest.fn(),
       findLatestRevision: jest.fn(),
       findMaxQuotationNumber: jest.fn(),
+      findByIds: jest.fn(),
       update: jest.fn(),
     };
     advancePaymentQuery = {
@@ -110,6 +111,7 @@ describe('BookingApplicationService', () => {
       findById: jest.fn(),
       findByBookingId: jest.fn(),
       findMaxInvoiceNumber: jest.fn(),
+      findAll: jest.fn(),
       hasDraftInvoiceForBooking: jest.fn().mockResolvedValue(false),
       update: jest.fn(),
     };
