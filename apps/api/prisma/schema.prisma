@@ -25,6 +25,7 @@ model Tenant {
   payments   Payment[]
   tasks      Task[]
   staffAssignments StaffAssignment[]
+  inventoryMovements InventoryMovement[]
 
   @@map("tenants")
 }
@@ -326,6 +327,7 @@ model Event {
   payments       Payment[]
   tasks          Task[]
   staffAssignments StaffAssignment[]
+  inventoryMovements InventoryMovement[]
 
   @@unique([tenantId, bookingNumber])
   @@index([tenantId, status, eventStartDate])
@@ -489,4 +491,69 @@ model StaffAssignment {
   @@index([tenantId, staffMemberId])
   @@index([tenantId, status])
   @@map("staff_assignments")
+}
+
+// ---------------------------------------------------------------------------
+// Sprint 3 — Inventory Movement (EP1-INV-003, EP1-INV-005, EP1-INV-006)
+// ---------------------------------------------------------------------------
+
+enum InventoryMovementStatus {
+  planned
+  picked
+  packed
+  loaded
+  at_venue
+  returned
+  cleaned_ready
+
+  @@map("inventory_movement_status")
+}
+
+/// Per-event stock movement through preparation and return (`07-domain-model.md` §Inventory
+/// Movement, `docs/business/08-inventory-workflow.md` §11). `inventoryItemId` is stored as a plain
+/// tenant-scoped identifier (no FK) because the `InventoryItem` master (EP1-INV-001/EP1-INV-002) is
+/// out of scope for Sprint 3 — same deferral pattern as `Payment.attachmentId` for the not-yet-built
+/// `Attachment` aggregate (see implementation report).
+model InventoryMovement {
+  id              String                  @id @default(uuid()) @db.Uuid
+  tenantId        String                  @map("tenant_id") @db.Uuid
+  bookingId       String                  @map("booking_id") @db.Uuid
+  inventoryItemId String                  @map("inventory_item_id") @db.Uuid
+  quantity        Int                     @default(1)
+  notes           String?
+  status          InventoryMovementStatus @default(planned)
+  pickedAt        DateTime?               @map("picked_at")
+  packedAt        DateTime?               @map("packed_at")
+  loadedAt        DateTime?               @map("loaded_at")
+  atVenueAt       DateTime?               @map("at_venue_at")
+  returnedAt      DateTime?               @map("returned_at")
+  cleanedReadyAt  DateTime?               @map("cleaned_ready_at")
+  createdAt       DateTime                @default(now()) @map("created_at")
+  updatedAt       DateTime                @updatedAt @map("updated_at")
+  version         Int                     @default(1)
+
+  tenant      Tenant                        @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  booking     Event                         @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  damageNotes InventoryMovementDamageNote[]
+
+  @@index([tenantId, bookingId, status])
+  @@index([tenantId, inventoryItemId, status])
+  @@map("inventory_movements")
+}
+
+/// Accountability note for damage/loss on a movement (`EP1-INV-006`). Append-only — no update or
+/// delete endpoint is documented, matching the `LeadStageHistory` immutable-log pattern.
+model InventoryMovementDamageNote {
+  id             String    @id @default(uuid()) @db.Uuid
+  tenantId       String    @map("tenant_id") @db.Uuid
+  movementId     String    @map("movement_id") @db.Uuid
+  message        String
+  accountability String?
+  occurredAt     DateTime? @map("occurred_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  movement InventoryMovement @relation(fields: [movementId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, movementId])
+  @@map("inventory_movement_damage_notes")
 }

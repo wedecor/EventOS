@@ -4,6 +4,10 @@ import { EventRepository } from './booking/domain/repositories/event.repository'
 import { EventRepositoryImpl } from './booking/infrastructure/persistence/event.repository.impl';
 import { CustomerRepository } from './customer/domain/repositories/customer.repository';
 import { CustomerRepositoryImpl } from './customer/infrastructure/persistence/customer.repository.impl';
+import { InventoryMovementDamageNoteRepository } from './inventory/domain/repositories/inventory-movement-damage-note.repository';
+import { InventoryMovementRepository } from './inventory/domain/repositories/inventory-movement.repository';
+import { InventoryMovementDamageNoteRepositoryImpl } from './inventory/infrastructure/persistence/inventory-movement-damage-note.repository.impl';
+import { InventoryMovementRepositoryImpl } from './inventory/infrastructure/persistence/inventory-movement.repository.impl';
 import { FollowUpRepository } from './lead/domain/repositories/follow-up.repository';
 import { FollowUpRepositoryImpl } from './lead/infrastructure/persistence/follow-up.repository.impl';
 import { LeadRepository } from './lead/domain/repositories/lead.repository';
@@ -43,6 +47,14 @@ import { TaskRepositoryImpl } from './task/infrastructure/persistence/task.repos
       provide: StaffAssignmentRepository,
       useClass: StaffAssignmentRepositoryImpl,
     },
+    {
+      provide: InventoryMovementRepository,
+      useClass: InventoryMovementRepositoryImpl,
+    },
+    {
+      provide: InventoryMovementDamageNoteRepository,
+      useClass: InventoryMovementDamageNoteRepositoryImpl,
+    },
   ],
   exports: [
     LeadRepository,
@@ -55,6 +67,8 @@ import { TaskRepositoryImpl } from './task/infrastructure/persistence/task.repos
     TaskRepository,
     ChecklistItemRepository,
     StaffAssignmentRepository,
+    InventoryMovementRepository,
+    InventoryMovementDamageNoteRepository,
   ],
 })
 export class RepositoriesModule {}

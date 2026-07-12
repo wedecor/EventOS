@@ -7,6 +7,7 @@ import { BookingApplicationService } from './booking/application/services/bookin
 import { ExecutionProgressService } from './booking/application/services/execution-progress.service';
 import { WorkspaceService } from './booking/application/services/workspace.service';
 import { CustomerApplicationService } from './customer/application/services/customer.application.service';
+import { InventoryMovementApplicationService } from './inventory/application/services/inventory-movement.application.service';
 import { LeadApplicationService } from './lead/application/services/lead.application.service';
 import { QuotationApplicationService } from './quotation/application/services/quotation.application.service';
 import { QuotationLineItemApplicationService } from './quotation/application/services/quotation-line-item.application.service';
@@ -32,6 +33,7 @@ import { RepositoriesModule } from './repositories.module';
     TaskApplicationService,
     ChecklistItemApplicationService,
     StaffAssignmentApplicationService,
+    InventoryMovementApplicationService,
   ],
   exports: [
     LeadApplicationService,
@@ -45,6 +47,7 @@ import { RepositoriesModule } from './repositories.module';
     TaskApplicationService,
     ChecklistItemApplicationService,
     StaffAssignmentApplicationService,
+    InventoryMovementApplicationService,
   ],
 })
 export class ApplicationServicesModule {}

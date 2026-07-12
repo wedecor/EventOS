@@ -9,6 +9,7 @@ import { DatabaseModule, PrismaModule } from './database';
 import { ApplicationServicesModule } from './modules/application-services.module';
 import { BookingModule } from './modules/booking/booking.module';
 import { CustomerModule } from './modules/customer/customer.module';
+import { InventoryModule } from './modules/inventory/inventory.module';
 import { LeadModule } from './modules/lead/lead.module';
 import { PaymentModule } from './modules/payment/payment.module';
 import { QuotationModule } from './modules/quotation/quotation.module';
@@ -54,6 +55,7 @@ import { TaskModule } from './modules/task/task.module';
     PaymentModule,
     TaskModule,
     StaffModule,
+    InventoryModule,
     AuthModule,
     HealthModule,
   ],

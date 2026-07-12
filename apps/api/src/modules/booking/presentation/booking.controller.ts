@@ -18,6 +18,7 @@ import { BookingApplicationService } from '../application/services/booking.appli
 import { ExecutionProgressService } from '../application/services/execution-progress.service';
 import { WorkspaceService } from '../application/services/workspace.service';
 import { PaymentApplicationService } from '../../payment/application/services/payment.application.service';
+import { InventoryMovementApplicationService } from '../../inventory/application/services/inventory-movement.application.service';
 import {
   activateWorkspaceSchema,
   advanceExecutionStageSchema,
@@ -38,6 +39,7 @@ export class BookingController {
     private readonly workspaceService: WorkspaceService,
     private readonly executionProgressService: ExecutionProgressService,
     private readonly paymentService: PaymentApplicationService,
+    private readonly inventoryMovementService: InventoryMovementApplicationService,
   ) {}
 
   @Get(':id')
@@ -54,6 +56,20 @@ export class BookingController {
     @Param('id') id: string,
   ) {
     const result = await this.paymentService.listPaymentsForBooking(
+      tenantId,
+      id,
+    );
+    return resultToResponse(result);
+  }
+
+  // EP1-INV-003 — List inventory movements for a booking (Event Workspace integration)
+  @Get(':id/inventory-movements')
+  @ApiOperation({ summary: 'List inventory movements for a booking' })
+  async listInventoryMovementsForBooking(
+    @TenantId() tenantId: string,
+    @Param('id') id: string,
+  ) {
+    const result = await this.inventoryMovementService.listMovementsForBooking(
       tenantId,
       id,
     );
