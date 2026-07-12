@@ -13,6 +13,7 @@ import { LeadModule } from './modules/lead/lead.module';
 import { PaymentModule } from './modules/payment/payment.module';
 import { QuotationModule } from './modules/quotation/quotation.module';
 import { RepositoriesModule } from './modules/repositories.module';
+import { TaskModule } from './modules/task/task.module';
 
 @Module({
   imports: [
@@ -50,6 +51,7 @@ import { RepositoriesModule } from './modules/repositories.module';
     QuotationModule,
     BookingModule,
     PaymentModule,
+    TaskModule,
     AuthModule,
     HealthModule,
   ],

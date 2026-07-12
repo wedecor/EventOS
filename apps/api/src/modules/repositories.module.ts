@@ -14,6 +14,10 @@ import { QuotationLineItemRepository } from './quotation/domain/repositories/quo
 import { QuotationLineItemRepositoryImpl } from './quotation/infrastructure/persistence/quotation-line-item.repository.impl';
 import { QuotationRepository } from './quotation/domain/repositories/quotation.repository';
 import { QuotationRepositoryImpl } from './quotation/infrastructure/persistence/quotation.repository.impl';
+import { ChecklistItemRepository } from './task/domain/repositories/checklist-item.repository';
+import { ChecklistItemRepositoryImpl } from './task/infrastructure/persistence/checklist-item.repository.impl';
+import { TaskRepository } from './task/domain/repositories/task.repository';
+import { TaskRepositoryImpl } from './task/infrastructure/persistence/task.repository.impl';
 
 @Module({
   imports: [PrismaModule],
@@ -28,6 +32,11 @@ import { QuotationRepositoryImpl } from './quotation/infrastructure/persistence/
     },
     { provide: EventRepository, useClass: EventRepositoryImpl },
     { provide: PaymentRepository, useClass: PaymentRepositoryImpl },
+    { provide: TaskRepository, useClass: TaskRepositoryImpl },
+    {
+      provide: ChecklistItemRepository,
+      useClass: ChecklistItemRepositoryImpl,
+    },
   ],
   exports: [
     LeadRepository,
@@ -37,6 +46,8 @@ import { QuotationRepositoryImpl } from './quotation/infrastructure/persistence/
     QuotationLineItemRepository,
     EventRepository,
     PaymentRepository,
+    TaskRepository,
+    ChecklistItemRepository,
   ],
 })
 export class RepositoriesModule {}

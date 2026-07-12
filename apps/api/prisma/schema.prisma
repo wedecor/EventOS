@@ -23,6 +23,7 @@ model Tenant {
   quotations Quotation[]
   events     Event[]
   payments   Payment[]
+  tasks      Task[]
 
   @@map("tenants")
 }
@@ -321,6 +322,7 @@ model Event {
   lead           Lead?     @relation(fields: [leadId], references: [id], onDelete: Restrict)
   executionOwner User?     @relation("EventExecutionOwner", fields: [executionOwnerId], references: [id], onDelete: SetNull)
   payments       Payment[]
+  tasks          Task[]
 
   @@unique([tenantId, bookingNumber])
   @@index([tenantId, status, eventStartDate])
@@ -382,4 +384,61 @@ model QuotationLineItem {
 
   @@index([tenantId, quotationId])
   @@map("quotation_line_items")
+}
+
+// ---------------------------------------------------------------------------
+// Sprint 2B — Task Management (EP1-OPS-003, EP1-AUT-003)
+// ---------------------------------------------------------------------------
+
+enum TaskStatus {
+  pending
+  in_progress
+  completed
+  cancelled
+
+  @@map("task_status")
+}
+
+/// Event-linked execution checklist / operational task (Task module, `07-domain-model.md` §Task).
+model Task {
+  id          String     @id @default(uuid()) @db.Uuid
+  tenantId    String     @map("tenant_id") @db.Uuid
+  bookingId   String     @map("booking_id") @db.Uuid
+  title       String
+  description String?
+  assignedTo  String?    @map("assigned_to") @db.Uuid
+  dueAt       DateTime?  @map("due_at")
+  status      TaskStatus @default(pending)
+  completedAt DateTime?  @map("completed_at")
+  createdAt   DateTime   @default(now()) @map("created_at")
+  updatedAt   DateTime   @updatedAt @map("updated_at")
+  version     Int        @default(1)
+
+  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  booking        Event           @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  checklistItems ChecklistItem[]
+
+  @@index([tenantId, bookingId])
+  @@index([tenantId, status])
+  @@index([tenantId, assignedTo])
+  @@map("tasks")
+}
+
+/// Owned checklist row under a Task (`07-domain-model.md` §Task — ChecklistItem entity).
+model ChecklistItem {
+  id          String    @id @default(uuid()) @db.Uuid
+  tenantId    String    @map("tenant_id") @db.Uuid
+  taskId      String    @map("task_id") @db.Uuid
+  description String
+  isCompleted Boolean   @default(false) @map("is_completed")
+  completedAt DateTime? @map("completed_at")
+  sortOrder   Int       @default(0) @map("sort_order")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  version     Int       @default(1)
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, taskId])
+  @@map("checklist_items")
 }
