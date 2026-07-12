@@ -19,6 +19,11 @@ import { ExecutionProgressService } from '../application/services/execution-prog
 import { WorkspaceService } from '../application/services/workspace.service';
 import { PaymentApplicationService } from '../../payment/application/services/payment.application.service';
 import { InventoryMovementApplicationService } from '../../inventory/application/services/inventory-movement.application.service';
+import { VendorProcurementApplicationService } from '../../vendor/application/services/vendor-procurement.application.service';
+import {
+  createVendorProcurementSchema,
+  type CreateVendorProcurementBody,
+} from '../../vendor/presentation/schemas/vendor-procurement.schemas';
 import {
   activateWorkspaceSchema,
   advanceExecutionStageSchema,
@@ -40,6 +45,7 @@ export class BookingController {
     private readonly executionProgressService: ExecutionProgressService,
     private readonly paymentService: PaymentApplicationService,
     private readonly inventoryMovementService: InventoryMovementApplicationService,
+    private readonly vendorProcurementService: VendorProcurementApplicationService,
   ) {}
 
   @Get(':id')
@@ -72,6 +78,39 @@ export class BookingController {
     const result = await this.inventoryMovementService.listMovementsForBooking(
       tenantId,
       id,
+    );
+    return resultToResponse(result);
+  }
+
+  // EP1-VEN-002 — List vendor procurements for a booking (Event Workspace integration)
+  @Get(':id/procurements')
+  @ApiOperation({ summary: 'List vendor procurements for a booking' })
+  async listProcurementsForBooking(
+    @TenantId() tenantId: string,
+    @Param('id') id: string,
+  ) {
+    const result =
+      await this.vendorProcurementService.listProcurementsForBooking(
+        tenantId,
+        id,
+      );
+    return resultToResponse(result);
+  }
+
+  // EP1-VEN-002 — Create a vendor procurement header for a booking
+  @Post(':id/procurements')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Create a vendor procurement for a booking' })
+  async createProcurement(
+    @TenantId() tenantId: string,
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(createVendorProcurementSchema))
+    body: CreateVendorProcurementBody,
+  ) {
+    const result = await this.vendorProcurementService.createProcurement(
+      tenantId,
+      id,
+      { vendorId: body.vendorId, notes: body.notes },
     );
     return resultToResponse(result);
   }

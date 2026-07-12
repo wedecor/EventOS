@@ -15,6 +15,9 @@ import { PaymentApplicationService } from './payment/application/services/paymen
 import { StaffAssignmentApplicationService } from './staff/application/services/staff-assignment.application.service';
 import { ChecklistItemApplicationService } from './task/application/services/checklist-item.application.service';
 import { TaskApplicationService } from './task/application/services/task.application.service';
+import { ProcurementLineApplicationService } from './vendor/application/services/procurement-line.application.service';
+import { VendorApplicationService } from './vendor/application/services/vendor.application.service';
+import { VendorProcurementApplicationService } from './vendor/application/services/vendor-procurement.application.service';
 import { RepositoriesModule } from './repositories.module';
 
 @Module({
@@ -34,6 +37,9 @@ import { RepositoriesModule } from './repositories.module';
     ChecklistItemApplicationService,
     StaffAssignmentApplicationService,
     InventoryMovementApplicationService,
+    VendorApplicationService,
+    VendorProcurementApplicationService,
+    ProcurementLineApplicationService,
   ],
   exports: [
     LeadApplicationService,
@@ -48,6 +54,9 @@ import { RepositoriesModule } from './repositories.module';
     ChecklistItemApplicationService,
     StaffAssignmentApplicationService,
     InventoryMovementApplicationService,
+    VendorApplicationService,
+    VendorProcurementApplicationService,
+    ProcurementLineApplicationService,
   ],
 })
 export class ApplicationServicesModule {}

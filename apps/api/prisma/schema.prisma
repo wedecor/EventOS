@@ -26,6 +26,8 @@ model Tenant {
   tasks      Task[]
   staffAssignments StaffAssignment[]
   inventoryMovements InventoryMovement[]
+  vendors            Vendor[]
+  vendorProcurements VendorProcurement[]
 
   @@map("tenants")
 }
@@ -328,6 +330,8 @@ model Event {
   tasks          Task[]
   staffAssignments StaffAssignment[]
   inventoryMovements InventoryMovement[]
+  vendorProcurements VendorProcurement[]
+  procurementLines   ProcurementLine[]
 
   @@unique([tenantId, bookingNumber])
   @@index([tenantId, status, eventStartDate])
@@ -386,6 +390,7 @@ model QuotationLineItem {
   version       Int      @default(1)
 
   quotation Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  procurementLines ProcurementLine[]
 
   @@index([tenantId, quotationId])
   @@map("quotation_line_items")
@@ -556,4 +561,180 @@ model InventoryMovementDamageNote {
 
   @@index([tenantId, movementId])
   @@map("inventory_movement_damage_notes")
+}
+
+// ---------------------------------------------------------------------------
+// Sprint 4 — Vendor Procurement (EP1-VEN-001, 002, 003, 005, 006)
+// ---------------------------------------------------------------------------
+
+// Per `docs/business/07-vendor-management.md` §11A "Vendor Status Model" (explicit 5-value
+// status field) and `07-domain-model.md` §Vendor ("Preferred/backup is classification, not a
+// separate aggregate" — i.e. folded into this single status field rather than a second table).
+enum VendorStatus {
+  preferred
+  active
+  backup
+  paused
+  blocked
+
+  @@map("vendor_status")
+}
+
+enum ProcurementLineStatus {
+  planned
+  requested
+  confirmed
+  delivered
+  completed
+
+  @@map("procurement_line_status")
+}
+
+// Fixed reason list per `docs/business/07-vendor-management.md` §11 "Cost Variance Reason
+// (Phase 1 Requirement)" — required whenever actual procurement cost exceeds budget (EP1-VEN-005).
+enum CostVarianceReason {
+  market_price_increase
+  vendor_price_change
+  vendor_change_availability_quality
+  customer_scope_change
+  emergency_purchase
+  material_wastage_damage
+  incorrect_estimation
+  other
+
+  @@map("cost_variance_reason")
+}
+
+enum IssueNoteSeverity {
+  low
+  medium
+  high
+
+  @@map("issue_note_severity")
+}
+
+/// Vendor directory with status + lightweight issue history (`07-domain-model.md` §Vendor,
+/// EP1-VEN-001, EP1-VEN-006). Tax details are optional per `07-vendor-management.md` §11A.
+model Vendor {
+  id                String       @id @default(uuid()) @db.Uuid
+  tenantId          String       @map("tenant_id") @db.Uuid
+  name              String
+  category          String
+  status            VendorStatus @default(active)
+  contactName       String?      @map("contact_name")
+  contactPhone      String?      @map("contact_phone")
+  location          String?
+  servicesProvided  String?      @map("services_provided")
+  pricingNotes      String?      @map("pricing_notes")
+  paymentTerms      String?      @map("payment_terms")
+  taxDetails        String?      @map("tax_details")
+  notes             String?
+  createdAt         DateTime     @default(now()) @map("created_at")
+  updatedAt         DateTime     @updatedAt @map("updated_at")
+  version           Int          @default(1)
+
+  tenant       Tenant              @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  issueNotes   VendorIssueNote[]
+  procurements VendorProcurement[]
+
+  @@index([tenantId, status])
+  @@index([tenantId, category])
+  @@map("vendors")
+}
+
+/// Vendor-level feedback note (`07-domain-model.md` §Vendor — VendorIssueNote entity, EP1-VEN-006).
+/// Append-only, matching the `InventoryMovementDamageNote` precedent.
+model VendorIssueNote {
+  id         String             @id @default(uuid()) @db.Uuid
+  tenantId   String             @map("tenant_id") @db.Uuid
+  vendorId   String             @map("vendor_id") @db.Uuid
+  message    String
+  severity   IssueNoteSeverity  @default(medium)
+  occurredAt DateTime?          @map("occurred_at")
+  createdAt  DateTime           @default(now()) @map("created_at")
+
+  vendor Vendor @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, vendorId])
+  @@map("vendor_issue_notes")
+}
+
+/// Procurement header per event-vendor pairing (`07-domain-model.md` §Vendor Procurement AR,
+/// EP1-VEN-002). `status` mirrors `ProcurementLineStatus` for the header summary; Phase 1 exposes
+/// no dedicated header-transition endpoint (see implementation report).
+model VendorProcurement {
+  id        String                 @id @default(uuid()) @db.Uuid
+  tenantId  String                 @map("tenant_id") @db.Uuid
+  bookingId String                 @map("booking_id") @db.Uuid
+  vendorId  String                 @map("vendor_id") @db.Uuid
+  status    ProcurementLineStatus  @default(planned)
+  notes     String?
+  createdAt DateTime               @default(now()) @map("created_at")
+  updatedAt DateTime               @updatedAt @map("updated_at")
+  version   Int                    @default(1)
+
+  tenant  Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  booking Event             @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  vendor  Vendor            @relation(fields: [vendorId], references: [id], onDelete: Restrict)
+  lines   ProcurementLine[]
+
+  @@index([tenantId, bookingId])
+  @@index([tenantId, vendorId])
+  @@map("vendor_procurements")
+}
+
+/// Procurement line item (`07-domain-model.md` §Vendor Procurement — ProcurementLine entity,
+/// EP1-VEN-002/003/005). `bookingId` is denormalized onto the line per `08-data-model.md`
+/// §Procurement Persistence ("Each ProcurementLine stores: event_id, vendor_procurement_id,
+/// optional quotation_line_item_id"). `quotationLineItemId` is a real FK (unlike
+/// `InventoryMovement.inventoryItemId`) because `QuotationLineItem` already exists from Sprint 1.
+model ProcurementLine {
+  id                  String              @id @default(uuid()) @db.Uuid
+  tenantId            String              @map("tenant_id") @db.Uuid
+  vendorProcurementId String              @map("vendor_procurement_id") @db.Uuid
+  bookingId           String              @map("booking_id") @db.Uuid
+  quotationLineItemId String?             @map("quotation_line_item_id") @db.Uuid
+  description         String
+  category            String
+  quantity            Int                 @default(1)
+  budgetedAmount      Decimal?            @map("budgeted_amount") @db.Decimal(12, 2)
+  actualAmount        Decimal?            @map("actual_amount") @db.Decimal(12, 2)
+  currency            String              @default("INR")
+  status              ProcurementLineStatus @default(planned)
+  requestedAt         DateTime?           @map("requested_at")
+  confirmedAt         DateTime?           @map("confirmed_at")
+  deliveredAt         DateTime?           @map("delivered_at")
+  completedAt         DateTime?           @map("completed_at")
+  costVarianceAmount  Decimal?            @map("cost_variance_amount") @db.Decimal(12, 2)
+  costVarianceReason  CostVarianceReason? @map("cost_variance_reason")
+  notes               String?
+  createdAt           DateTime            @default(now()) @map("created_at")
+  updatedAt           DateTime            @updatedAt @map("updated_at")
+  version             Int                 @default(1)
+
+  vendorProcurement VendorProcurement          @relation(fields: [vendorProcurementId], references: [id], onDelete: Restrict)
+  booking           Event                      @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  quotationLineItem QuotationLineItem?         @relation(fields: [quotationLineItemId], references: [id], onDelete: SetNull)
+  issueNotes        ProcurementLineIssueNote[]
+
+  @@index([tenantId, vendorProcurementId])
+  @@index([tenantId, bookingId, status])
+  @@map("procurement_lines")
+}
+
+/// Line-level issue note (`07-domain-model.md` §Vendor Procurement — ProcurementLineIssueNote
+/// entity, EP1-VEN-006). Append-only, matching the `InventoryMovementDamageNote` precedent.
+model ProcurementLineIssueNote {
+  id                String            @id @default(uuid()) @db.Uuid
+  tenantId          String            @map("tenant_id") @db.Uuid
+  procurementLineId String            @map("procurement_line_id") @db.Uuid
+  message           String
+  severity          IssueNoteSeverity @default(medium)
+  occurredAt        DateTime?         @map("occurred_at")
+  createdAt         DateTime          @default(now()) @map("created_at")
+
+  procurementLine ProcurementLine @relation(fields: [procurementLineId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, procurementLineId])
+  @@map("procurement_line_issue_notes")
 }

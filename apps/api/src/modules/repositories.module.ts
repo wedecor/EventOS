@@ -24,6 +24,16 @@ import { ChecklistItemRepository } from './task/domain/repositories/checklist-it
 import { ChecklistItemRepositoryImpl } from './task/infrastructure/persistence/checklist-item.repository.impl';
 import { TaskRepository } from './task/domain/repositories/task.repository';
 import { TaskRepositoryImpl } from './task/infrastructure/persistence/task.repository.impl';
+import { ProcurementLineIssueNoteRepository } from './vendor/domain/repositories/procurement-line-issue-note.repository';
+import { ProcurementLineIssueNoteRepositoryImpl } from './vendor/infrastructure/persistence/procurement-line-issue-note.repository.impl';
+import { ProcurementLineRepository } from './vendor/domain/repositories/procurement-line.repository';
+import { ProcurementLineRepositoryImpl } from './vendor/infrastructure/persistence/procurement-line.repository.impl';
+import { VendorIssueNoteRepository } from './vendor/domain/repositories/vendor-issue-note.repository';
+import { VendorIssueNoteRepositoryImpl } from './vendor/infrastructure/persistence/vendor-issue-note.repository.impl';
+import { VendorProcurementRepository } from './vendor/domain/repositories/vendor-procurement.repository';
+import { VendorProcurementRepositoryImpl } from './vendor/infrastructure/persistence/vendor-procurement.repository.impl';
+import { VendorRepository } from './vendor/domain/repositories/vendor.repository';
+import { VendorRepositoryImpl } from './vendor/infrastructure/persistence/vendor.repository.impl';
 
 @Module({
   imports: [PrismaModule],
@@ -55,6 +65,23 @@ import { TaskRepositoryImpl } from './task/infrastructure/persistence/task.repos
       provide: InventoryMovementDamageNoteRepository,
       useClass: InventoryMovementDamageNoteRepositoryImpl,
     },
+    { provide: VendorRepository, useClass: VendorRepositoryImpl },
+    {
+      provide: VendorIssueNoteRepository,
+      useClass: VendorIssueNoteRepositoryImpl,
+    },
+    {
+      provide: VendorProcurementRepository,
+      useClass: VendorProcurementRepositoryImpl,
+    },
+    {
+      provide: ProcurementLineRepository,
+      useClass: ProcurementLineRepositoryImpl,
+    },
+    {
+      provide: ProcurementLineIssueNoteRepository,
+      useClass: ProcurementLineIssueNoteRepositoryImpl,
+    },
   ],
   exports: [
     LeadRepository,
@@ -69,6 +96,11 @@ import { TaskRepositoryImpl } from './task/infrastructure/persistence/task.repos
     StaffAssignmentRepository,
     InventoryMovementRepository,
     InventoryMovementDamageNoteRepository,
+    VendorRepository,
+    VendorIssueNoteRepository,
+    VendorProcurementRepository,
+    ProcurementLineRepository,
+    ProcurementLineIssueNoteRepository,
   ],
 })
 export class RepositoriesModule {}

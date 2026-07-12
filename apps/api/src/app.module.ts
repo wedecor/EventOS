@@ -16,6 +16,7 @@ import { QuotationModule } from './modules/quotation/quotation.module';
 import { RepositoriesModule } from './modules/repositories.module';
 import { StaffModule } from './modules/staff/staff.module';
 import { TaskModule } from './modules/task/task.module';
+import { VendorModule } from './modules/vendor/vendor.module';
 
 @Module({
   imports: [
@@ -56,6 +57,7 @@ import { TaskModule } from './modules/task/task.module';
     TaskModule,
     StaffModule,
     InventoryModule,
+    VendorModule,
     AuthModule,
     HealthModule,
   ],
