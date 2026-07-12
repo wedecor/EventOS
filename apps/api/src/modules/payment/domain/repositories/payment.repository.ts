@@ -4,6 +4,7 @@ export type PaymentRecord = {
   bookingId: string | null;
   leadId: string | null;
   quotationId: string | null;
+  invoiceId: string | null;
   amount: number;
   currency: string;
   method: string;
@@ -21,6 +22,7 @@ export type CreatePaymentData = {
   bookingId?: string | null;
   leadId?: string | null;
   quotationId?: string | null;
+  invoiceId?: string | null;
   amount: number;
   currency?: string;
   method: string;
@@ -28,6 +30,10 @@ export type CreatePaymentData = {
   attachmentId?: string | null;
   missingProofReason?: string | null;
   notes?: string | null;
+};
+
+export type UpdatePaymentData = {
+  status?: string;
 };
 
 export abstract class PaymentRepository {
@@ -55,4 +61,12 @@ export abstract class PaymentRepository {
     tenantId: string,
     quotationId: string,
   ): Promise<boolean>;
+
+  // EP1-FIN-003 — Payment lifecycle extension (void)
+  abstract update(
+    tenantId: string,
+    id: string,
+    data: UpdatePaymentData,
+    version: number,
+  ): Promise<PaymentRecord>;
 }

@@ -7,6 +7,9 @@ import { BookingApplicationService } from './booking/application/services/bookin
 import { ExecutionProgressService } from './booking/application/services/execution-progress.service';
 import { WorkspaceService } from './booking/application/services/workspace.service';
 import { CustomerApplicationService } from './customer/application/services/customer.application.service';
+import { InvoiceApplicationService } from './finance/application/services/invoice.application.service';
+import { ProfitabilityApplicationService } from './finance/application/services/profitability.application.service';
+import { VendorExpenseApplicationService } from './finance/application/services/vendor-expense.application.service';
 import { InventoryMovementApplicationService } from './inventory/application/services/inventory-movement.application.service';
 import { LeadApplicationService } from './lead/application/services/lead.application.service';
 import { QuotationApplicationService } from './quotation/application/services/quotation.application.service';
@@ -40,6 +43,9 @@ import { RepositoriesModule } from './repositories.module';
     VendorApplicationService,
     VendorProcurementApplicationService,
     ProcurementLineApplicationService,
+    InvoiceApplicationService,
+    VendorExpenseApplicationService,
+    ProfitabilityApplicationService,
   ],
   exports: [
     LeadApplicationService,
@@ -57,6 +63,9 @@ import { RepositoriesModule } from './repositories.module';
     VendorApplicationService,
     VendorProcurementApplicationService,
     ProcurementLineApplicationService,
+    InvoiceApplicationService,
+    VendorExpenseApplicationService,
+    ProfitabilityApplicationService,
   ],
 })
 export class ApplicationServicesModule {}

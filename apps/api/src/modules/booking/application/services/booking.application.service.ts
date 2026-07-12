@@ -11,7 +11,11 @@ import {
   BookingStatusChangedEvent,
   EventCreatedEvent,
 } from '../../../../shared/events/sprint1-domain.events';
-import { BookingCancelledEvent } from '../../../../shared/events/sprint2-domain.events';
+import {
+  BookingCancelledEvent,
+  EventCompletedEvent,
+} from '../../../../shared/events/sprint2-domain.events';
+import { InvoiceRepository } from '../../../finance/domain/repositories/invoice.repository';
 import { QuotationRepository } from '../../../quotation/domain/repositories/quotation.repository';
 import { EventRepository } from '../../domain/repositories/event.repository';
 import { toBookingDto, type BookingDto } from '../dtos/booking.dto';
@@ -35,6 +39,7 @@ export class BookingApplicationService {
     private readonly eventRepository: EventRepository,
     private readonly quotationRepository: QuotationRepository,
     private readonly advancePaymentQuery: AdvancePaymentQuery,
+    private readonly invoiceRepository: InvoiceRepository,
     private readonly eventPublisher: DomainEventPublisher,
   ) {}
 
@@ -202,11 +207,18 @@ export class BookingApplicationService {
     }
   }
 
-  // EP1-BR-002: Financial review required before completion (stub — always fails until Finance module)
+  // EP1-BR-002: Financial review required before completion. `08-data-model.md` §Payment
+  // Persistence: "Event transition to Completed is blocked until finance review over Payment +
+  // VendorExpense passes EP1-BR-002." Implementation decision (see implementation report):
+  // "financial review" is interpreted as no outstanding *unreviewed* billing — i.e. no invoice for
+  // the booking is left in `draft`. This maps the gate onto the one Phase 1 aggregate
+  // (`Invoice`) that has an explicit unreviewed state; `Payment`/`VendorExpense` have no
+  // "unreviewed" status in Phase 1 (recorded payments/expenses are immediately `confirmed`), and a
+  // confirmed advance payment is already guaranteed to exist by EP1-BR-001 at booking creation.
   async completeBooking(
     tenantId: string,
     bookingId: string,
-    _input: CompleteBookingInput,
+    input: CompleteBookingInput,
   ): Promise<Result<BookingDto>> {
     const existing = await this.eventRepository.findById(tenantId, bookingId);
     if (!existing) {
@@ -221,11 +233,39 @@ export class BookingApplicationService {
       );
     }
 
-    // EP1-BR-002: Stub — financial review not yet available
-    return failure(
-      'EP1-BR-002',
-      'Financial review must be completed before marking an event as completed. Finance module not yet available.',
-      { bookingId },
-    );
+    const hasDraftInvoice =
+      await this.invoiceRepository.hasDraftInvoiceForBooking(
+        tenantId,
+        bookingId,
+      );
+    if (hasDraftInvoice) {
+      return failure(
+        'EP1-BR-002',
+        'Financial review must be completed before marking an event as completed: an invoice for this booking is still in draft.',
+        { bookingId },
+      );
+    }
+
+    try {
+      const event = await this.eventRepository.update(
+        tenantId,
+        bookingId,
+        { status: 'completed', completedAt: new Date() },
+        input.version,
+      );
+
+      this.eventPublisher.publish(new EventCompletedEvent(tenantId, event));
+
+      return success(toBookingDto(event));
+    } catch (error: unknown) {
+      if (error instanceof ConcurrentModificationError) {
+        return failure(
+          'CONCURRENT_MODIFICATION',
+          'Booking was modified by another request. Reload and retry.',
+          { bookingId },
+        );
+      }
+      throw error;
+    }
   }
 }

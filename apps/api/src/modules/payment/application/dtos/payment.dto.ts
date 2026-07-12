@@ -6,6 +6,7 @@ export type PaymentDto = {
   bookingId: string | null;
   leadId: string | null;
   quotationId: string | null;
+  invoiceId: string | null;
   amount: number;
   currency: string;
   method: string;

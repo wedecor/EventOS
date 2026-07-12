@@ -4,6 +4,12 @@ import { EventRepository } from './booking/domain/repositories/event.repository'
 import { EventRepositoryImpl } from './booking/infrastructure/persistence/event.repository.impl';
 import { CustomerRepository } from './customer/domain/repositories/customer.repository';
 import { CustomerRepositoryImpl } from './customer/infrastructure/persistence/customer.repository.impl';
+import { InvoiceLineItemRepository } from './finance/domain/repositories/invoice-line-item.repository';
+import { InvoiceLineItemRepositoryImpl } from './finance/infrastructure/persistence/invoice-line-item.repository.impl';
+import { InvoiceRepository } from './finance/domain/repositories/invoice.repository';
+import { InvoiceRepositoryImpl } from './finance/infrastructure/persistence/invoice.repository.impl';
+import { VendorExpenseRepository } from './finance/domain/repositories/vendor-expense.repository';
+import { VendorExpenseRepositoryImpl } from './finance/infrastructure/persistence/vendor-expense.repository.impl';
 import { InventoryMovementDamageNoteRepository } from './inventory/domain/repositories/inventory-movement-damage-note.repository';
 import { InventoryMovementRepository } from './inventory/domain/repositories/inventory-movement.repository';
 import { InventoryMovementDamageNoteRepositoryImpl } from './inventory/infrastructure/persistence/inventory-movement-damage-note.repository.impl';
@@ -82,6 +88,15 @@ import { VendorRepositoryImpl } from './vendor/infrastructure/persistence/vendor
       provide: ProcurementLineIssueNoteRepository,
       useClass: ProcurementLineIssueNoteRepositoryImpl,
     },
+    { provide: InvoiceRepository, useClass: InvoiceRepositoryImpl },
+    {
+      provide: InvoiceLineItemRepository,
+      useClass: InvoiceLineItemRepositoryImpl,
+    },
+    {
+      provide: VendorExpenseRepository,
+      useClass: VendorExpenseRepositoryImpl,
+    },
   ],
   exports: [
     LeadRepository,
@@ -101,6 +116,9 @@ import { VendorRepositoryImpl } from './vendor/infrastructure/persistence/vendor
     VendorProcurementRepository,
     ProcurementLineRepository,
     ProcurementLineIssueNoteRepository,
+    InvoiceRepository,
+    InvoiceLineItemRepository,
+    VendorExpenseRepository,
   ],
 })
 export class RepositoriesModule {}

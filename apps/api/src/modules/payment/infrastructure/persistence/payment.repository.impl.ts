@@ -6,6 +6,7 @@ import type {
   CreatePaymentData,
   PaymentRecord,
   PaymentRepository,
+  UpdatePaymentData,
 } from '../../domain/repositories/payment.repository';
 
 @Injectable()
@@ -29,6 +30,9 @@ export class PaymentRepositoryImpl
           : undefined,
         leadId: data.leadId ?? null,
         quotationId: data.quotationId ?? null,
+        invoice: data.invoiceId
+          ? { connect: { id: data.invoiceId } }
+          : undefined,
         amount: data.amount,
         currency: data.currency ?? 'INR',
         method: data.method as never,
@@ -94,6 +98,27 @@ export class PaymentRepositoryImpl
     return count > 0;
   }
 
+  async update(
+    tenantId: string,
+    id: string,
+    data: UpdatePaymentData,
+    version: number,
+  ): Promise<PaymentRecord> {
+    try {
+      const payment = await this.prisma.payment.update({
+        where: { id, tenantId, version },
+        data: {
+          status: data.status as never,
+          version: { increment: 1 },
+        },
+      });
+
+      return this.mapPayment(payment);
+    } catch (error: unknown) {
+      return this.toConcurrentModification('Payment', id, error);
+    }
+  }
+
   private mapPayment(payment: Payment): PaymentRecord {
     return {
       id: payment.id,
@@ -101,6 +126,7 @@ export class PaymentRepositoryImpl
       bookingId: payment.bookingId,
       leadId: payment.leadId,
       quotationId: payment.quotationId,
+      invoiceId: payment.invoiceId,
       amount: this.toNumber(payment.amount)!,
       currency: payment.currency,
       method: payment.method,

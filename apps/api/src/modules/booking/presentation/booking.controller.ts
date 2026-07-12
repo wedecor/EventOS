@@ -20,10 +20,17 @@ import { WorkspaceService } from '../application/services/workspace.service';
 import { PaymentApplicationService } from '../../payment/application/services/payment.application.service';
 import { InventoryMovementApplicationService } from '../../inventory/application/services/inventory-movement.application.service';
 import { VendorProcurementApplicationService } from '../../vendor/application/services/vendor-procurement.application.service';
+import { InvoiceApplicationService } from '../../finance/application/services/invoice.application.service';
+import { ProfitabilityApplicationService } from '../../finance/application/services/profitability.application.service';
+import { VendorExpenseApplicationService } from '../../finance/application/services/vendor-expense.application.service';
 import {
   createVendorProcurementSchema,
   type CreateVendorProcurementBody,
 } from '../../vendor/presentation/schemas/vendor-procurement.schemas';
+import {
+  recordExpenseSchema,
+  type RecordExpenseBody,
+} from '../../finance/presentation/schemas/vendor-expense.schemas';
 import {
   activateWorkspaceSchema,
   advanceExecutionStageSchema,
@@ -46,6 +53,9 @@ export class BookingController {
     private readonly paymentService: PaymentApplicationService,
     private readonly inventoryMovementService: InventoryMovementApplicationService,
     private readonly vendorProcurementService: VendorProcurementApplicationService,
+    private readonly invoiceService: InvoiceApplicationService,
+    private readonly expenseService: VendorExpenseApplicationService,
+    private readonly profitabilityService: ProfitabilityApplicationService,
   ) {}
 
   @Get(':id')
@@ -111,6 +121,71 @@ export class BookingController {
       tenantId,
       id,
       { vendorId: body.vendorId, notes: body.notes },
+    );
+    return resultToResponse(result);
+  }
+
+  // EP1-FIN-002 — List invoices for a booking (Event Workspace / financial-review integration)
+  @Get(':id/invoices')
+  @ApiOperation({ summary: 'List invoices for a booking' })
+  async listInvoicesForBooking(
+    @TenantId() tenantId: string,
+    @Param('id') id: string,
+  ) {
+    const result = await this.invoiceService.listInvoicesForBooking(
+      tenantId,
+      id,
+    );
+    return resultToResponse(result);
+  }
+
+  // EP1-FIN-004 — List vendor expenses for a booking (Event Workspace integration)
+  @Get(':id/expenses')
+  @ApiOperation({ summary: 'List vendor expenses for a booking' })
+  async listExpensesForBooking(
+    @TenantId() tenantId: string,
+    @Param('id') id: string,
+  ) {
+    const result = await this.expenseService.listExpensesForBooking(
+      tenantId,
+      id,
+    );
+    return resultToResponse(result);
+  }
+
+  // EP1-FIN-004 — Record a vendor expense for a booking
+  @Post(':id/expenses')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Record a vendor expense for a booking' })
+  async recordExpense(
+    @TenantId() tenantId: string,
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(recordExpenseSchema))
+    body: RecordExpenseBody,
+  ) {
+    const result = await this.expenseService.recordExpense(tenantId, id, {
+      vendorId: body.vendorId,
+      procurementLineId: body.procurementLineId,
+      amount: body.amount,
+      currency: body.currency,
+      method: body.method,
+      paidAt: new Date(body.paidAt),
+      attachmentId: body.attachmentId,
+      notes: body.notes,
+    });
+    return resultToResponse(result);
+  }
+
+  // EP1-FIN-005 — Event profitability view (Event Workspace integration)
+  @Get(':id/profitability')
+  @ApiOperation({ summary: 'Get profitability view for a booking' })
+  async getProfitability(
+    @TenantId() tenantId: string,
+    @Param('id') id: string,
+  ) {
+    const result = await this.profitabilityService.getProfitability(
+      tenantId,
+      id,
     );
     return resultToResponse(result);
   }

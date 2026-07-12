@@ -4,7 +4,10 @@ import {
   BookingStatusChangedEvent,
   EventCreatedEvent,
 } from '../../../../shared/events/sprint1-domain.events';
-import { BookingCancelledEvent } from '../../../../shared/events/sprint2-domain.events';
+import {
+  BookingCancelledEvent,
+  EventCompletedEvent,
+} from '../../../../shared/events/sprint2-domain.events';
 import { AdvancePaymentQuery } from '../../../../shared/application/ports/advance-payment.query';
 import { BookingApplicationService } from './booking.application.service';
 import type {
@@ -15,6 +18,7 @@ import type {
   QuotationRecord,
   QuotationRepository,
 } from '../../../quotation/domain/repositories/quotation.repository';
+import type { InvoiceRepository } from '../../../finance/domain/repositories/invoice.repository';
 
 describe('BookingApplicationService', () => {
   const tenantId = 'tenant-1';
@@ -75,6 +79,7 @@ describe('BookingApplicationService', () => {
   let eventRepository: jest.Mocked<EventRepository>;
   let quotationRepository: jest.Mocked<QuotationRepository>;
   let advancePaymentQuery: jest.Mocked<AdvancePaymentQuery>;
+  let invoiceRepository: jest.Mocked<InvoiceRepository>;
   let eventPublisher: jest.Mocked<DomainEventPublisher>;
   let service: BookingApplicationService;
 
@@ -100,12 +105,21 @@ describe('BookingApplicationService', () => {
     advancePaymentQuery = {
       hasConfirmedAdvance: jest.fn(),
     };
+    invoiceRepository = {
+      create: jest.fn(),
+      findById: jest.fn(),
+      findByBookingId: jest.fn(),
+      findMaxInvoiceNumber: jest.fn(),
+      hasDraftInvoiceForBooking: jest.fn().mockResolvedValue(false),
+      update: jest.fn(),
+    };
     eventPublisher = { publish };
 
     service = new BookingApplicationService(
       eventRepository,
       quotationRepository,
       advancePaymentQuery,
+      invoiceRepository,
       eventPublisher,
     );
   });
@@ -395,11 +409,12 @@ describe('BookingApplicationService', () => {
     }
   });
 
-  it('returns EP1-BR-002 stub when completing an in-execution booking', async () => {
+  it('rejects EP1-BR-002 when a draft invoice exists for the booking', async () => {
     eventRepository.findById.mockResolvedValue({
       ...baseEvent,
       status: 'in_execution',
     });
+    invoiceRepository.hasDraftInvoiceForBooking.mockResolvedValue(true);
 
     const result = await service.completeBooking(tenantId, bookingId, {
       version: 1,
@@ -408,6 +423,57 @@ describe('BookingApplicationService', () => {
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.code).toBe('EP1-BR-002');
+    }
+    expect(eventRepository.update).not.toHaveBeenCalled();
+  });
+
+  it('completes an in-execution booking and publishes EventCompletedEvent', async () => {
+    eventRepository.findById.mockResolvedValue({
+      ...baseEvent,
+      status: 'in_execution',
+    });
+    invoiceRepository.hasDraftInvoiceForBooking.mockResolvedValue(false);
+    eventRepository.update.mockResolvedValue({
+      ...baseEvent,
+      status: 'completed',
+      completedAt: new Date('2026-08-05'),
+      version: 2,
+    });
+
+    const result = await service.completeBooking(tenantId, bookingId, {
+      version: 1,
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.status).toBe('completed');
+    }
+    expect(eventRepository.update).toHaveBeenCalledWith(
+      tenantId,
+      bookingId,
+      expect.objectContaining({ status: 'completed' }),
+      1,
+    );
+    expect(publish).toHaveBeenCalledWith(expect.any(EventCompletedEvent));
+  });
+
+  it('maps concurrent modification failures on complete', async () => {
+    eventRepository.findById.mockResolvedValue({
+      ...baseEvent,
+      status: 'in_execution',
+    });
+    invoiceRepository.hasDraftInvoiceForBooking.mockResolvedValue(false);
+    eventRepository.update.mockRejectedValue(
+      new ConcurrentModificationError('Event', bookingId),
+    );
+
+    const result = await service.completeBooking(tenantId, bookingId, {
+      version: 1,
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('CONCURRENT_MODIFICATION');
     }
   });
 });
