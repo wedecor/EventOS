@@ -11,6 +11,7 @@ import { LeadApplicationService } from './lead/application/services/lead.applica
 import { QuotationApplicationService } from './quotation/application/services/quotation.application.service';
 import { QuotationLineItemApplicationService } from './quotation/application/services/quotation-line-item.application.service';
 import { PaymentApplicationService } from './payment/application/services/payment.application.service';
+import { StaffAssignmentApplicationService } from './staff/application/services/staff-assignment.application.service';
 import { ChecklistItemApplicationService } from './task/application/services/checklist-item.application.service';
 import { TaskApplicationService } from './task/application/services/task.application.service';
 import { RepositoriesModule } from './repositories.module';
@@ -30,6 +31,7 @@ import { RepositoriesModule } from './repositories.module';
     PaymentApplicationService,
     TaskApplicationService,
     ChecklistItemApplicationService,
+    StaffAssignmentApplicationService,
   ],
   exports: [
     LeadApplicationService,
@@ -42,6 +44,7 @@ import { RepositoriesModule } from './repositories.module';
     PaymentApplicationService,
     TaskApplicationService,
     ChecklistItemApplicationService,
+    StaffAssignmentApplicationService,
   ],
 })
 export class ApplicationServicesModule {}

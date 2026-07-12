@@ -1,6 +1,7 @@
 import { DomainEvent } from './domain-event.base';
 import type { EventRecord } from '../../modules/booking/domain/repositories/event.repository';
 import type { TaskRecord } from '../../modules/task/domain/repositories/task.repository';
+import type { StaffAssignmentRecord } from '../../modules/staff/domain/repositories/staff-assignment.repository';
 
 // EP1-OPS-001, EP1-AUT-002 — Workspace activated for an approved event
 export class WorkspaceActivatedEvent extends DomainEvent {
@@ -82,6 +83,54 @@ export class TaskCompletedEvent extends DomainEvent {
   constructor(
     readonly tenantId: string,
     readonly task: TaskRecord,
+  ) {
+    super();
+  }
+}
+
+// EP1-STF-002 — Staff assignment proposed (recommendation pending Zakir confirmation)
+export class StaffAssignmentCreatedEvent extends DomainEvent {
+  readonly eventName = 'StaffAssignmentCreated';
+
+  constructor(
+    readonly tenantId: string,
+    readonly staffAssignment: StaffAssignmentRecord,
+  ) {
+    super();
+  }
+}
+
+// EP1-STF-002, EP1-AUT-004 — Staff assignment confirmed by human approval
+export class StaffAssignmentConfirmedEvent extends DomainEvent {
+  readonly eventName = 'StaffAssignmentConfirmed';
+
+  constructor(
+    readonly tenantId: string,
+    readonly staffAssignment: StaffAssignmentRecord,
+  ) {
+    super();
+  }
+}
+
+// EP1-STF-002 — Staff assignment released (event complete / assignment closed)
+export class StaffAssignmentReleasedEvent extends DomainEvent {
+  readonly eventName = 'StaffAssignmentReleased';
+
+  constructor(
+    readonly tenantId: string,
+    readonly staffAssignment: StaffAssignmentRecord,
+  ) {
+    super();
+  }
+}
+
+// EP1-STF-002 — Staff assignment withdrawn/cancelled
+export class StaffAssignmentCancelledEvent extends DomainEvent {
+  readonly eventName = 'StaffAssignmentCancelled';
+
+  constructor(
+    readonly tenantId: string,
+    readonly staffAssignment: StaffAssignmentRecord,
   ) {
     super();
   }

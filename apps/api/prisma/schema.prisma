@@ -24,6 +24,7 @@ model Tenant {
   events     Event[]
   payments   Payment[]
   tasks      Task[]
+  staffAssignments StaffAssignment[]
 
   @@map("tenants")
 }
@@ -43,6 +44,7 @@ model User {
   assignedLeads       Lead[]              @relation("LeadAssignee")
   leadStageChanges    LeadStageHistory[]  @relation("LeadStageChangedBy")
   executionOwnedEvents Event[]             @relation("EventExecutionOwner")
+  staffAssignments    StaffAssignment[]   @relation("StaffAssignmentStaffMember")
 
   @@unique([tenantId, email])
   @@index([tenantId])
@@ -323,6 +325,7 @@ model Event {
   executionOwner User?     @relation("EventExecutionOwner", fields: [executionOwnerId], references: [id], onDelete: SetNull)
   payments       Payment[]
   tasks          Task[]
+  staffAssignments StaffAssignment[]
 
   @@unique([tenantId, bookingNumber])
   @@index([tenantId, status, eventStartDate])
@@ -441,4 +444,49 @@ model ChecklistItem {
 
   @@index([tenantId, taskId])
   @@map("checklist_items")
+}
+
+// ---------------------------------------------------------------------------
+// Sprint 2C — Staff Assignment (EP1-STF-002, EP1-AUT-004)
+// ---------------------------------------------------------------------------
+
+enum StaffAssignmentStatus {
+  proposed
+  confirmed
+  released
+  cancelled
+
+  @@map("staff_assignment_status")
+}
+
+/// Staff member assigned to an event (Staff module, `07-domain-model.md` §Staff Assignment).
+/// `staffMemberId` references the existing `User` model — Phase 1 reuses the auth identity already
+/// used for `Lead.assignedToId` / `Event.executionOwnerId` since a dedicated `StaffMember` staff
+/// master (EP1-STF-001) is out of scope for Sprint 2C (see implementation report).
+model StaffAssignment {
+  id                 String                @id @default(uuid()) @db.Uuid
+  tenantId           String                @map("tenant_id") @db.Uuid
+  bookingId          String                @map("booking_id") @db.Uuid
+  staffMemberId      String                @map("staff_member_id") @db.Uuid
+  role               String?
+  isOnSiteLead       Boolean               @default(false) @map("is_on_site_lead")
+  reportingAt        DateTime?             @map("reporting_at")
+  note               String?
+  status             StaffAssignmentStatus @default(proposed)
+  confirmedAt        DateTime?             @map("confirmed_at")
+  releasedAt         DateTime?             @map("released_at")
+  cancelledAt        DateTime?             @map("cancelled_at")
+  cancellationReason String?               @map("cancellation_reason")
+  createdAt          DateTime              @default(now()) @map("created_at")
+  updatedAt          DateTime              @updatedAt @map("updated_at")
+  version            Int                   @default(1)
+
+  tenant      Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  booking     Event  @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  staffMember User   @relation("StaffAssignmentStaffMember", fields: [staffMemberId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, bookingId])
+  @@index([tenantId, staffMemberId])
+  @@index([tenantId, status])
+  @@map("staff_assignments")
 }

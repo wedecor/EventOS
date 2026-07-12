@@ -14,6 +14,8 @@ import { QuotationLineItemRepository } from './quotation/domain/repositories/quo
 import { QuotationLineItemRepositoryImpl } from './quotation/infrastructure/persistence/quotation-line-item.repository.impl';
 import { QuotationRepository } from './quotation/domain/repositories/quotation.repository';
 import { QuotationRepositoryImpl } from './quotation/infrastructure/persistence/quotation.repository.impl';
+import { StaffAssignmentRepository } from './staff/domain/repositories/staff-assignment.repository';
+import { StaffAssignmentRepositoryImpl } from './staff/infrastructure/persistence/staff-assignment.repository.impl';
 import { ChecklistItemRepository } from './task/domain/repositories/checklist-item.repository';
 import { ChecklistItemRepositoryImpl } from './task/infrastructure/persistence/checklist-item.repository.impl';
 import { TaskRepository } from './task/domain/repositories/task.repository';
@@ -37,6 +39,10 @@ import { TaskRepositoryImpl } from './task/infrastructure/persistence/task.repos
       provide: ChecklistItemRepository,
       useClass: ChecklistItemRepositoryImpl,
     },
+    {
+      provide: StaffAssignmentRepository,
+      useClass: StaffAssignmentRepositoryImpl,
+    },
   ],
   exports: [
     LeadRepository,
@@ -48,6 +54,7 @@ import { TaskRepositoryImpl } from './task/infrastructure/persistence/task.repos
     PaymentRepository,
     TaskRepository,
     ChecklistItemRepository,
+    StaffAssignmentRepository,
   ],
 })
 export class RepositoriesModule {}
