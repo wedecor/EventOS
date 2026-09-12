@@ -1,128 +1,117 @@
 import { Injectable } from '@nestjs/common';
 import type { QuotationLineItem } from '@prisma/client';
 import { PrismaService } from '../../../../database/prisma.service';
-import { ConcurrentModificationError } from '../../../../shared/database';
-import {
+import { TenantScopedRepository } from '../../../../shared/database';
+import type {
+  CreateLineItemData,
+  QuotationLineItemRecord,
   QuotationLineItemRepository,
-  type CreateQuotationLineItemData,
-  type QuotationLineItemRecord,
-  type UpdateQuotationLineItemData,
+  UpdateLineItemData,
 } from '../../domain/repositories/quotation-line-item.repository';
 
 @Injectable()
-export class QuotationLineItemRepositoryImpl implements QuotationLineItemRepository {
-  constructor(private readonly prisma: PrismaService) {}
+export class QuotationLineItemRepositoryImpl
+  extends TenantScopedRepository
+  implements QuotationLineItemRepository
+{
+  constructor(prisma: PrismaService) {
+    super(prisma);
+  }
 
   async create(
     tenantId: string,
-    data: CreateQuotationLineItemData,
+    data: CreateLineItemData,
   ): Promise<QuotationLineItemRecord> {
-    const item = await this.prisma.quotationLineItem.create({
+    const lineItem = await this.prisma.quotationLineItem.create({
       data: {
         tenantId,
         quotationId: data.quotationId,
         description: data.description,
-        packageId: data.packageId ?? null,
-        quantity: data.quantity,
-        unitPrice: data.unitPrice,
+        quantity: data.quantity ?? 1,
+        unitPriceAmount: data.unitPriceAmount,
+        currency: data.currency ?? 'INR',
         sortOrder: data.sortOrder ?? 0,
       },
     });
 
-    return this.map(item);
+    return this.mapLineItem(lineItem);
   }
 
   async findById(
     tenantId: string,
     id: string,
   ): Promise<QuotationLineItemRecord | null> {
-    const item = await this.prisma.quotationLineItem.findFirst({
-      where: { id, tenantId, deletedAt: null },
+    const lineItem = await this.prisma.quotationLineItem.findFirst({
+      where: { id, tenantId },
     });
 
-    return item ? this.map(item) : null;
+    return lineItem ? this.mapLineItem(lineItem) : null;
   }
 
-  async listActiveByQuotation(
+  async findByQuotationId(
     tenantId: string,
     quotationId: string,
   ): Promise<QuotationLineItemRecord[]> {
-    const items = await this.prisma.quotationLineItem.findMany({
-      where: { tenantId, quotationId, deletedAt: null },
+    const lineItems = await this.prisma.quotationLineItem.findMany({
+      where: { tenantId, quotationId },
       orderBy: { sortOrder: 'asc' },
     });
 
-    return items.map((item) => this.map(item));
+    return lineItems.map((item) => this.mapLineItem(item));
   }
 
   async update(
     tenantId: string,
     id: string,
-    data: UpdateQuotationLineItemData,
+    data: UpdateLineItemData,
     version: number,
   ): Promise<QuotationLineItemRecord> {
     try {
-      const item = await this.prisma.quotationLineItem.update({
-        where: { id, tenantId, version, deletedAt: null },
+      const lineItem = await this.prisma.quotationLineItem.update({
+        where: { id, tenantId, version },
         data: {
           description: data.description,
-          packageId: data.packageId,
           quantity: data.quantity,
-          unitPrice: data.unitPrice,
+          unitPriceAmount: data.unitPriceAmount,
           sortOrder: data.sortOrder,
           version: { increment: 1 },
         },
       });
 
-      return this.map(item);
-    } catch {
-      throw new ConcurrentModificationError('QuotationLineItem', id);
+      return this.mapLineItem(lineItem);
+    } catch (error: unknown) {
+      return this.toConcurrentModification('QuotationLineItem', id, error);
     }
   }
 
-  async softDelete(
-    tenantId: string,
-    id: string,
-    version: number,
-  ): Promise<QuotationLineItemRecord> {
-    try {
-      const item = await this.prisma.quotationLineItem.update({
-        where: { id, tenantId, version, deletedAt: null },
-        data: {
-          deletedAt: new Date(),
-          version: { increment: 1 },
-        },
-      });
-
-      return this.map(item);
-    } catch {
-      throw new ConcurrentModificationError('QuotationLineItem', id);
-    }
+  async remove(tenantId: string, id: string): Promise<void> {
+    await this.prisma.quotationLineItem.deleteMany({
+      where: { id, tenantId },
+    });
   }
 
-  async countActiveByQuotation(
+  async countByQuotationId(
     tenantId: string,
     quotationId: string,
   ): Promise<number> {
     return this.prisma.quotationLineItem.count({
-      where: { tenantId, quotationId, deletedAt: null },
+      where: { tenantId, quotationId },
     });
   }
 
-  private map(item: QuotationLineItem): QuotationLineItemRecord {
+  private mapLineItem(lineItem: QuotationLineItem): QuotationLineItemRecord {
     return {
-      id: item.id,
-      tenantId: item.tenantId,
-      quotationId: item.quotationId,
-      description: item.description,
-      packageId: item.packageId,
-      quantity: Number(item.quantity),
-      unitPrice: Number(item.unitPrice),
-      sortOrder: item.sortOrder,
-      deletedAt: item.deletedAt,
-      createdAt: item.createdAt,
-      updatedAt: item.updatedAt,
-      version: item.version,
+      id: lineItem.id,
+      tenantId: lineItem.tenantId,
+      quotationId: lineItem.quotationId,
+      description: lineItem.description,
+      quantity: lineItem.quantity,
+      unitPriceAmount: this.toNumber(lineItem.unitPriceAmount) ?? 0,
+      currency: lineItem.currency,
+      sortOrder: lineItem.sortOrder,
+      createdAt: lineItem.createdAt,
+      updatedAt: lineItem.updatedAt,
+      version: lineItem.version,
     };
   }
 }

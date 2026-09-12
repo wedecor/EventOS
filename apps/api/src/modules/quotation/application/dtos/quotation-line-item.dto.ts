@@ -2,24 +2,20 @@ import type { QuotationLineItemRecord } from '../../domain/repositories/quotatio
 
 export type QuotationLineItemDto = {
   id: string;
+  tenantId: string;
   quotationId: string;
   description: string;
   quantity: number;
-  unitPrice: number;
+  unitPriceAmount: number;
+  currency: string;
   sortOrder: number;
+  createdAt: Date;
+  updatedAt: Date;
   version: number;
 };
 
 export function toQuotationLineItemDto(
-  item: QuotationLineItemRecord,
+  record: QuotationLineItemRecord,
 ): QuotationLineItemDto {
-  return {
-    id: item.id,
-    quotationId: item.quotationId,
-    description: item.description,
-    quantity: item.quantity,
-    unitPrice: item.unitPrice,
-    sortOrder: item.sortOrder,
-    version: item.version,
-  };
+  return { ...record };
 }

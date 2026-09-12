@@ -42,18 +42,6 @@ export class FollowUpRepositoryImpl
     return followUp ? this.mapFollowUp(followUp) : null;
   }
 
-  async listByLeadId(
-    tenantId: string,
-    leadId: string,
-  ): Promise<FollowUpRecord[]> {
-    const followUps = await this.prisma.followUp.findMany({
-      where: { tenantId, leadId },
-      orderBy: [{ status: 'asc' }, { dueAt: 'asc' }],
-    });
-
-    return followUps.map((followUp) => this.mapFollowUp(followUp));
-  }
-
   async update(
     tenantId: string,
     id: string,
@@ -64,16 +52,18 @@ export class FollowUpRepositoryImpl
       const followUp = await this.prisma.followUp.update({
         where: { id, tenantId, version },
         data: {
-          dueAt: data.dueAt,
-          notes: data.notes,
           status: data.status,
+          ...(data.dueAt !== undefined && data.dueAt !== null
+            ? { dueAt: data.dueAt }
+            : {}),
+          notes: data.notes,
           version: { increment: 1 },
         },
       });
 
       return this.mapFollowUp(followUp);
     } catch (error: unknown) {
-      this.toConcurrentModification('FollowUp', id, error);
+      return this.toConcurrentModification('FollowUp', id, error);
     }
   }
 

@@ -77,7 +77,7 @@ Implementation technology was selected in **ADR-018** (NestJS). That ADR changes
 | Logging | **Pino** (ADR-015) |
 | Containerization | **Docker** |
 | Package manager | **pnpm** |
-| Testing | **Jest** |
+| Testing | **Jest 30** with **@swc/jest** transformer (SWC ~20× faster than tsc) |
 
 Full ADR: [`docs/12-architecture-decisions.md`](./12-architecture-decisions.md) — section **ADR-018**.
 
@@ -153,8 +153,8 @@ Install the following on **Ubuntu** or **macOS** before cloning.
 | Tool | Version | Purpose |
 |------|---------|---------|
 | **Git** | Latest stable | Version control |
-| **Node.js** | **20 LTS** (`20.x`) | Runtime — use [nvm](https://github.com/nvm-sh/nvm) or [fnm](https://github.com/Schniz/fnm) |
-| **pnpm** | **9+** | Package manager — `corepack enable && corepack prepare pnpm@latest --activate` |
+| **Node.js** | **22 LTS** (`>=22.12 <23`) | Runtime — use [nvm](https://github.com/nvm-sh/nvm) or [fnm](https://github.com/Schniz/fnm). Node 23+ is unsupported. |
+| **pnpm** | **10.13+** | Package manager — `corepack enable && corepack prepare pnpm@10.13.1 --activate` |
 | **Docker** | Latest | Local PostgreSQL and Redis |
 | **Cursor** | Latest | Recommended IDE (AI-assisted development) |
 | **VS Code** | Latest | Optional alternative to Cursor |
@@ -179,8 +179,8 @@ Using Docker for PostgreSQL and Redis is **strongly recommended** — it matches
 
 ```bash
 git --version
-node --version    # expect v20.x.x
-pnpm --version    # expect 9.x or higher
+node --version    # expect v22.12.x or higher within Node 22 LTS
+pnpm --version    # expect 10.13.x or higher
 docker --version
 docker compose version
 ```
@@ -198,15 +198,15 @@ git clone <repository-url> EventOS
 cd EventOS
 ```
 
-### Step 2 — Install Node.js 20 and pnpm
+### Step 2 — Install Node.js 22 and pnpm
 
 ```bash
 # Example with nvm
-nvm install 20
-nvm use 20
+nvm install 22
+nvm use
 
 corepack enable
-corepack prepare pnpm@latest --activate
+corepack prepare pnpm@10.13.1 --activate
 ```
 
 ### Step 3 — Install dependencies
@@ -780,7 +780,7 @@ rm -rf node_modules
 pnpm install
 ```
 
-Use Node 20 — other major versions are unsupported.
+Use Node 22 LTS (`>=22.12 <23`). Node 23+ is unsupported for this project.
 
 ### Environment validation failed at startup
 
@@ -802,6 +802,19 @@ Use Node 20 — other major versions are unsupported.
 - Wrong `DATABASE_URL` — verify credentials match Docker Compose
 - Redis not running — check `eventos-redis` container
 - Wrong `REDIS_HOST` / `REDIS_PORT` in `.env`
+
+### SWC / Jest transformer issues
+
+**Symptoms:** Tests fail with transform errors, decorator metadata missing at runtime, or `Cannot use import statement outside a module`.
+
+**Context:** This project uses **@swc/jest** (not ts-jest) as the Jest transformer. SWC is configured in `apps/api/.swcrc` with `legacyDecorator` and `decoratorMetadata` enabled for NestJS compatibility.
+
+**Fixes:**
+
+- Ensure `.swcrc` exists in `apps/api/` with `legacyDecorator: true` and `decoratorMetadata: true`
+- Ensure `package.json` jest transform is `["@swc/jest"]` (not `"ts-jest"`)
+- Ensure `test/jest-e2e.json` also uses `["@swc/jest"]`
+- Do NOT install ts-jest — it is incompatible with Jest 30
 
 ### Tests fail after pulling changes
 
@@ -827,7 +840,7 @@ You are working on Event OS — a greenfield NestJS backend for We Decor Events 
 
 ## Architecture status: FROZEN
 Do NOT change business rules, domain model, API contracts, or module boundaries without explicit founder approval.
-Technology stack is fixed by ADR-018: NestJS + TypeScript + PostgreSQL + Prisma + Redis + BullMQ + Zod + Passport JWT + pnpm.
+Technology stack is fixed by ADR-018: NestJS + TypeScript + PostgreSQL + Prisma + Redis + BullMQ + Zod + Passport JWT + pnpm. Testing uses Jest 30 with @swc/jest (not ts-jest).
 
 ## Authoritative documents (read before coding)
 - Business: docs/business/19-event-os-phase1-requirements.md (EP1 IDs, W1–W5 UAT)
@@ -868,7 +881,7 @@ Goal: lead capture through to Approved Event (Booking), with workspace activatio
 7. Run: cd apps/api && pnpm build && pnpm lint && pnpm test && pnpm test:e2e
 
 ## Dev environment
-- Node.js 20 LTS, pnpm 9+
+- Node.js 22 LTS (>=22.12 <23), pnpm 10.13+
 - cd apps/api && cp .env.example .env
 - docker compose -f infrastructure/docker/docker-compose.yml up -d
 - pnpm install && pnpm prisma:generate && pnpm prisma:migrate && pnpm prisma:seed
@@ -894,5 +907,5 @@ Do NOT implement auth module unless explicitly requested — stub tenant context
 
 ---
 
-*Last updated: 2026-07-08*
+*Last updated: 2026-07-10*
 *Owner: Founding Engineering*

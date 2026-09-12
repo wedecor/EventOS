@@ -19,9 +19,9 @@ export type CreateFollowUpData = {
 };
 
 export type UpdateFollowUpData = {
-  dueAt?: Date;
+  status?: FollowUpRecord['status'];
+  dueAt?: Date | null;
   notes?: string | null;
-  status?: FollowUpStatus;
 };
 
 export abstract class FollowUpRepository {
@@ -34,11 +34,6 @@ export abstract class FollowUpRepository {
     tenantId: string,
     id: string,
   ): Promise<FollowUpRecord | null>;
-
-  abstract listByLeadId(
-    tenantId: string,
-    leadId: string,
-  ): Promise<FollowUpRecord[]>;
 
   abstract update(
     tenantId: string,

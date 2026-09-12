@@ -59,6 +59,28 @@ describe('CustomerApplicationService', () => {
     );
   });
 
+  it('returns not found when getting a missing customer', async () => {
+    customerRepository.findById.mockResolvedValue(null);
+
+    const result = await service.getCustomerById(tenantId, customerId);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('NOT_FOUND');
+    }
+  });
+
+  it('retrieves a customer by id', async () => {
+    customerRepository.findById.mockResolvedValue(baseCustomer);
+
+    const result = await service.getCustomerById(tenantId, customerId);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.id).toBe(customerId);
+    }
+  });
+
   it('rejects create when display name is empty', async () => {
     const result = await service.createCustomer(tenantId, {
       displayName: '   ',

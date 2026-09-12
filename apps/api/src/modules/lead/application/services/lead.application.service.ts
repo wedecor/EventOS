@@ -1,6 +1,5 @@
 import { Injectable } from '@nestjs/common';
 import { AdvancePaymentQuery } from '../../../../shared/application/ports/advance-payment.query';
-import { LeadConversionQuery } from '../../../../shared/application/ports/lead-conversion.query';
 import {
   failure,
   success,
@@ -20,9 +19,8 @@ import {
 } from '../../domain/lead-stage.rules';
 import {
   FollowUpRepository,
-  type FollowUpRecord,
+  type UpdateFollowUpData,
 } from '../../domain/repositories/follow-up.repository';
-import { CustomerRepository } from '../../../customer/domain/repositories/customer.repository';
 import {
   LeadRepository,
   type CreateLeadData,
@@ -30,15 +28,7 @@ import {
   type UpdateLeadData,
 } from '../../domain/repositories/lead.repository';
 import { toFollowUpDto, type FollowUpDto } from '../dtos/follow-up.dto';
-import {
-  toLeadListItemDto,
-  type LeadListItemDto,
-} from '../dtos/lead-list-item.dto';
 import { toLeadDto, type LeadDto } from '../dtos/lead.dto';
-
-export type ListLeadsOptions = {
-  includeCustomer?: boolean;
-};
 
 export type CreateLeadInput = CreateLeadData;
 export type UpdateLeadInput = UpdateLeadData;
@@ -61,16 +51,33 @@ export type ScheduleFollowUpInput = {
   notes?: string | null;
 };
 
+export type UpdateFollowUpInput = UpdateFollowUpData;
+
 @Injectable()
 export class LeadApplicationService {
   constructor(
     private readonly leadRepository: LeadRepository,
     private readonly followUpRepository: FollowUpRepository,
-    private readonly customerRepository: CustomerRepository,
     private readonly advancePaymentQuery: AdvancePaymentQuery,
-    private readonly leadConversionQuery: LeadConversionQuery,
     private readonly eventPublisher: DomainEventPublisher,
   ) {}
+
+  async listLeads(tenantId: string): Promise<Result<LeadDto[]>> {
+    const leads = await this.leadRepository.findAll(tenantId);
+    return success(leads.map(toLeadDto));
+  }
+
+  async getLeadById(
+    tenantId: string,
+    leadId: string,
+  ): Promise<Result<LeadDto>> {
+    const lead = await this.leadRepository.findById(tenantId, leadId);
+    if (!lead) {
+      return failure('NOT_FOUND', 'Lead not found.');
+    }
+
+    return success(toLeadDto(lead));
+  }
 
   async createLead(
     tenantId: string,
@@ -191,14 +198,6 @@ export class LeadApplicationService {
           'Advance payment must be confirmed before the lead can be approved.',
         );
       }
-
-      const conversion = await this.leadConversionQuery.validateForApproval(
-        tenantId,
-        leadId,
-      );
-      if (!conversion.ok) {
-        return conversion;
-      }
     }
 
     try {
@@ -259,103 +258,6 @@ export class LeadApplicationService {
     }
   }
 
-  async listLeads(
-    tenantId: string,
-    options: ListLeadsOptions = {},
-  ): Promise<Result<LeadListItemDto[]>> {
-    const leads = await this.leadRepository.listAll(tenantId);
-    const dtos = leads.map(toLeadDto);
-
-    if (!options.includeCustomer) {
-      return success(dtos);
-    }
-
-    const customers = await this.customerRepository.listAll(tenantId);
-    const nameById = new Map(
-      customers.map((customer) => [customer.id, customer.displayName]),
-    );
-
-    return success(
-      dtos.map((lead) =>
-        toLeadListItemDto(
-          lead,
-          lead.customerId ? (nameById.get(lead.customerId) ?? null) : null,
-        ),
-      ),
-    );
-  }
-
-  async listFollowUpsForLead(
-    tenantId: string,
-    leadId: string,
-  ): Promise<Result<FollowUpDto[]>> {
-    const lead = await this.leadRepository.findById(tenantId, leadId);
-    if (!lead) {
-      return failure('NOT_FOUND', 'Lead not found.');
-    }
-
-    const followUps = await this.followUpRepository.listByLeadId(
-      tenantId,
-      leadId,
-    );
-
-    return success(followUps.map(toFollowUpDto));
-  }
-
-  async getLead(tenantId: string, leadId: string): Promise<Result<LeadDto>> {
-    const lead = await this.leadRepository.findById(tenantId, leadId);
-    if (!lead) {
-      return failure('NOT_FOUND', 'Lead not found.');
-    }
-
-    return success(toLeadDto(lead));
-  }
-
-  async updateFollowUp(
-    tenantId: string,
-    followUpId: string,
-    input: {
-      dueAt?: Date;
-      notes?: string | null;
-      status?: FollowUpRecord['status'];
-    },
-    version: number,
-  ): Promise<Result<FollowUpDto>> {
-    const existing = await this.followUpRepository.findById(
-      tenantId,
-      followUpId,
-    );
-
-    if (!existing) {
-      return failure('NOT_FOUND', 'Follow-up not found.');
-    }
-
-    const lead = await this.leadRepository.findById(tenantId, existing.leadId);
-    if (!lead) {
-      return failure('NOT_FOUND', 'Lead not found.');
-    }
-
-    if (isTerminalLeadStage(lead.stage)) {
-      return failure(
-        'INVALID_STATE',
-        'Follow-ups cannot be updated for terminal leads.',
-      );
-    }
-
-    try {
-      const followUp = await this.followUpRepository.update(
-        tenantId,
-        followUpId,
-        input,
-        version,
-      );
-
-      return success(toFollowUpDto(followUp));
-    } catch (error: unknown) {
-      return this.handleConcurrency(error, followUpId);
-    }
-  }
-
   async scheduleFollowUp(
     tenantId: string,
     leadId: string,
@@ -382,6 +284,42 @@ export class LeadApplicationService {
     this.eventPublisher.publish(new FollowUpCreatedEvent(tenantId, followUp));
 
     return success(toFollowUpDto(followUp));
+  }
+
+  async updateFollowUp(
+    tenantId: string,
+    followUpId: string,
+    input: UpdateFollowUpInput,
+    version: number,
+  ): Promise<Result<FollowUpDto>> {
+    const existing = await this.followUpRepository.findById(
+      tenantId,
+      followUpId,
+    );
+    if (!existing) {
+      return failure('NOT_FOUND', 'Follow-up not found.');
+    }
+
+    try {
+      const followUp = await this.followUpRepository.update(
+        tenantId,
+        followUpId,
+        input,
+        version,
+      );
+
+      return success(toFollowUpDto(followUp));
+    } catch (error: unknown) {
+      if (error instanceof ConcurrentModificationError) {
+        return failure(
+          'CONCURRENT_MODIFICATION',
+          'Follow-up was modified by another request. Reload and retry.',
+          { followUpId },
+        );
+      }
+
+      throw error;
+    }
   }
 
   private validateLeadDates(

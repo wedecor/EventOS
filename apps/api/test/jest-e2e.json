@@ -5,9 +5,6 @@
   "setupFiles": ["<rootDir>/setup-e2e.ts"],
   "testRegex": ".e2e-spec.ts$",
   "transform": {
-    "^.+\\.(t|j)s$": "ts-jest"
-  },
-  "moduleNameMapper": {
-    "^@nestjs/jwt$": "<rootDir>/mocks/nestjs-jwt.mock.ts"
+    "^.+\\.(t|j)s$": ["@swc/jest"]
   }
 }

@@ -5,7 +5,6 @@ import type { CustomerRecord } from '../../modules/customer/domain/repositories/
 import type { QuotationRecord } from '../../modules/quotation/domain/repositories/quotation.repository';
 import type { EventRecord } from '../../modules/booking/domain/repositories/event.repository';
 import type { PaymentRecord } from '../../modules/payment/domain/repositories/payment.repository';
-import type { ContactRecord } from '../../modules/customer/domain/repositories/contact.repository';
 
 export class LeadCreatedEvent extends DomainEvent {
   readonly eventName = 'LeadCreated';
@@ -48,18 +47,6 @@ export class FollowUpCreatedEvent extends DomainEvent {
   constructor(
     readonly tenantId: string,
     readonly followUp: FollowUpRecord,
-  ) {
-    super();
-  }
-}
-
-export class ContactAddedEvent extends DomainEvent {
-  readonly eventName = 'ContactAdded';
-
-  constructor(
-    readonly tenantId: string,
-    readonly contact: ContactRecord,
-    readonly customerId: string,
   ) {
     super();
   }
@@ -133,6 +120,17 @@ export class BookingStatusChangedEvent extends DomainEvent {
   }
 }
 
+export class PaymentRecordedEvent extends DomainEvent {
+  readonly eventName = 'PaymentRecorded';
+
+  constructor(
+    readonly tenantId: string,
+    readonly payment: PaymentRecord,
+  ) {
+    super();
+  }
+}
+
 export class QuotationSentEvent extends DomainEvent {
   readonly eventName = 'QuotationSent';
 
@@ -144,12 +142,12 @@ export class QuotationSentEvent extends DomainEvent {
   }
 }
 
-export class PaymentRecordedEvent extends DomainEvent {
-  readonly eventName = 'PaymentRecorded';
+export class QuotationRejectedEvent extends DomainEvent {
+  readonly eventName = 'QuotationRejected';
 
   constructor(
     readonly tenantId: string,
-    readonly payment: PaymentRecord,
+    readonly quotation: QuotationRecord,
   ) {
     super();
   }

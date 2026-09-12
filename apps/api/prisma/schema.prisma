@@ -17,16 +17,19 @@ model Tenant {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  users              User[]
-  customers          Customer[]
-  leads              Lead[]
-  quotations         Quotation[]
-  events             Event[]
-  quotationLineItems QuotationLineItem[]
-  payments           Payment[]
-  suggestions        Suggestion[]
-  contacts           Contact[]
-  authSessions       AuthSession[]
+  users      User[]
+  customers  Customer[]
+  leads      Lead[]
+  quotations Quotation[]
+  events     Event[]
+  payments   Payment[]
+  tasks      Task[]
+  staffAssignments StaffAssignment[]
+  inventoryMovements InventoryMovement[]
+  vendors            Vendor[]
+  vendorProcurements VendorProcurement[]
+  invoices           Invoice[]
+  vendorExpenses     VendorExpense[]
 
   @@map("tenants")
 }
@@ -46,28 +49,11 @@ model User {
   assignedLeads       Lead[]              @relation("LeadAssignee")
   leadStageChanges    LeadStageHistory[]  @relation("LeadStageChangedBy")
   executionOwnedEvents Event[]             @relation("EventExecutionOwner")
-  authSessions         AuthSession[]
+  staffAssignments    StaffAssignment[]   @relation("StaffAssignmentStaffMember")
 
   @@unique([tenantId, email])
   @@index([tenantId])
   @@map("users")
-}
-
-model AuthSession {
-  id        String    @id @default(uuid()) @db.Uuid
-  tenantId  String    @map("tenant_id") @db.Uuid
-  userId    String    @map("user_id") @db.Uuid
-  tokenHash String    @unique @map("token_hash")
-  expiresAt DateTime  @map("expires_at")
-  revokedAt DateTime? @map("revoked_at")
-  createdAt DateTime  @default(now()) @map("created_at")
-
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([tenantId, userId])
-  @@index([expiresAt])
-  @@map("auth_sessions")
 }
 
 // ---------------------------------------------------------------------------
@@ -142,12 +128,38 @@ enum EventStatus {
   @@map("event_status")
 }
 
+enum PaymentMethod {
+  upi
+  cash
+  bank_transfer
+  card
+  cheque
+  other
+
+  @@map("payment_method")
+}
+
+enum PaymentStatus {
+  confirmed
+  void
+
+  @@map("payment_status")
+}
+
 enum PreparationStatus {
   pending
   ready
   needs_attention
 
   @@map("preparation_status")
+}
+
+enum WorkspaceStatus {
+  inactive
+  active
+  archived
+
+  @@map("workspace_status")
 }
 
 model Customer {
@@ -167,31 +179,11 @@ model Customer {
   leads      Lead[]
   quotations Quotation[]
   events     Event[]
-  contacts   Contact[]
+  invoices   Invoice[]
 
   @@unique([tenantId, displayName])
   @@index([tenantId, status])
   @@map("customers")
-}
-
-model Contact {
-  id         String   @id @default(uuid()) @db.Uuid
-  tenantId   String   @map("tenant_id") @db.Uuid
-  customerId String   @map("customer_id") @db.Uuid
-  name       String
-  role       String?
-  phone      String?
-  email      String?
-  isPrimary  Boolean  @default(false) @map("is_primary")
-  createdAt  DateTime @default(now()) @map("created_at")
-  updatedAt  DateTime @updatedAt @map("updated_at")
-  version    Int      @default(1)
-
-  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
-
-  @@index([tenantId, customerId])
-  @@map("contacts")
 }
 
 model Lead {
@@ -222,7 +214,6 @@ model Lead {
   followUps     FollowUp[]
   stageHistory  LeadStageHistory[]
   quotations    Quotation[]
-  payments      Payment[]
 
   @@index([tenantId, stage])
   @@index([tenantId, assignedToId])
@@ -297,10 +288,9 @@ model Quotation {
   customer   Customer  @relation(fields: [customerId], references: [id], onDelete: Restrict)
   lead       Lead?     @relation(fields: [leadId], references: [id], onDelete: Restrict)
   event      Event?
-  lineItems  QuotationLineItem[]
-  payments   Payment[]
   superseded Quotation? @relation("QuotationRevision", fields: [supersededById], references: [id], onDelete: SetNull)
   supersedes Quotation? @relation("QuotationRevision")
+  lineItems  QuotationLineItem[]
 
   @@unique([tenantId, quotationNumber, revisionNumber])
   @@index([tenantId, status])
@@ -324,6 +314,7 @@ model Event {
   venueName           String?           @map("venue_name")
   guestCount          Int?              @map("guest_count")
   requirementsNotes   String?           @map("requirements_notes")
+  workspaceStatus     WorkspaceStatus   @default(inactive) @map("workspace_status")
   preparationStatus   PreparationStatus @default(pending) @map("preparation_status")
   operationalMilestone String?          @map("operational_milestone")
   executionOwnerId    String?           @map("execution_owner_id") @db.Uuid
@@ -339,6 +330,13 @@ model Event {
   lead           Lead?     @relation(fields: [leadId], references: [id], onDelete: Restrict)
   executionOwner User?     @relation("EventExecutionOwner", fields: [executionOwnerId], references: [id], onDelete: SetNull)
   payments       Payment[]
+  tasks          Task[]
+  staffAssignments StaffAssignment[]
+  inventoryMovements InventoryMovement[]
+  vendorProcurements VendorProcurement[]
+  procurementLines   ProcurementLine[]
+  invoices           Invoice[]
+  vendorExpenses     VendorExpense[]
 
   @@unique([tenantId, bookingNumber])
   @@index([tenantId, status, eventStartDate])
@@ -347,106 +345,520 @@ model Event {
   @@map("events")
 }
 
-enum PaymentType {
-  advance
-  balance
-  other
+// ---------------------------------------------------------------------------
+// Sprint 1 — Payment (EP1-BR-001 advance gating)
+// ---------------------------------------------------------------------------
 
-  @@map("payment_type")
+model Payment {
+  id                 String        @id @default(uuid()) @db.Uuid
+  tenantId           String        @map("tenant_id") @db.Uuid
+  bookingId          String?       @map("booking_id") @db.Uuid
+  leadId             String?       @map("lead_id") @db.Uuid
+  quotationId        String?       @map("quotation_id") @db.Uuid
+  invoiceId          String?       @map("invoice_id") @db.Uuid
+  amount             Decimal       @db.Decimal(12, 2)
+  currency           String        @default("INR")
+  method             PaymentMethod
+  status             PaymentStatus @default(confirmed)
+  receivedAt         DateTime      @map("received_at")
+  attachmentId       String?       @map("attachment_id") @db.Uuid
+  missingProofReason String?       @map("missing_proof_reason")
+  notes              String?
+  createdAt          DateTime      @default(now()) @map("created_at")
+  updatedAt          DateTime      @updatedAt @map("updated_at")
+  version            Int           @default(1)
+
+  tenant  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  booking Event?   @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  invoice Invoice? @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, bookingId])
+  @@index([tenantId, leadId])
+  @@index([tenantId, quotationId])
+  @@index([tenantId, invoiceId])
+  @@index([tenantId, status])
+  @@map("payments")
 }
 
-enum PaymentMethod {
-  upi
-  cash
-  bank_transfer
-  card
-  cheque
-  other
-
-  @@map("payment_method")
-}
-
-enum PaymentStatus {
-  recorded
-  void
-
-  @@map("payment_status")
-}
+// ---------------------------------------------------------------------------
+// Sprint 1 — Quotation Line Items
+// ---------------------------------------------------------------------------
 
 model QuotationLineItem {
-  id           String    @id @default(uuid()) @db.Uuid
-  tenantId     String    @map("tenant_id") @db.Uuid
-  quotationId  String    @map("quotation_id") @db.Uuid
-  description  String
-  packageId    String?   @map("package_id") @db.Uuid
-  quantity     Decimal   @default(1) @db.Decimal(12, 2)
-  unitPrice    Decimal   @map("unit_price") @db.Decimal(12, 2)
-  sortOrder    Int       @default(0) @map("sort_order")
-  deletedAt    DateTime? @map("deleted_at")
-  createdAt    DateTime  @default(now()) @map("created_at")
-  updatedAt    DateTime  @updatedAt @map("updated_at")
-  version      Int       @default(1)
+  id            String   @id @default(uuid()) @db.Uuid
+  tenantId      String   @map("tenant_id") @db.Uuid
+  quotationId   String   @map("quotation_id") @db.Uuid
+  description   String
+  quantity      Int      @default(1)
+  unitPriceAmount Decimal @map("unit_price_amount") @db.Decimal(12, 2)
+  currency      String   @default("INR")
+  sortOrder     Int      @default(0) @map("sort_order")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+  version       Int      @default(1)
 
-  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   quotation Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  procurementLines ProcurementLine[]
 
   @@index([tenantId, quotationId])
   @@map("quotation_line_items")
 }
 
-model Payment {
-  id                 String        @id @default(uuid()) @db.Uuid
-  tenantId           String        @map("tenant_id") @db.Uuid
-  eventId            String?       @map("event_id") @db.Uuid
-  leadId             String?       @map("lead_id") @db.Uuid
-  quotationId        String?       @map("quotation_id") @db.Uuid
-  paymentType        PaymentType   @default(advance) @map("payment_type")
-  amount             Decimal       @db.Decimal(12, 2)
-  currency           String        @default("INR")
-  method             PaymentMethod
-  status             PaymentStatus @default(recorded)
-  receivedAt         DateTime      @map("received_at")
-  missingProofReason String?       @map("missing_proof_reason")
-  createdAt          DateTime      @default(now()) @map("created_at")
-  updatedAt          DateTime      @updatedAt @map("updated_at")
-  version            Int           @default(1)
+// ---------------------------------------------------------------------------
+// Sprint 2B — Task Management (EP1-OPS-003, EP1-AUT-003)
+// ---------------------------------------------------------------------------
 
-  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  event     Event?     @relation(fields: [eventId], references: [id], onDelete: Restrict)
-  lead      Lead?      @relation(fields: [leadId], references: [id], onDelete: Restrict)
-  quotation Quotation? @relation(fields: [quotationId], references: [id], onDelete: Restrict)
-
-  @@index([tenantId, eventId])
-  @@index([tenantId, leadId])
-  @@index([tenantId, quotationId])
-  @@index([tenantId, status, paymentType])
-  @@map("payments")
-}
-
-enum SuggestionStatus {
+enum TaskStatus {
   pending
-  accepted
-  dismissed
-  expired
+  in_progress
+  completed
+  cancelled
 
-  @@map("suggestion_status")
+  @@map("task_status")
 }
 
-model Suggestion {
-  id            String           @id @default(uuid()) @db.Uuid
-  tenantId      String           @map("tenant_id") @db.Uuid
-  type          String
-  status        SuggestionStatus @default(pending)
-  aggregateType String           @map("aggregate_type")
-  aggregateId   String           @map("aggregate_id") @db.Uuid
-  payload       Json?
-  createdAt     DateTime         @default(now()) @map("created_at")
-  updatedAt     DateTime         @updatedAt @map("updated_at")
-  version       Int              @default(1)
+/// Event-linked execution checklist / operational task (Task module, `07-domain-model.md` §Task).
+model Task {
+  id          String     @id @default(uuid()) @db.Uuid
+  tenantId    String     @map("tenant_id") @db.Uuid
+  bookingId   String     @map("booking_id") @db.Uuid
+  title       String
+  description String?
+  assignedTo  String?    @map("assigned_to") @db.Uuid
+  dueAt       DateTime?  @map("due_at")
+  status      TaskStatus @default(pending)
+  completedAt DateTime?  @map("completed_at")
+  createdAt   DateTime   @default(now()) @map("created_at")
+  updatedAt   DateTime   @updatedAt @map("updated_at")
+  version     Int        @default(1)
 
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  booking        Event           @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  checklistItems ChecklistItem[]
+
+  @@index([tenantId, bookingId])
+  @@index([tenantId, status])
+  @@index([tenantId, assignedTo])
+  @@map("tasks")
+}
+
+/// Owned checklist row under a Task (`07-domain-model.md` §Task — ChecklistItem entity).
+model ChecklistItem {
+  id          String    @id @default(uuid()) @db.Uuid
+  tenantId    String    @map("tenant_id") @db.Uuid
+  taskId      String    @map("task_id") @db.Uuid
+  description String
+  isCompleted Boolean   @default(false) @map("is_completed")
+  completedAt DateTime? @map("completed_at")
+  sortOrder   Int       @default(0) @map("sort_order")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  version     Int       @default(1)
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, taskId])
+  @@map("checklist_items")
+}
+
+// ---------------------------------------------------------------------------
+// Sprint 2C — Staff Assignment (EP1-STF-002, EP1-AUT-004)
+// ---------------------------------------------------------------------------
+
+enum StaffAssignmentStatus {
+  proposed
+  confirmed
+  released
+  cancelled
+
+  @@map("staff_assignment_status")
+}
+
+/// Staff member assigned to an event (Staff module, `07-domain-model.md` §Staff Assignment).
+/// `staffMemberId` references the existing `User` model — Phase 1 reuses the auth identity already
+/// used for `Lead.assignedToId` / `Event.executionOwnerId` since a dedicated `StaffMember` staff
+/// master (EP1-STF-001) is out of scope for Sprint 2C (see implementation report).
+model StaffAssignment {
+  id                 String                @id @default(uuid()) @db.Uuid
+  tenantId           String                @map("tenant_id") @db.Uuid
+  bookingId          String                @map("booking_id") @db.Uuid
+  staffMemberId      String                @map("staff_member_id") @db.Uuid
+  role               String?
+  isOnSiteLead       Boolean               @default(false) @map("is_on_site_lead")
+  reportingAt        DateTime?             @map("reporting_at")
+  note               String?
+  status             StaffAssignmentStatus @default(proposed)
+  confirmedAt        DateTime?             @map("confirmed_at")
+  releasedAt         DateTime?             @map("released_at")
+  cancelledAt        DateTime?             @map("cancelled_at")
+  cancellationReason String?               @map("cancellation_reason")
+  createdAt          DateTime              @default(now()) @map("created_at")
+  updatedAt          DateTime              @updatedAt @map("updated_at")
+  version            Int                   @default(1)
+
+  tenant      Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  booking     Event  @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  staffMember User   @relation("StaffAssignmentStaffMember", fields: [staffMemberId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, bookingId])
+  @@index([tenantId, staffMemberId])
+  @@index([tenantId, status])
+  @@map("staff_assignments")
+}
+
+// ---------------------------------------------------------------------------
+// Sprint 3 — Inventory Movement (EP1-INV-003, EP1-INV-005, EP1-INV-006)
+// ---------------------------------------------------------------------------
+
+enum InventoryMovementStatus {
+  planned
+  picked
+  packed
+  loaded
+  at_venue
+  returned
+  cleaned_ready
+
+  @@map("inventory_movement_status")
+}
+
+/// Per-event stock movement through preparation and return (`07-domain-model.md` §Inventory
+/// Movement, `docs/business/08-inventory-workflow.md` §11). `inventoryItemId` is stored as a plain
+/// tenant-scoped identifier (no FK) because the `InventoryItem` master (EP1-INV-001/EP1-INV-002) is
+/// out of scope for Sprint 3 — same deferral pattern as `Payment.attachmentId` for the not-yet-built
+/// `Attachment` aggregate (see implementation report).
+model InventoryMovement {
+  id              String                  @id @default(uuid()) @db.Uuid
+  tenantId        String                  @map("tenant_id") @db.Uuid
+  bookingId       String                  @map("booking_id") @db.Uuid
+  inventoryItemId String                  @map("inventory_item_id") @db.Uuid
+  quantity        Int                     @default(1)
+  notes           String?
+  status          InventoryMovementStatus @default(planned)
+  pickedAt        DateTime?               @map("picked_at")
+  packedAt        DateTime?               @map("packed_at")
+  loadedAt        DateTime?               @map("loaded_at")
+  atVenueAt       DateTime?               @map("at_venue_at")
+  returnedAt      DateTime?               @map("returned_at")
+  cleanedReadyAt  DateTime?               @map("cleaned_ready_at")
+  createdAt       DateTime                @default(now()) @map("created_at")
+  updatedAt       DateTime                @updatedAt @map("updated_at")
+  version         Int                     @default(1)
+
+  tenant      Tenant                        @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  booking     Event                         @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  damageNotes InventoryMovementDamageNote[]
+
+  @@index([tenantId, bookingId, status])
+  @@index([tenantId, inventoryItemId, status])
+  @@map("inventory_movements")
+}
+
+/// Accountability note for damage/loss on a movement (`EP1-INV-006`). Append-only — no update or
+/// delete endpoint is documented, matching the `LeadStageHistory` immutable-log pattern.
+model InventoryMovementDamageNote {
+  id             String    @id @default(uuid()) @db.Uuid
+  tenantId       String    @map("tenant_id") @db.Uuid
+  movementId     String    @map("movement_id") @db.Uuid
+  message        String
+  accountability String?
+  occurredAt     DateTime? @map("occurred_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  movement InventoryMovement @relation(fields: [movementId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, movementId])
+  @@map("inventory_movement_damage_notes")
+}
+
+// ---------------------------------------------------------------------------
+// Sprint 4 — Vendor Procurement (EP1-VEN-001, 002, 003, 005, 006)
+// ---------------------------------------------------------------------------
+
+// Per `docs/business/07-vendor-management.md` §11A "Vendor Status Model" (explicit 5-value
+// status field) and `07-domain-model.md` §Vendor ("Preferred/backup is classification, not a
+// separate aggregate" — i.e. folded into this single status field rather than a second table).
+enum VendorStatus {
+  preferred
+  active
+  backup
+  paused
+  blocked
+
+  @@map("vendor_status")
+}
+
+enum ProcurementLineStatus {
+  planned
+  requested
+  confirmed
+  delivered
+  completed
+
+  @@map("procurement_line_status")
+}
+
+// Fixed reason list per `docs/business/07-vendor-management.md` §11 "Cost Variance Reason
+// (Phase 1 Requirement)" — required whenever actual procurement cost exceeds budget (EP1-VEN-005).
+enum CostVarianceReason {
+  market_price_increase
+  vendor_price_change
+  vendor_change_availability_quality
+  customer_scope_change
+  emergency_purchase
+  material_wastage_damage
+  incorrect_estimation
+  other
+
+  @@map("cost_variance_reason")
+}
+
+enum IssueNoteSeverity {
+  low
+  medium
+  high
+
+  @@map("issue_note_severity")
+}
+
+/// Vendor directory with status + lightweight issue history (`07-domain-model.md` §Vendor,
+/// EP1-VEN-001, EP1-VEN-006). Tax details are optional per `07-vendor-management.md` §11A.
+model Vendor {
+  id                String       @id @default(uuid()) @db.Uuid
+  tenantId          String       @map("tenant_id") @db.Uuid
+  name              String
+  category          String
+  status            VendorStatus @default(active)
+  contactName       String?      @map("contact_name")
+  contactPhone      String?      @map("contact_phone")
+  location          String?
+  servicesProvided  String?      @map("services_provided")
+  pricingNotes      String?      @map("pricing_notes")
+  paymentTerms      String?      @map("payment_terms")
+  taxDetails        String?      @map("tax_details")
+  notes             String?
+  createdAt         DateTime     @default(now()) @map("created_at")
+  updatedAt         DateTime     @updatedAt @map("updated_at")
+  version           Int          @default(1)
+
+  tenant       Tenant              @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  issueNotes   VendorIssueNote[]
+  procurements VendorProcurement[]
+  expenses     VendorExpense[]
 
   @@index([tenantId, status])
-  @@index([tenantId, aggregateType, aggregateId])
-  @@map("suggestions")
+  @@index([tenantId, category])
+  @@map("vendors")
+}
+
+/// Vendor-level feedback note (`07-domain-model.md` §Vendor — VendorIssueNote entity, EP1-VEN-006).
+/// Append-only, matching the `InventoryMovementDamageNote` precedent.
+model VendorIssueNote {
+  id         String             @id @default(uuid()) @db.Uuid
+  tenantId   String             @map("tenant_id") @db.Uuid
+  vendorId   String             @map("vendor_id") @db.Uuid
+  message    String
+  severity   IssueNoteSeverity  @default(medium)
+  occurredAt DateTime?          @map("occurred_at")
+  createdAt  DateTime           @default(now()) @map("created_at")
+
+  vendor Vendor @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, vendorId])
+  @@map("vendor_issue_notes")
+}
+
+/// Procurement header per event-vendor pairing (`07-domain-model.md` §Vendor Procurement AR,
+/// EP1-VEN-002). `status` mirrors `ProcurementLineStatus` for the header summary; Phase 1 exposes
+/// no dedicated header-transition endpoint (see implementation report).
+model VendorProcurement {
+  id        String                 @id @default(uuid()) @db.Uuid
+  tenantId  String                 @map("tenant_id") @db.Uuid
+  bookingId String                 @map("booking_id") @db.Uuid
+  vendorId  String                 @map("vendor_id") @db.Uuid
+  status    ProcurementLineStatus  @default(planned)
+  notes     String?
+  createdAt DateTime               @default(now()) @map("created_at")
+  updatedAt DateTime               @updatedAt @map("updated_at")
+  version   Int                    @default(1)
+
+  tenant  Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  booking Event             @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  vendor  Vendor            @relation(fields: [vendorId], references: [id], onDelete: Restrict)
+  lines   ProcurementLine[]
+
+  @@index([tenantId, bookingId])
+  @@index([tenantId, vendorId])
+  @@map("vendor_procurements")
+}
+
+/// Procurement line item (`07-domain-model.md` §Vendor Procurement — ProcurementLine entity,
+/// EP1-VEN-002/003/005). `bookingId` is denormalized onto the line per `08-data-model.md`
+/// §Procurement Persistence ("Each ProcurementLine stores: event_id, vendor_procurement_id,
+/// optional quotation_line_item_id"). `quotationLineItemId` is a real FK (unlike
+/// `InventoryMovement.inventoryItemId`) because `QuotationLineItem` already exists from Sprint 1.
+model ProcurementLine {
+  id                  String              @id @default(uuid()) @db.Uuid
+  tenantId            String              @map("tenant_id") @db.Uuid
+  vendorProcurementId String              @map("vendor_procurement_id") @db.Uuid
+  bookingId           String              @map("booking_id") @db.Uuid
+  quotationLineItemId String?             @map("quotation_line_item_id") @db.Uuid
+  description         String
+  category            String
+  quantity            Int                 @default(1)
+  budgetedAmount      Decimal?            @map("budgeted_amount") @db.Decimal(12, 2)
+  actualAmount        Decimal?            @map("actual_amount") @db.Decimal(12, 2)
+  currency            String              @default("INR")
+  status              ProcurementLineStatus @default(planned)
+  requestedAt         DateTime?           @map("requested_at")
+  confirmedAt         DateTime?           @map("confirmed_at")
+  deliveredAt         DateTime?           @map("delivered_at")
+  completedAt         DateTime?           @map("completed_at")
+  costVarianceAmount  Decimal?            @map("cost_variance_amount") @db.Decimal(12, 2)
+  costVarianceReason  CostVarianceReason? @map("cost_variance_reason")
+  notes               String?
+  createdAt           DateTime            @default(now()) @map("created_at")
+  updatedAt           DateTime            @updatedAt @map("updated_at")
+  version             Int                 @default(1)
+
+  vendorProcurement VendorProcurement          @relation(fields: [vendorProcurementId], references: [id], onDelete: Restrict)
+  booking           Event                      @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  quotationLineItem QuotationLineItem?         @relation(fields: [quotationLineItemId], references: [id], onDelete: SetNull)
+  issueNotes        ProcurementLineIssueNote[]
+  vendorExpenses    VendorExpense[]
+
+  @@index([tenantId, vendorProcurementId])
+  @@index([tenantId, bookingId, status])
+  @@map("procurement_lines")
+}
+
+/// Line-level issue note (`07-domain-model.md` §Vendor Procurement — ProcurementLineIssueNote
+/// entity, EP1-VEN-006). Append-only, matching the `InventoryMovementDamageNote` precedent.
+model ProcurementLineIssueNote {
+  id                String            @id @default(uuid()) @db.Uuid
+  tenantId          String            @map("tenant_id") @db.Uuid
+  procurementLineId String            @map("procurement_line_id") @db.Uuid
+  message           String
+  severity          IssueNoteSeverity @default(medium)
+  occurredAt        DateTime?         @map("occurred_at")
+  createdAt         DateTime          @default(now()) @map("created_at")
+
+  procurementLine ProcurementLine @relation(fields: [procurementLineId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, procurementLineId])
+  @@map("procurement_line_issue_notes")
+}
+
+// ---------------------------------------------------------------------------
+// Sprint 5 — Finance (EP1-FIN-002, EP1-FIN-004, EP1-FIN-005, EP1-BR-002)
+// ---------------------------------------------------------------------------
+
+enum VendorExpenseStatus {
+  confirmed
+  void
+
+  @@map("vendor_expense_status")
+}
+
+// Per `07-domain-model.md` §Invoice: "draft → sent → partially_paid → paid → void". Phase 1 API
+// design (`09-api-design.md` §Module: Finance) only exposes `send`/`void` commands — `partially_paid`
+// and `paid` are reserved for a future automatic recalculation from linked payments (see
+// implementation report: documented risk "avoid auto-financial calculations that assume missing
+// data"). The enum values are included for domain-model completeness/traceability even though no
+// Phase 1 command transitions into them yet.
+enum InvoiceStatus {
+  draft
+  sent
+  partially_paid
+  paid
+  void
+
+  @@map("invoice_status")
+}
+
+/// Vendor and event expenses for profitability (`07-domain-model.md` §VendorExpense, EP1-FIN-004).
+/// `procurementLineId` is a real FK (unlike `InventoryMovement.inventoryItemId`) because
+/// `ProcurementLine` already exists from Sprint 4 — mirrors `ProcurementLine.quotationLineItemId`.
+/// `attachmentId` is stored as a plain identifier (no FK), matching the deferred `Payment.attachmentId`
+/// pattern, because the `Attachment` aggregate (EP1-FIN-003/INV-007/MKT-003) is out of scope.
+model VendorExpense {
+  id                String              @id @default(uuid()) @db.Uuid
+  tenantId          String              @map("tenant_id") @db.Uuid
+  bookingId         String              @map("booking_id") @db.Uuid
+  vendorId          String              @map("vendor_id") @db.Uuid
+  procurementLineId String?             @map("procurement_line_id") @db.Uuid
+  amount            Decimal             @db.Decimal(12, 2)
+  currency          String              @default("INR")
+  method            PaymentMethod
+  status            VendorExpenseStatus @default(confirmed)
+  paidAt            DateTime            @map("paid_at")
+  attachmentId      String?             @map("attachment_id") @db.Uuid
+  notes             String?
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
+  version           Int                 @default(1)
+
+  tenant          Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  booking         Event            @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  vendor          Vendor           @relation(fields: [vendorId], references: [id], onDelete: Restrict)
+  procurementLine ProcurementLine? @relation(fields: [procurementLineId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, bookingId])
+  @@index([tenantId, vendorId])
+  @@index([tenantId, status])
+  @@map("vendor_expenses")
+}
+
+/// Event-linked billing and invoices (`07-domain-model.md` §Invoice, EP1-FIN-002). `invoiceNumber`
+/// is a tenant-scoped display sequence, matching `Event.bookingNumber` / `Quotation.quotationNumber`.
+model Invoice {
+  id             String        @id @default(uuid()) @db.Uuid
+  tenantId       String        @map("tenant_id") @db.Uuid
+  bookingId      String        @map("booking_id") @db.Uuid
+  customerId     String        @map("customer_id") @db.Uuid
+  invoiceNumber  Int           @map("invoice_number")
+  status         InvoiceStatus @default(draft)
+  subtotalAmount Decimal       @default(0) @map("subtotal_amount") @db.Decimal(12, 2)
+  taxAmount      Decimal       @default(0) @map("tax_amount") @db.Decimal(12, 2)
+  totalAmount    Decimal       @default(0) @map("total_amount") @db.Decimal(12, 2)
+  currency       String        @default("INR")
+  notes          String?
+  sentAt         DateTime?     @map("sent_at")
+  voidedAt       DateTime?     @map("voided_at")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+  version        Int           @default(1)
+
+  tenant    Tenant              @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  booking   Event               @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  customer  Customer            @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  lineItems InvoiceLineItem[]
+  payments  Payment[]
+
+  @@unique([tenantId, invoiceNumber])
+  @@index([tenantId, bookingId])
+  @@index([tenantId, customerId])
+  @@index([tenantId, status])
+  @@map("invoices")
+}
+
+/// Billed line under an Invoice (`07-domain-model.md` §Invoice — InvoiceLineItem entity,
+/// EP1-FIN-002). Mirrors `QuotationLineItem` exactly (same owned-entity shape and lifecycle).
+model InvoiceLineItem {
+  id              String   @id @default(uuid()) @db.Uuid
+  tenantId        String   @map("tenant_id") @db.Uuid
+  invoiceId       String   @map("invoice_id") @db.Uuid
+  description     String
+  quantity        Int      @default(1)
+  unitPriceAmount Decimal  @map("unit_price_amount") @db.Decimal(12, 2)
+  currency        String   @default("INR")
+  sortOrder       Int      @default(0) @map("sort_order")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  version         Int      @default(1)
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, invoiceId])
+  @@map("invoice_line_items")
 }

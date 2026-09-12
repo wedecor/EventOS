@@ -7,7 +7,19 @@ import { HealthModule } from './common';
 import { configuration, validateEnv } from './config';
 import { DatabaseModule, PrismaModule } from './database';
 import { ApplicationServicesModule } from './modules/application-services.module';
-import { Sprint1ApiModule } from './modules/presentation/sprint1-api.module';
+import { BookingModule } from './modules/booking/booking.module';
+import { CustomerModule } from './modules/customer/customer.module';
+import { DashboardModule } from './modules/dashboard/dashboard.module';
+import { FinanceModule } from './modules/finance/finance.module';
+import { InventoryModule } from './modules/inventory/inventory.module';
+import { LeadModule } from './modules/lead/lead.module';
+import { PaymentModule } from './modules/payment/payment.module';
+import { QuotationModule } from './modules/quotation/quotation.module';
+import { RepositoriesModule } from './modules/repositories.module';
+import { StaffModule } from './modules/staff/staff.module';
+import { TaskModule } from './modules/task/task.module';
+import { VendorModule } from './modules/vendor/vendor.module';
+
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -37,8 +49,19 @@ import { Sprint1ApiModule } from './modules/presentation/sprint1-api.module';
     }),
     DatabaseModule,
     PrismaModule,
+    RepositoriesModule,
     ApplicationServicesModule,
-    Sprint1ApiModule,
+    LeadModule,
+    CustomerModule,
+    QuotationModule,
+    BookingModule,
+    PaymentModule,
+    TaskModule,
+    StaffModule,
+    InventoryModule,
+    VendorModule,
+    FinanceModule,
+    DashboardModule,
     AuthModule,
     HealthModule,
   ],

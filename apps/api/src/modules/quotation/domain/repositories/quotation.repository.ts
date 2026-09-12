@@ -87,6 +87,12 @@ export abstract class QuotationRepository {
 
   abstract findMaxQuotationNumber(tenantId: string): Promise<number>;
 
+  // EP1-FIN-003 — Dashboard: batch quotation totals read for pending-payments aggregation
+  abstract findByIds(
+    tenantId: string,
+    ids: string[],
+  ): Promise<QuotationRecord[]>;
+
   abstract update(
     tenantId: string,
     id: string,

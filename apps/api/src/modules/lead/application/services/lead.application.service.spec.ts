@@ -7,10 +7,8 @@ import {
   LeadStageChangedEvent,
 } from '../../../../shared/events/sprint1-domain.events';
 import { AdvancePaymentQuery } from '../../../../shared/application/ports/advance-payment.query';
-import { LeadConversionQuery } from '../../../../shared/application/ports/lead-conversion.query';
 import { LeadApplicationService } from './lead.application.service';
 import type { FollowUpRepository } from '../../domain/repositories/follow-up.repository';
-import type { CustomerRepository } from '../../../customer/domain/repositories/customer.repository';
 import type {
   LeadRepository,
   LeadRecord,
@@ -44,55 +42,32 @@ describe('LeadApplicationService', () => {
 
   let leadRepository: jest.Mocked<LeadRepository>;
   let followUpRepository: jest.Mocked<FollowUpRepository>;
-  let customerRepository: jest.Mocked<CustomerRepository>;
   let advancePaymentQuery: jest.Mocked<AdvancePaymentQuery>;
-  let leadConversionQuery: jest.Mocked<LeadConversionQuery>;
   let eventPublisher: jest.Mocked<DomainEventPublisher>;
   let service: LeadApplicationService;
 
   let publish: jest.Mock;
   let updateLead: jest.Mock;
-  let changeStage: jest.Mock;
 
   beforeEach(() => {
     publish = jest.fn();
     updateLead = jest.fn();
-    changeStage = jest.fn();
     leadRepository = {
       create: jest.fn(),
       findById: jest.fn(),
+      findAll: jest.fn(),
       findByPhone: jest.fn(),
       findByStage: jest.fn(),
-      listAll: jest.fn(),
       update: updateLead,
-      changeStage,
+      changeStage: jest.fn(),
     };
     followUpRepository = {
       create: jest.fn(),
       findById: jest.fn(),
-      listByLeadId: jest.fn(),
       update: jest.fn(),
-    };
-    customerRepository = {
-      create: jest.fn(),
-      findById: jest.fn(),
-      findByPhone: jest.fn(),
-      findByDisplayName: jest.fn(),
-      update: jest.fn(),
-      listAll: jest.fn().mockResolvedValue([]),
     };
     advancePaymentQuery = {
       hasConfirmedAdvance: jest.fn(),
-    };
-    leadConversionQuery = {
-      validateForApproval: jest.fn().mockResolvedValue({
-        ok: true,
-        value: {
-          customerId: 'customer-1',
-          quotationId: 'quotation-1',
-          eventId: 'event-1',
-        },
-      }),
     };
     eventPublisher = {
       publish,
@@ -101,11 +76,43 @@ describe('LeadApplicationService', () => {
     service = new LeadApplicationService(
       leadRepository,
       followUpRepository,
-      customerRepository,
       advancePaymentQuery,
-      leadConversionQuery,
       eventPublisher,
     );
+  });
+
+  it('lists all leads for the tenant', async () => {
+    leadRepository.findAll.mockResolvedValue([baseLead]);
+
+    const result = await service.listLeads(tenantId);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toHaveLength(1);
+      expect(result.value[0].id).toBe(leadId);
+    }
+  });
+
+  it('returns not found when getting a missing lead', async () => {
+    leadRepository.findById.mockResolvedValue(null);
+
+    const result = await service.getLeadById(tenantId, leadId);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('NOT_FOUND');
+    }
+  });
+
+  it('retrieves a lead by id', async () => {
+    leadRepository.findById.mockResolvedValue(baseLead);
+
+    const result = await service.getLeadById(tenantId, leadId);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.id).toBe(leadId);
+    }
   });
 
   it('creates a lead and publishes LeadCreated', async () => {
@@ -264,7 +271,7 @@ describe('LeadApplicationService', () => {
     });
 
     expect(result.ok).toBe(true);
-    expect(changeStage).not.toHaveBeenCalled();
+    expect(leadRepository.changeStage).not.toHaveBeenCalled();
   });
 
   it('rejects invalid stage transitions', async () => {
@@ -297,7 +304,7 @@ describe('LeadApplicationService', () => {
 
   it('changes lead stage and publishes LeadStageChanged', async () => {
     leadRepository.findById.mockResolvedValue(baseLead);
-    changeStage.mockResolvedValue({
+    leadRepository.changeStage.mockResolvedValue({
       ...baseLead,
       stage: 'in_talks',
       version: 2,
@@ -326,31 +333,6 @@ describe('LeadApplicationService', () => {
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.code).toBe('VALIDATION_ERROR');
-    }
-  });
-
-  it('enforces EP1-AUT-006 before approving a lead', async () => {
-    leadRepository.findById.mockResolvedValue({
-      ...baseLead,
-      stage: 'in_talks',
-    });
-    advancePaymentQuery.hasConfirmedAdvance.mockResolvedValue(true);
-    leadConversionQuery.validateForApproval.mockResolvedValue({
-      ok: false,
-      error: {
-        code: 'EP1-AUT-006',
-        message: 'Conversion chain incomplete.',
-      },
-    });
-
-    const result = await service.changeLeadStage(tenantId, leadId, {
-      stage: 'approved',
-      version: 1,
-    });
-
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error.code).toBe('EP1-AUT-006');
     }
   });
 
@@ -470,57 +452,5 @@ describe('LeadApplicationService', () => {
 
     expect(result.ok).toBe(true);
     expect(publish).toHaveBeenCalledWith(expect.any(FollowUpCreatedEvent));
-  });
-
-  it('lists leads with customer display names when includeCustomer is set', async () => {
-    leadRepository.listAll.mockResolvedValue([
-      { ...baseLead, customerId: 'customer-1' },
-    ]);
-    customerRepository.listAll.mockResolvedValue([
-      {
-        id: 'customer-1',
-        tenantId,
-        displayName: 'Priya Sharma',
-        type: 'individual',
-        status: 'active',
-        primaryPhone: '+919999999999',
-        primaryEmail: null,
-        notes: null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        version: 1,
-      },
-    ]);
-
-    const result = await service.listLeads(tenantId, { includeCustomer: true });
-
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.value[0]?.customerDisplayName).toBe('Priya Sharma');
-    }
-  });
-
-  it('lists follow-ups for a lead', async () => {
-    leadRepository.findById.mockResolvedValue(baseLead);
-    followUpRepository.listByLeadId.mockResolvedValue([
-      {
-        id: 'follow-up-1',
-        tenantId,
-        leadId,
-        dueAt: new Date('2026-08-10T10:00:00.000Z'),
-        notes: null,
-        status: 'pending',
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        version: 1,
-      },
-    ]);
-
-    const result = await service.listFollowUpsForLead(tenantId, leadId);
-
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.value).toHaveLength(1);
-    }
   });
 });

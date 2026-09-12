@@ -1,90 +1,126 @@
 # Event OS API
 
-NestJS modular monolith for We Decor Phase 1 (Sprint 1: W5 Lead → Booking).
+Production-ready NestJS backend for Event OS (We Decor Phase 1). Prisma persistence is configured; business models and modules are added in Sprint 1 per [ADR-018](../../docs/12-architecture-decisions.md).
 
 ## Prerequisites
 
-- Node.js **20 LTS**
-- pnpm **9+**
-- Docker Compose (PostgreSQL 16 + Redis 7)
+- Node.js 22 LTS (`22.12+`)
+- [pnpm](https://pnpm.io/) 10.13+
+- Docker and Docker Compose (for local PostgreSQL and Redis)
 
 ## Quick start
 
+### 1. Install dependencies
+
 ```bash
 pnpm install
-cp .env.example .env
-docker compose -f ../../infrastructure/docker/docker-compose.yml up -d
 pnpm prisma:generate
-pnpm prisma:migrate
-pnpm prisma:seed
+```
+
+### 2. Start infrastructure
+
+From the repository root:
+
+```bash
+docker compose -f infrastructure/docker/docker-compose.yml up -d
+```
+
+This starts:
+
+- **PostgreSQL** on `localhost:5432` (user/password/db: `eventos`)
+- **Redis** on `localhost:6379`
+
+### 3. Configure environment
+
+```bash
+cp .env.example .env
+```
+
+`DATABASE_URL` is loaded from `.env` and validated at startup. The default matches the Docker Compose services above.
+
+### 4. Run the API
+
+```bash
+# Development (watch mode)
 pnpm start:dev
+
+# Production build
+pnpm build
+pnpm start:prod
 ```
 
-Default URL: http://localhost:3000  
-Swagger: http://localhost:3000/docs
+The API listens on `http://localhost:3000` by default.
 
-## Authentication (ADR-008)
+## Endpoints
 
-**Production:** `Authorization: Bearer <access_token>` (tenant is taken from the JWT).
+| Method | Path            | Description                                   |
+| ------ | --------------- | --------------------------------------------- |
+| GET    | `/health`       | Liveness probe — application is running       |
+| GET    | `/health/ready` | Readiness probe — Prisma (PostgreSQL) + Redis |
+| GET    | `/docs`         | Swagger UI                                    |
+| GET    | `/docs/json`    | OpenAPI JSON document                         |
 
-**Login:**
+Business routes are mounted under `/api/v1` when modules are added in Sprint 1.
 
-```http
-POST /api/v1/auth/login
-{ "email": "admin@wedecor.events", "password": "<see seed.ts default>" }
-```
-
-**Development fallback** (when `NODE_ENV` is not `production`): you may still use `X-Tenant-Slug: we-decor` without a token.
-
-Set `JWT_SECRET` (32+ chars) in production. Optional: `JWT_EXPIRES_IN` (default `15m`), `REFRESH_TOKEN_DAYS` (default `7`). Login sets an HTTP-only `refresh_token` cookie on `/api/v1/auth/*`.
-
-Integration tests (PostgreSQL): `RUN_INTEGRATION_TESTS=true pnpm test:integration` (CI runs migrate + seed first).
-
-## Sprint 1 REST surface
-
-Business routes are under `/api/v1` (health excluded):
-
-| Area | Endpoints |
-|------|-----------|
-| Leads | `GET/POST /leads`, `GET/PATCH /leads/:id`, `PATCH /leads/:id/stage`, `POST .../assign`, `POST .../follow-ups` |
-| Auth | `POST /auth/login`, `POST /auth/refresh`, `POST /auth/logout`, `GET /auth/me` |
-| Clients | `GET/POST /clients`, `PATCH /clients/:id`, `POST /clients/:id/contacts` |
-| Quotations | CRUD-ish + line items, `send`, `approve`, `reject`, `revise`, `GET .../pdf` |
-| Bookings | `GET /bookings/:id`, `POST /bookings/from-quotation/:quotationId`, `POST .../activate` |
-| Payments | `POST /payments` |
-| Suggestions | `GET /suggestions?status=pending`, `POST .../accept`, `POST .../dismiss` |
-| Follow-ups | `PATCH /follow-ups/:id` |
-
-Optimistic concurrency: send `If-Match: "<version>"` on PATCH endpoints that require it.
-
-## Layers
+## Project structure
 
 ```
-presentation/ (controllers, Zod schemas)
-application/  (services, Result<T>, domain events)
-domain/       (repository interfaces, rules)
-infrastructure/ (Prisma repositories)
+prisma/
+├── schema.prisma      # Generator + datasource only (no models yet)
+├── migrations/        # Migration history (Sprint 1+)
+└── seed.ts            # Seed entry point (empty until models exist)
+
+src/
+├── auth/              # Authentication placeholder (Passport JWT in Sprint 1)
+├── common/            # Filters, pipes, health checks
+├── config/            # Environment validation (Zod) and configuration
+├── database/          # PrismaModule, PrismaService, Redis provider
+├── modules/           # Business modules (empty — added per sprint)
+└── shared/            # Cross-cutting shared kernel (empty)
 ```
 
-Prisma is **only** imported under `infrastructure/persistence/`.
+## Prisma scripts
 
-## Scripts
+| Command              | Description                                      |
+| -------------------- | ------------------------------------------------ |
+| `pnpm prisma:generate` | Generate Prisma Client from schema             |
+| `pnpm prisma:migrate`  | Create and apply migrations (`migrate dev`)    |
+| `pnpm prisma:studio`   | Open Prisma Studio                             |
+| `pnpm prisma:seed`     | Run seed script (`prisma db seed`)             |
+| `pnpm prisma:reset`    | Reset database and re-apply migrations         |
 
-| Command | Description |
-|---------|-------------|
-| `pnpm start:dev` | API with hot reload |
-| `pnpm build` | Compile (runs `prisma generate`) |
-| `pnpm lint` | ESLint |
-| `pnpm test` | Unit tests |
-| `pnpm test:e2e` | Health e2e |
-| `pnpm prisma:migrate` | Apply migrations |
-| `pnpm prisma:seed` | Seed We Decor tenant |
+`pnpm build` runs `prisma generate` automatically via the `prebuild` hook.
 
-## Migrations
+## Development scripts
 
-1. `20260708144526_sprint1_w5_lead_to_booking` — core W5 aggregates
-2. `20260912133000_sprint1_w5_payments_line_items_suggestions` — Payment, line items, Suggestion
-3. `20260912143000_contacts` — Contact
-4. `20260912150000_auth_sessions` — refresh token sessions
+| Command           | Description           |
+| ----------------- | --------------------- |
+| `pnpm start:dev`  | Start with hot reload |
+| `pnpm build`      | Compile TypeScript    |
+| `pnpm lint`       | Run ESLint            |
+| `pnpm format`     | Format with Prettier  |
+| `pnpm test`       | Run unit tests        |
+| `pnpm test:e2e`   | Run end-to-end tests  |
 
-See [`docs/22-developer-onboarding.md`](../../docs/22-developer-onboarding.md) for full setup and AI handoff.
+## Persistence foundation
+
+- **Prisma 7** with PostgreSQL via `DATABASE_URL` in `prisma.config.ts`
+- **PrismaService** — global provider with connection lifecycle, graceful shutdown, and development query logging
+- **Health check** — `/health/ready` runs `SELECT 1` through Prisma to verify PostgreSQL connectivity
+
+## What is intentionally not included
+
+- Prisma models, migrations with tables, or seed data
+- Business modules or domain controllers
+- JWT authentication strategy or guards
+- Background job processors
+
+See [docs/10-implementation-specification.md](../../docs/10-implementation-specification.md) for the Sprint 1 backlog.
+
+## Stopping infrastructure
+
+```bash
+docker compose -f infrastructure/docker/docker-compose.yml down
+```
+
+Add `-v` to remove persisted volumes.

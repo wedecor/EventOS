@@ -1,33 +1,39 @@
-import type { PaymentMethod, PaymentStatus, PaymentType } from '@prisma/client';
-
 export type PaymentRecord = {
   id: string;
   tenantId: string;
-  eventId: string | null;
+  bookingId: string | null;
   leadId: string | null;
   quotationId: string | null;
-  paymentType: PaymentType;
+  invoiceId: string | null;
   amount: number;
   currency: string;
-  method: PaymentMethod;
-  status: PaymentStatus;
+  method: string;
+  status: string;
   receivedAt: Date;
+  attachmentId: string | null;
   missingProofReason: string | null;
+  notes: string | null;
   createdAt: Date;
   updatedAt: Date;
   version: number;
 };
 
 export type CreatePaymentData = {
-  eventId?: string | null;
+  bookingId?: string | null;
   leadId?: string | null;
   quotationId?: string | null;
-  paymentType?: PaymentType;
+  invoiceId?: string | null;
   amount: number;
   currency?: string;
-  method: PaymentMethod;
+  method: string;
   receivedAt: Date;
+  attachmentId?: string | null;
   missingProofReason?: string | null;
+  notes?: string | null;
+};
+
+export type UpdatePaymentData = {
+  status?: string;
 };
 
 export abstract class PaymentRepository {
@@ -36,8 +42,34 @@ export abstract class PaymentRepository {
     data: CreatePaymentData,
   ): Promise<PaymentRecord>;
 
-  abstract hasConfirmedAdvance(
+  abstract findById(
     tenantId: string,
-    criteria: { leadId?: string; quotationId?: string; eventId?: string },
+    id: string,
+  ): Promise<PaymentRecord | null>;
+
+  abstract findByBookingId(
+    tenantId: string,
+    bookingId: string,
+  ): Promise<PaymentRecord[]>;
+
+  // EP1-KPI-004, EP1-FIN-005 — Dashboard: tenant-wide payment read for revenue/margin aggregation
+  abstract findAll(tenantId: string): Promise<PaymentRecord[]>;
+
+  abstract hasConfirmedAdvanceForLead(
+    tenantId: string,
+    leadId: string,
   ): Promise<boolean>;
+
+  abstract hasConfirmedAdvanceForQuotation(
+    tenantId: string,
+    quotationId: string,
+  ): Promise<boolean>;
+
+  // EP1-FIN-003 — Payment lifecycle extension (void)
+  abstract update(
+    tenantId: string,
+    id: string,
+    data: UpdatePaymentData,
+    version: number,
+  ): Promise<PaymentRecord>;
 }

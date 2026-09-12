@@ -1110,12 +1110,26 @@ Request:
 - Present operational workspace view for an approved event
 - Show execution progress, tasks/checklists, staff assignment links, procurement links, inventory movement links, and finance visibility
 
-Workspace activation is governed by ADR-017 suggestion acceptance (`workspace.create`).
+Workspace activation follows ADR-017's approval-gate rule for Execution-category actions: it
+**requires either manual initiation or accepted suggestion** — handlers alone cannot complete it.
+Phase 1 supports two valid entry points into the identical use case:
+
+- **Direct human command** — `POST /api/v1/bookings/:id/activate-workspace` (primary path; does not
+  depend on the Suggestion subsystem)
+- **Suggestion acceptance** — `POST /api/v1/suggestions/:id/accept` (`workspace.create`); optional,
+  available once the Suggestion subsystem exists
+
+Both entry points **MUST** invoke the identical `WorkspaceService.activateWorkspace()` /
+`BookingApplicationService.activateWorkspace()` use case, per ADR-017's single-execution-path
+principle ("Accepting a suggestion calls the same use case as a manual user action") — suggestion
+acceptance never re-implements or diverges from the direct command's business logic.
 
 ### Application Services
 
 - `WorkspaceQueryService` (read)
-- `WorkspaceService` is triggered via suggestion accept (no standalone write endpoint in Phase 1)
+- `WorkspaceService.activateWorkspace()` — the single execution path for workspace activation,
+  invoked either directly via `POST /api/v1/bookings/:id/activate-workspace` or via an accepted
+  `workspace.create` suggestion
 
 ### Primary aggregates
 
@@ -1143,6 +1157,34 @@ Response model:
   "data": {
     "eventId": "uuid",
     "workspaceStatus": "inactive|active|archived",
+    "preparationStatus": "pending|ready|needs_attention",
+    "executionOwnerId": "uuid|null"
+  }
+}
+```
+
+2. `POST /api/v1/bookings/:id/activate-workspace`
+- Role: `operations_manager`, `coordinator`, `owner`, `admin`
+- Permission: `workspace:activate`
+- Primary: `Event`
+- Transaction boundary: set `workspaceStatus` active + execution progress defaults
+- User approval required: Yes (explicit human command per ADR-017)
+
+If-Match: required.
+Command: `ActivateWorkspaceCommand`
+Validation: booking exists; status is approved or in_preparation; workspace not already active.
+Domain service: `WorkspaceService.activateWorkspace()`
+Domain event: `WorkspaceActivated`
+Suggestion (ADR-017): this is the direct/manual entry point. If a pending `workspace.create`
+suggestion exists for this booking, accepting it via `POST /api/v1/suggestions/:id/accept` invokes
+this same `WorkspaceService.activateWorkspace()` method — both paths share one execution path and
+neither depends on the other.
+Response:
+```json
+{
+  "data": {
+    "eventId": "uuid",
+    "workspaceStatus": "active",
     "preparationStatus": "pending|ready|needs_attention",
     "executionOwnerId": "uuid|null"
   }

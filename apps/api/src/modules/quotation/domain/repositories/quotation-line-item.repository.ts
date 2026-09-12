@@ -3,37 +3,35 @@ export type QuotationLineItemRecord = {
   tenantId: string;
   quotationId: string;
   description: string;
-  packageId: string | null;
   quantity: number;
-  unitPrice: number;
+  unitPriceAmount: number;
+  currency: string;
   sortOrder: number;
-  deletedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
   version: number;
 };
 
-export type CreateQuotationLineItemData = {
+export type CreateLineItemData = {
   quotationId: string;
   description: string;
-  packageId?: string | null;
-  quantity: number;
-  unitPrice: number;
+  quantity?: number;
+  unitPriceAmount: number;
+  currency?: string;
   sortOrder?: number;
 };
 
-export type UpdateQuotationLineItemData = {
+export type UpdateLineItemData = {
   description?: string;
-  packageId?: string | null;
   quantity?: number;
-  unitPrice?: number;
+  unitPriceAmount?: number;
   sortOrder?: number;
 };
 
 export abstract class QuotationLineItemRepository {
   abstract create(
     tenantId: string,
-    data: CreateQuotationLineItemData,
+    data: CreateLineItemData,
   ): Promise<QuotationLineItemRecord>;
 
   abstract findById(
@@ -41,7 +39,7 @@ export abstract class QuotationLineItemRepository {
     id: string,
   ): Promise<QuotationLineItemRecord | null>;
 
-  abstract listActiveByQuotation(
+  abstract findByQuotationId(
     tenantId: string,
     quotationId: string,
   ): Promise<QuotationLineItemRecord[]>;
@@ -49,17 +47,13 @@ export abstract class QuotationLineItemRepository {
   abstract update(
     tenantId: string,
     id: string,
-    data: UpdateQuotationLineItemData,
+    data: UpdateLineItemData,
     version: number,
   ): Promise<QuotationLineItemRecord>;
 
-  abstract softDelete(
-    tenantId: string,
-    id: string,
-    version: number,
-  ): Promise<QuotationLineItemRecord>;
+  abstract remove(tenantId: string, id: string): Promise<void>;
 
-  abstract countActiveByQuotation(
+  abstract countByQuotationId(
     tenantId: string,
     quotationId: string,
   ): Promise<number>;
