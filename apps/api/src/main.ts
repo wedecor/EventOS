@@ -2,6 +2,7 @@ import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import compression from 'compression';
+import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import helmet from 'helmet';
 import { Logger } from 'nestjs-pino';
@@ -23,6 +24,7 @@ async function bootstrap(): Promise<void> {
   const nodeEnv = configService.get('NODE_ENV', { infer: true });
 
   app.use(helmet());
+  app.use(cookieParser());
   app.use(compression());
   app.use(
     cors({
@@ -43,7 +45,7 @@ async function bootstrap(): Promise<void> {
   const swaggerConfig = new DocumentBuilder()
     .setTitle('Event OS API')
     .setDescription(
-      'We Decor Phase 1 REST API — scaffold only. Business endpoints are added per sprint.',
+      'We Decor Phase 1 REST API — Sprint 1 (W5 Lead → Booking) business endpoints.',
     )
     .setVersion('0.1.0')
     .addBearerAuth()

@@ -5,6 +5,7 @@ import {
   QuotationCreatedEvent,
   QuotationSupersededEvent,
 } from '../../../../shared/events/sprint1-domain.events';
+import type { TenantRepository } from '../../../platform/domain/repositories/tenant.repository';
 import { QuotationApplicationService } from './quotation.application.service';
 import type {
   QuotationRecord,
@@ -27,7 +28,7 @@ describe('QuotationApplicationService', () => {
     eventStartDate: new Date('2026-08-01'),
     eventEndDate: new Date('2026-08-02'),
     venue: 'Bangalore',
-    validUntil: new Date('2026-08-31'),
+    validUntil: new Date('2099-12-31'),
     terms: 'Standard terms',
     notes: null,
     subtotalAmount: 100000,
@@ -42,6 +43,9 @@ describe('QuotationApplicationService', () => {
   };
 
   let quotationRepository: jest.Mocked<QuotationRepository>;
+  let lineItemRepository: jest.Mocked<
+    import('../../domain/repositories/quotation-line-item.repository').QuotationLineItemRepository
+  >;
   let eventPublisher: jest.Mocked<DomainEventPublisher>;
   let service: QuotationApplicationService;
 
@@ -55,13 +59,30 @@ describe('QuotationApplicationService', () => {
       create: createQuotation,
       findById: jest.fn(),
       findLatestRevision: jest.fn(),
+      findLatestByLeadId: jest.fn(),
       findMaxQuotationNumber: jest.fn(),
       update: jest.fn(),
+    };
+    lineItemRepository = {
+      create: jest.fn(),
+      findById: jest.fn(),
+      listActiveByQuotation: jest.fn(),
+      update: jest.fn(),
+      softDelete: jest.fn(),
+      countActiveByQuotation: jest.fn(),
     };
     eventPublisher = { publish };
 
     service = new QuotationApplicationService(
       quotationRepository,
+      lineItemRepository,
+      {
+        findById: jest.fn().mockResolvedValue({
+          id: tenantId,
+          name: 'We Decor Events',
+          slug: 'we-decor',
+        }),
+      } as unknown as TenantRepository,
       eventPublisher,
     );
   });

@@ -46,6 +46,17 @@ export class EventRepositoryImpl
     return event ? this.mapEvent(event) : null;
   }
 
+  async findByLeadId(
+    tenantId: string,
+    leadId: string,
+  ): Promise<EventRecord | null> {
+    const event = await this.prisma.event.findFirst({
+      where: { tenantId, leadId },
+    });
+
+    return event ? this.mapEvent(event) : null;
+  }
+
   async findMaxBookingNumber(tenantId: string): Promise<number> {
     const result = await this.prisma.event.aggregate({
       where: { tenantId },

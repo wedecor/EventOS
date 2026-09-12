@@ -74,6 +74,11 @@ export abstract class EventRepository {
     quotationId: string,
   ): Promise<EventRecord | null>;
 
+  abstract findByLeadId(
+    tenantId: string,
+    leadId: string,
+  ): Promise<EventRecord | null>;
+
   abstract findMaxBookingNumber(tenantId: string): Promise<number>;
 
   abstract findByEventDate(

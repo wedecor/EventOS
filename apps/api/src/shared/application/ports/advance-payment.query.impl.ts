@@ -1,13 +1,17 @@
 import { Injectable } from '@nestjs/common';
+import { PaymentRepository } from '../../../modules/payment/domain/repositories/payment.repository';
 import { AdvancePaymentQuery } from './advance-payment.query';
 
-/**
- * Sprint 1 placeholder until Payment persistence is introduced.
- * Returns false until a payment record confirms advance (EP1-BR-001).
- */
 @Injectable()
-export class NoAdvancePaymentQuery extends AdvancePaymentQuery {
-  hasConfirmedAdvance(): Promise<boolean> {
-    return Promise.resolve(false);
+export class PrismaAdvancePaymentQuery extends AdvancePaymentQuery {
+  constructor(private readonly paymentRepository: PaymentRepository) {
+    super();
+  }
+
+  hasConfirmedAdvance(
+    tenantId: string,
+    criteria: { leadId?: string; quotationId?: string },
+  ): Promise<boolean> {
+    return this.paymentRepository.hasConfirmedAdvance(tenantId, criteria);
   }
 }

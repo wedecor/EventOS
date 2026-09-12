@@ -59,4 +59,6 @@ export abstract class CustomerRepository {
     data: UpdateCustomerData,
     version: number,
   ): Promise<CustomerRecord>;
+
+  abstract listAll(tenantId: string): Promise<CustomerRecord[]>;
 }

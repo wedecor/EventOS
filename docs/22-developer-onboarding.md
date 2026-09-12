@@ -35,7 +35,7 @@ One-line definition (from [`docs/02-product-vision.md`](./02-product-vision.md))
 | API design | **Frozen** — [`docs/09-api-design.md`](./09-api-design.md) |
 | Implementation specification | **Frozen** — [`docs/10-implementation-specification.md`](./10-implementation-specification.md) |
 | Backend application code | **In progress** — NestJS API in `apps/api/` |
-| Frontend application | **Not started** — `apps/web/` planned per folder structure |
+| Frontend application | **Started** — `apps/web/` W5 UI (+ clients, line items, toasts) |
 | Production deployment | **Not started** |
 
 ### Current implementation phase
@@ -71,7 +71,7 @@ Implementation technology was selected in **ADR-018** (NestJS). That ADR changes
 | Migrations | **Prisma Migrate** |
 | Cache / queue broker | **Redis 7** |
 | Job queue | **BullMQ** (wired, not yet used for business jobs) |
-| Authentication | **Passport JWT** (ADR-008 — not yet implemented) |
+| Authentication | **JWT access tokens** (ADR-008 — login + Bearer; refresh deferred) |
 | Request validation | **Zod** (ADR-013) |
 | API documentation | **Swagger / OpenAPI** |
 | Logging | **Pino** (ADR-015) |
@@ -559,7 +559,7 @@ Read [`12-architecture-decisions.md`](./12-architecture-decisions.md), focusing 
 
 ## 10. Current Progress
 
-*Last verified: 2026-07-08*
+*Last verified: 2026-09-12*
 
 ### Completed
 
@@ -588,41 +588,37 @@ Read [`12-architecture-decisions.md`](./12-architecture-decisions.md), focusing 
 - `EventWorkspace`
 - `QuotationLineItem`
 - `Payment` (advance gating — stub port exists)
-- `Contact`
-- `Suggestion`
+- `Contact` (implemented)
+- `Suggestion` (implemented)
 - Staff, Tasks, Inventory, Vendors, Finance, Attachments
 
 ### Not yet implemented
 
 | Item | Status |
 |------|--------|
-| REST controllers (`/api/v1/*`) | ✗ Not started |
-| JWT authentication / guards | ✗ Not started |
-| Zod request DTOs at API boundary | ✗ Not started |
-| Domain event handlers | ✗ Not started (publish only) |
-| Payment persistence | ✗ Not started |
-| Frontend (`apps/web/`) | ✗ Not started |
-| CI/CD pipelines | ✗ Not started |
+| REST controllers (`/api/v1/*`) | ✓ Sprint 1 W5 surface |
+| Dev tenant guard (`X-Tenant-Slug`) | ✓ Non-production fallback alongside JWT |
+| Zod request DTOs at API boundary | ✓ Sprint 1 controllers |
+| Domain event handlers | ✓ `EventCreated` → workspace suggestion (ADR-017) |
+| Payment persistence | ✓ Done + EP1-BR-001 query |
+| Quotation line items | ✓ Done |
+| Suggestion model | ✓ Done (`accept` / `dismiss` for `workspace.create`) |
+| GitHub Actions CI | ✓ `.github/workflows/ci.yml` |
+| Frontend (`apps/web/`) | ✓ W5 UI + follow-ups, assign, `?include=customer`, loading panels, PDF header/footer |
+| Production JWT (ADR-008) | ✓ Access + refresh (HTTP-only cookie, rotation on `/auth/refresh`) |
+| Contact aggregate / client contacts API | ✓ Done |
+| Quotation PDF | ✓ GST subtotal/tax/total layout (minimal PDF engine) |
+| Lead approval conversion gate (EP1-AUT-006) | ✓ `LeadConversionQuery` before `approved` stage |
+| HTTP integration tests | ✓ Auth + W5 happy path (`pnpm test:integration`) |
 
 ### Current next task
 
-**Implement Sprint 1 REST controllers** for the W5 Lead → Booking workflow.
+**Harden Sprint 1 for UAT and production readiness:**
 
-Wire NestJS controllers to the existing application services. Follow [`docs/09-api-design.md`](./09-api-design.md) and Sprint 1 API list in [`docs/10-implementation-specification.md`](./10-implementation-specification.md) § Sprint 1.
-
-Priority endpoints:
-
-- **Lead:** `POST /api/v1/leads`, `PATCH /api/v1/leads/:id/stage`, `POST /api/v1/leads/:id/assign`, `POST /api/v1/leads/:id/follow-ups`, `GET /api/v1/leads/:id`
-- **Customer:** `POST /api/v1/clients`, `PATCH /api/v1/clients/:id`, `GET /api/v1/clients/:id`
-- **Quotation:** `POST /api/v1/quotations`, `POST /api/v1/quotations/:id/revise`, `POST /api/v1/quotations/:id/approve`, `GET /api/v1/quotations/:id`
-- **Booking:** `GET /api/v1/bookings/:id` (and commands wired through quotation approve → event creation flow)
-
-Controllers must:
-
-- Map `Result<T>` from application services to the standard error envelope ([`docs/18-api-standards.md`](./18-api-standards.md))
-- Validate requests with Zod
-- Not import Prisma directly
-- Not implement auth until the Auth module task is explicitly started (may stub tenant context for dev)
+1. **Task / inventory modules** — full checklist and packing workflows (beyond Sprint 1 booking flags)
+2. **Web polish** — assignee names (user list API), lost-reason display, dashboard/home
+3. **Branded quotation PDF** — logo, fonts, print layout (replace text-only PDF stub)
+4. **Single DB transaction orchestration** — optional atomic multi-aggregate conversion (if UAT requires rollback)
 
 ---
 

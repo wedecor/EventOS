@@ -7,8 +7,7 @@ import { HealthModule } from './common';
 import { configuration, validateEnv } from './config';
 import { DatabaseModule, PrismaModule } from './database';
 import { ApplicationServicesModule } from './modules/application-services.module';
-import { RepositoriesModule } from './modules/repositories.module';
-
+import { Sprint1ApiModule } from './modules/presentation/sprint1-api.module';
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -38,8 +37,8 @@ import { RepositoriesModule } from './modules/repositories.module';
     }),
     DatabaseModule,
     PrismaModule,
-    RepositoriesModule,
     ApplicationServicesModule,
+    Sprint1ApiModule,
     AuthModule,
     HealthModule,
   ],

@@ -6,7 +6,14 @@ import {
 } from '../../../../shared/application/result';
 import { ConcurrentModificationError } from '../../../../shared/database';
 import { DomainEventPublisher } from '../../../../shared/events/domain-event.base';
-import { CustomerCreatedEvent } from '../../../../shared/events/sprint1-domain.events';
+import {
+  ContactAddedEvent,
+  CustomerCreatedEvent,
+} from '../../../../shared/events/sprint1-domain.events';
+import {
+  ContactRepository,
+  type CreateContactData,
+} from '../../domain/repositories/contact.repository';
 import {
   CustomerRepository,
   type CreateCustomerData,
@@ -22,12 +29,44 @@ export type FindExistingCustomerInput = {
   displayName?: string;
 };
 
+export type AddContactInput = Omit<CreateContactData, 'customerId'> & {
+  phone?: { countryCode: string; number: string } | null;
+  email?: { value: string } | null;
+};
+
+export type AddContactResult = {
+  id: string;
+  contactsCount: number;
+};
+
 @Injectable()
 export class CustomerApplicationService {
   constructor(
     private readonly customerRepository: CustomerRepository,
+    private readonly contactRepository: ContactRepository,
     private readonly eventPublisher: DomainEventPublisher,
   ) {}
+
+  async listCustomers(tenantId: string): Promise<Result<CustomerDto[]>> {
+    const customers = await this.customerRepository.listAll(tenantId);
+    return success(customers.map(toCustomerDto));
+  }
+
+  async getCustomer(
+    tenantId: string,
+    customerId: string,
+  ): Promise<Result<CustomerDto>> {
+    const customer = await this.customerRepository.findById(
+      tenantId,
+      customerId,
+    );
+
+    if (!customer) {
+      return failure('NOT_FOUND', 'Customer not found.');
+    }
+
+    return success(toCustomerDto(customer));
+  }
 
   async createCustomer(
     tenantId: string,
@@ -135,4 +174,65 @@ export class CustomerApplicationService {
 
     return success(null);
   }
+
+  async addContact(
+    tenantId: string,
+    customerId: string,
+    input: AddContactInput,
+  ): Promise<Result<AddContactResult>> {
+    const customer = await this.customerRepository.findById(
+      tenantId,
+      customerId,
+    );
+    if (!customer) {
+      return failure('NOT_FOUND', 'Customer not found.');
+    }
+
+    if (!input.name.trim()) {
+      return failure('VALIDATION_ERROR', 'Contact name is required.');
+    }
+
+    const phone = normalizeContactPhone(input.phone);
+    const email = input.email?.value?.trim().toLowerCase() ?? null;
+
+    if (!phone && !email) {
+      return failure(
+        'VALIDATION_ERROR',
+        'Contact must have at least one phone or email.',
+      );
+    }
+
+    const contact = await this.contactRepository.create(tenantId, {
+      customerId,
+      name: input.name.trim(),
+      role: input.role?.trim() ?? null,
+      phone,
+      email,
+    });
+
+    const contactsCount = await this.contactRepository.countByCustomer(
+      tenantId,
+      customerId,
+    );
+
+    this.eventPublisher.publish(
+      new ContactAddedEvent(tenantId, contact, customerId),
+    );
+
+    return success({ id: contact.id, contactsCount });
+  }
+}
+
+function normalizeContactPhone(phone: AddContactInput['phone']): string | null {
+  if (!phone) {
+    return null;
+  }
+
+  const countryCode = phone.countryCode.trim();
+  const number = phone.number.trim().replace(/\s+/g, '');
+  if (!countryCode || !number) {
+    return null;
+  }
+
+  return `${countryCode}${number}`;
 }

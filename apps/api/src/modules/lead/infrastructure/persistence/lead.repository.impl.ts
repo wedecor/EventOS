@@ -61,6 +61,15 @@ export class LeadRepositoryImpl
     return leads.map((lead) => this.mapLead(lead));
   }
 
+  async listAll(tenantId: string): Promise<LeadRecord[]> {
+    const leads = await this.prisma.lead.findMany({
+      where: { tenantId },
+      orderBy: { updatedAt: 'desc' },
+    });
+
+    return leads.map((lead) => this.mapLead(lead));
+  }
+
   async update(
     tenantId: string,
     id: string,

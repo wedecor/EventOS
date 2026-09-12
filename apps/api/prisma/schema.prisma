@@ -17,11 +17,16 @@ model Tenant {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  users      User[]
-  customers  Customer[]
-  leads      Lead[]
-  quotations Quotation[]
-  events     Event[]
+  users              User[]
+  customers          Customer[]
+  leads              Lead[]
+  quotations         Quotation[]
+  events             Event[]
+  quotationLineItems QuotationLineItem[]
+  payments           Payment[]
+  suggestions        Suggestion[]
+  contacts           Contact[]
+  authSessions       AuthSession[]
 
   @@map("tenants")
 }
@@ -41,10 +46,28 @@ model User {
   assignedLeads       Lead[]              @relation("LeadAssignee")
   leadStageChanges    LeadStageHistory[]  @relation("LeadStageChangedBy")
   executionOwnedEvents Event[]             @relation("EventExecutionOwner")
+  authSessions         AuthSession[]
 
   @@unique([tenantId, email])
   @@index([tenantId])
   @@map("users")
+}
+
+model AuthSession {
+  id        String    @id @default(uuid()) @db.Uuid
+  tenantId  String    @map("tenant_id") @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at")
+  revokedAt DateTime? @map("revoked_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, userId])
+  @@index([expiresAt])
+  @@map("auth_sessions")
 }
 
 // ---------------------------------------------------------------------------
@@ -144,10 +167,31 @@ model Customer {
   leads      Lead[]
   quotations Quotation[]
   events     Event[]
+  contacts   Contact[]
 
   @@unique([tenantId, displayName])
   @@index([tenantId, status])
   @@map("customers")
+}
+
+model Contact {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  customerId String   @map("customer_id") @db.Uuid
+  name       String
+  role       String?
+  phone      String?
+  email      String?
+  isPrimary  Boolean  @default(false) @map("is_primary")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+  version    Int      @default(1)
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, customerId])
+  @@map("contacts")
 }
 
 model Lead {
@@ -178,6 +222,7 @@ model Lead {
   followUps     FollowUp[]
   stageHistory  LeadStageHistory[]
   quotations    Quotation[]
+  payments      Payment[]
 
   @@index([tenantId, stage])
   @@index([tenantId, assignedToId])
@@ -252,6 +297,8 @@ model Quotation {
   customer   Customer  @relation(fields: [customerId], references: [id], onDelete: Restrict)
   lead       Lead?     @relation(fields: [leadId], references: [id], onDelete: Restrict)
   event      Event?
+  lineItems  QuotationLineItem[]
+  payments   Payment[]
   superseded Quotation? @relation("QuotationRevision", fields: [supersededById], references: [id], onDelete: SetNull)
   supersedes Quotation? @relation("QuotationRevision")
 
@@ -291,10 +338,115 @@ model Event {
   quotation      Quotation @relation(fields: [quotationId], references: [id], onDelete: Restrict)
   lead           Lead?     @relation(fields: [leadId], references: [id], onDelete: Restrict)
   executionOwner User?     @relation("EventExecutionOwner", fields: [executionOwnerId], references: [id], onDelete: SetNull)
+  payments       Payment[]
 
   @@unique([tenantId, bookingNumber])
   @@index([tenantId, status, eventStartDate])
   @@index([tenantId, executionOwnerId])
   @@index([tenantId, customerId])
   @@map("events")
+}
+
+enum PaymentType {
+  advance
+  balance
+  other
+
+  @@map("payment_type")
+}
+
+enum PaymentMethod {
+  upi
+  cash
+  bank_transfer
+  card
+  cheque
+  other
+
+  @@map("payment_method")
+}
+
+enum PaymentStatus {
+  recorded
+  void
+
+  @@map("payment_status")
+}
+
+model QuotationLineItem {
+  id           String    @id @default(uuid()) @db.Uuid
+  tenantId     String    @map("tenant_id") @db.Uuid
+  quotationId  String    @map("quotation_id") @db.Uuid
+  description  String
+  packageId    String?   @map("package_id") @db.Uuid
+  quantity     Decimal   @default(1) @db.Decimal(12, 2)
+  unitPrice    Decimal   @map("unit_price") @db.Decimal(12, 2)
+  sortOrder    Int       @default(0) @map("sort_order")
+  deletedAt    DateTime? @map("deleted_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  version      Int       @default(1)
+
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  quotation Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, quotationId])
+  @@map("quotation_line_items")
+}
+
+model Payment {
+  id                 String        @id @default(uuid()) @db.Uuid
+  tenantId           String        @map("tenant_id") @db.Uuid
+  eventId            String?       @map("event_id") @db.Uuid
+  leadId             String?       @map("lead_id") @db.Uuid
+  quotationId        String?       @map("quotation_id") @db.Uuid
+  paymentType        PaymentType   @default(advance) @map("payment_type")
+  amount             Decimal       @db.Decimal(12, 2)
+  currency           String        @default("INR")
+  method             PaymentMethod
+  status             PaymentStatus @default(recorded)
+  receivedAt         DateTime      @map("received_at")
+  missingProofReason String?       @map("missing_proof_reason")
+  createdAt          DateTime      @default(now()) @map("created_at")
+  updatedAt          DateTime      @updatedAt @map("updated_at")
+  version            Int           @default(1)
+
+  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  event     Event?     @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  lead      Lead?      @relation(fields: [leadId], references: [id], onDelete: Restrict)
+  quotation Quotation? @relation(fields: [quotationId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, eventId])
+  @@index([tenantId, leadId])
+  @@index([tenantId, quotationId])
+  @@index([tenantId, status, paymentType])
+  @@map("payments")
+}
+
+enum SuggestionStatus {
+  pending
+  accepted
+  dismissed
+  expired
+
+  @@map("suggestion_status")
+}
+
+model Suggestion {
+  id            String           @id @default(uuid()) @db.Uuid
+  tenantId      String           @map("tenant_id") @db.Uuid
+  type          String
+  status        SuggestionStatus @default(pending)
+  aggregateType String           @map("aggregate_type")
+  aggregateId   String           @map("aggregate_id") @db.Uuid
+  payload       Json?
+  createdAt     DateTime         @default(now()) @map("created_at")
+  updatedAt     DateTime         @updatedAt @map("updated_at")
+  version       Int              @default(1)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, status])
+  @@index([tenantId, aggregateType, aggregateId])
+  @@map("suggestions")
 }

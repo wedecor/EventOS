@@ -80,6 +80,11 @@ export abstract class QuotationRepository {
     quotationNumber: number,
   ): Promise<QuotationRecord | null>;
 
+  abstract findLatestByLeadId(
+    tenantId: string,
+    leadId: string,
+  ): Promise<QuotationRecord | null>;
+
   abstract findMaxQuotationNumber(tenantId: string): Promise<number>;
 
   abstract update(
