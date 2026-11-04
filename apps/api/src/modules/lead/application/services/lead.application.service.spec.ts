@@ -55,6 +55,7 @@ describe('LeadApplicationService', () => {
     leadRepository = {
       create: jest.fn(),
       findById: jest.fn(),
+      findByCustomerId: jest.fn(),
       findAll: jest.fn(),
       findByPhone: jest.fn(),
       findByStage: jest.fn(),
@@ -64,6 +65,7 @@ describe('LeadApplicationService', () => {
     followUpRepository = {
       create: jest.fn(),
       findById: jest.fn(),
+      findByLeadIds: jest.fn(),
       update: jest.fn(),
     };
     advancePaymentQuery = {

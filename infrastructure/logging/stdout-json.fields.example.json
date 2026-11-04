@@ -1,0 +1,17 @@
+{
+  "$comment": "R2-07 — minimal stdout JSON field contract for aggregator index mapping. Not a runtime schema enforced by the API.",
+  "service": "event-os-api",
+  "requestId": "550e8400-e29b-41d4-a716-446655440000",
+  "level": 30,
+  "time": 1710000000000,
+  "msg": "request completed",
+  "req": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "method": "GET",
+    "url": "/api/v1/leads"
+  },
+  "res": {
+    "statusCode": 200
+  },
+  "responseTime": 12
+}

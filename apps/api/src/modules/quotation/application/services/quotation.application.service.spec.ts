@@ -1,3 +1,4 @@
+import { AUDIT_ACTIONS, type AuditLogService } from '../../../../shared/audit';
 import { ConcurrentModificationError } from '../../../../shared/database';
 import { DomainEventPublisher } from '../../../../shared/events/domain-event.base';
 import {
@@ -7,6 +8,9 @@ import {
   QuotationSentEvent,
   QuotationSupersededEvent,
 } from '../../../../shared/events/sprint1-domain.events';
+import { failure, success } from '../../../../shared/application/result';
+import type { BookingApplicationService } from '../../../booking/application/services/booking.application.service';
+import type { BookingDto } from '../../../booking/application/dtos/booking.dto';
 import { QuotationApplicationService } from './quotation.application.service';
 import type {
   QuotationRecord,
@@ -17,6 +21,7 @@ import type { QuotationLineItemRepository } from '../../domain/repositories/quot
 describe('QuotationApplicationService', () => {
   const tenantId = 'tenant-1';
   const quotationId = 'quotation-1';
+  const actorId = 'user-1';
 
   const baseQuotation: QuotationRecord = {
     id: quotationId,
@@ -47,17 +52,23 @@ describe('QuotationApplicationService', () => {
   let quotationRepository: jest.Mocked<QuotationRepository>;
   let lineItemRepository: jest.Mocked<QuotationLineItemRepository>;
   let eventPublisher: jest.Mocked<DomainEventPublisher>;
+  let bookingService: jest.Mocked<BookingApplicationService>;
   let service: QuotationApplicationService;
 
   let publish: jest.Mock;
   let createQuotation: jest.Mock;
+  let createEventFromApprovedQuotation: jest.Mock;
+  let auditRecord: jest.Mock;
 
   beforeEach(() => {
     publish = jest.fn();
     createQuotation = jest.fn();
+    createEventFromApprovedQuotation = jest.fn();
+    auditRecord = jest.fn().mockResolvedValue(undefined);
     quotationRepository = {
       create: createQuotation,
       findById: jest.fn(),
+      findByCustomerId: jest.fn(),
       findLatestRevision: jest.fn(),
       findMaxQuotationNumber: jest.fn(),
       findByIds: jest.fn(),
@@ -72,11 +83,25 @@ describe('QuotationApplicationService', () => {
       countByQuotationId: jest.fn(),
     };
     eventPublisher = { publish };
+    bookingService = {
+      createEventFromApprovedQuotation,
+      activateBooking: jest.fn(),
+      retrieveBooking: jest.fn(),
+      cancelBooking: jest.fn(),
+      completeBooking: jest.fn(),
+    } as unknown as jest.Mocked<BookingApplicationService>;
+    // Default: advance payment not yet confirmed, matching the most common
+    // pre-approval state; individual tests override this as needed.
+    createEventFromApprovedQuotation.mockResolvedValue(
+      failure('EP1-BR-001', 'Advance payment not confirmed.'),
+    );
 
     service = new QuotationApplicationService(
       quotationRepository,
       lineItemRepository,
       eventPublisher,
+      bookingService,
+      { record: auditRecord } as unknown as AuditLogService,
     );
   });
 
@@ -291,12 +316,27 @@ describe('QuotationApplicationService', () => {
   it('rejects approving a quotation that is not found', async () => {
     quotationRepository.findById.mockResolvedValue(null);
 
-    const result = await service.approveQuotation(tenantId, quotationId, 1);
+    const result = await service.approveQuotation(
+      actorId,
+      tenantId,
+      quotationId,
+      1,
+    );
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.code).toBe('NOT_FOUND');
     }
+    // R1-08 — a failure audit record is emitted even when approval is rejected.
+    expect(auditRecord).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorId,
+        action: AUDIT_ACTIONS.QUOTATION_APPROVED,
+        entityId: quotationId,
+        outcome: 'failure',
+        metadata: expect.objectContaining({ errorCode: 'NOT_FOUND' }),
+      }),
+    );
   });
 
   it('rejects approving a quotation with zero total', async () => {
@@ -306,7 +346,12 @@ describe('QuotationApplicationService', () => {
       totalAmount: 0,
     });
 
-    const result = await service.approveQuotation(tenantId, quotationId, 1);
+    const result = await service.approveQuotation(
+      actorId,
+      tenantId,
+      quotationId,
+      1,
+    );
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -321,7 +366,12 @@ describe('QuotationApplicationService', () => {
       validUntil: new Date('2020-01-01'),
     });
 
-    const result = await service.approveQuotation(tenantId, quotationId, 1);
+    const result = await service.approveQuotation(
+      actorId,
+      tenantId,
+      quotationId,
+      1,
+    );
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -329,7 +379,7 @@ describe('QuotationApplicationService', () => {
     }
   });
 
-  it('approves a sent quotation and publishes QuotationApproved', async () => {
+  it('approves a sent quotation and publishes QuotationApproved exactly once', async () => {
     quotationRepository.findById.mockResolvedValue({
       ...baseQuotation,
       status: 'sent',
@@ -340,21 +390,65 @@ describe('QuotationApplicationService', () => {
       version: 2,
     });
 
-    const result = await service.approveQuotation(tenantId, quotationId, 1);
+    const result = await service.approveQuotation(
+      actorId,
+      tenantId,
+      quotationId,
+      1,
+    );
 
     expect(result.ok).toBe(true);
     expect(publish).toHaveBeenCalledWith(expect.any(QuotationApprovedEvent));
+    expect(publish).toHaveBeenCalledTimes(1);
+    // R1-08 — a success audit record is emitted for the approval.
+    expect(auditRecord).toHaveBeenCalledTimes(1);
+    expect(auditRecord).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorId,
+        tenantId,
+        action: AUDIT_ACTIONS.QUOTATION_APPROVED,
+        entityType: 'Quotation',
+        entityId: quotationId,
+        outcome: 'success',
+      }),
+    );
   });
 
   it('rejects approving a draft quotation', async () => {
     quotationRepository.findById.mockResolvedValue(baseQuotation);
 
-    const result = await service.approveQuotation(tenantId, quotationId, 1);
+    const result = await service.approveQuotation(
+      actorId,
+      tenantId,
+      quotationId,
+      1,
+    );
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.code).toBe('INVALID_STATE');
     }
+    expect(createEventFromApprovedQuotation).not.toHaveBeenCalled();
+  });
+
+  it('rejects approving an already-approved (already processed) quotation', async () => {
+    quotationRepository.findById.mockResolvedValue({
+      ...baseQuotation,
+      status: 'approved',
+    });
+
+    const result = await service.approveQuotation(
+      actorId,
+      tenantId,
+      quotationId,
+      1,
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('INVALID_STATE');
+    }
+    expect(createEventFromApprovedQuotation).not.toHaveBeenCalled();
   });
 
   it('maps concurrent modification failures on approve', async () => {
@@ -366,12 +460,137 @@ describe('QuotationApplicationService', () => {
       new ConcurrentModificationError('Quotation', quotationId),
     );
 
-    const result = await service.approveQuotation(tenantId, quotationId, 1);
+    const result = await service.approveQuotation(
+      actorId,
+      tenantId,
+      quotationId,
+      1,
+    );
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.code).toBe('CONCURRENT_MODIFICATION');
     }
+    expect(createEventFromApprovedQuotation).not.toHaveBeenCalled();
+  });
+
+  // --- approveQuotation: booking/event conversion wiring (C11) ---
+
+  it('creates the linked booking/event when approving with confirmed advance payment', async () => {
+    const approvedQuotation = {
+      ...baseQuotation,
+      status: 'approved' as const,
+      version: 2,
+    };
+    const booking: BookingDto = {
+      id: 'event-1',
+      tenantId,
+      customerId: baseQuotation.customerId,
+      leadId: baseQuotation.leadId,
+      quotationId,
+      bookingNumber: 5001,
+      status: 'approved',
+      eventType: baseQuotation.eventType,
+      eventStartDate: baseQuotation.eventStartDate,
+      eventEndDate: baseQuotation.eventEndDate,
+      venueName: baseQuotation.venue,
+      guestCount: null,
+      requirementsNotes: null,
+      workspaceStatus: 'inactive',
+      preparationStatus: 'pending',
+      operationalMilestone: null,
+      executionOwnerId: null,
+      cancellationReason: null,
+      completedAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      version: 1,
+    };
+    quotationRepository.findById.mockResolvedValue({
+      ...baseQuotation,
+      status: 'sent',
+    });
+    quotationRepository.update.mockResolvedValue(approvedQuotation);
+    createEventFromApprovedQuotation.mockResolvedValue(success(booking));
+
+    const result = await service.approveQuotation(
+      actorId,
+      tenantId,
+      quotationId,
+      1,
+    );
+
+    expect(createEventFromApprovedQuotation).toHaveBeenCalledWith(
+      tenantId,
+      quotationId,
+    );
+    expect(createEventFromApprovedQuotation).toHaveBeenCalledTimes(1);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.eventId).toBe('event-1');
+      expect(result.value.status).toBe('approved');
+    }
+  });
+
+  it('approves successfully with a null eventId when advance payment is not yet confirmed', async () => {
+    quotationRepository.findById.mockResolvedValue({
+      ...baseQuotation,
+      status: 'sent',
+    });
+    quotationRepository.update.mockResolvedValue({
+      ...baseQuotation,
+      status: 'approved',
+      version: 2,
+    });
+    createEventFromApprovedQuotation.mockResolvedValue(
+      failure('EP1-BR-001', 'Advance payment not confirmed.'),
+    );
+
+    const result = await service.approveQuotation(
+      actorId,
+      tenantId,
+      quotationId,
+      1,
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.eventId).toBeNull();
+    }
+  });
+
+  it('returns the existing event id instead of creating a duplicate booking/event', async () => {
+    quotationRepository.findById.mockResolvedValue({
+      ...baseQuotation,
+      status: 'sent',
+    });
+    quotationRepository.update.mockResolvedValue({
+      ...baseQuotation,
+      status: 'approved',
+      version: 2,
+    });
+    createEventFromApprovedQuotation.mockResolvedValue(
+      failure(
+        'DUPLICATE_EVENT',
+        'An event already exists for this quotation.',
+        {
+          eventId: 'event-existing',
+        },
+      ),
+    );
+
+    const result = await service.approveQuotation(
+      actorId,
+      tenantId,
+      quotationId,
+      1,
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.eventId).toBe('event-existing');
+    }
+    expect(createEventFromApprovedQuotation).toHaveBeenCalledTimes(1);
   });
 
   // --- sendQuotation ---

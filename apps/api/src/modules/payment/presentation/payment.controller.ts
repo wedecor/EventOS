@@ -7,9 +7,17 @@ import {
   Post,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { CurrentUser, Permissions, type AuthenticatedUser } from '../../auth';
 import { ZodValidationPipe } from '../../../common/pipes/zod-validation.pipe';
 import { failure } from '../../../shared/application/result';
 import { IfMatchVersion } from '../../../shared/presentation/if-match.decorator';
+import {
+  ApiDataResponse,
+  ApiIfMatchHeader,
+  ApiStandardErrors,
+  ApiUuidParam,
+  ApiZodBody,
+} from '../../../shared/presentation/openapi.helpers';
 import { resultToResponse } from '../../../shared/presentation/result-to-response.helper';
 import { TenantId } from '../../../shared/presentation/tenant-context.decorator';
 import { PaymentApplicationService } from '../application/services/payment.application.service';
@@ -26,33 +34,48 @@ export class PaymentController {
   constructor(private readonly paymentService: PaymentApplicationService) {}
 
   @Post()
+  @Permissions('payments:record')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Record a payment' })
+  @ApiZodBody(recordPaymentSchema)
+  @ApiDataResponse(201, 'Payment recorded')
+  @ApiStandardErrors()
   async recordPayment(
+    @CurrentUser() user: AuthenticatedUser,
     @TenantId() tenantId: string,
     @Body(new ZodValidationPipe(recordPaymentSchema)) body: RecordPaymentBody,
   ) {
-    const result = await this.paymentService.recordPayment(tenantId, {
-      leadId: body.leadId,
-      quotationId: body.quotationId,
-      bookingId: body.bookingId,
-      invoiceId: body.invoiceId,
-      amount: body.amount,
-      currency: body.currency,
-      method: body.method,
-      receivedAt: new Date(body.receivedAt),
-      attachmentId: body.attachmentId,
-      missingProofReason: body.missingProofReason,
-      notes: body.notes,
-    });
+    const result = await this.paymentService.recordPayment(
+      user.userId,
+      tenantId,
+      {
+        leadId: body.leadId,
+        quotationId: body.quotationId,
+        bookingId: body.bookingId,
+        invoiceId: body.invoiceId,
+        amount: body.amount,
+        currency: body.currency,
+        method: body.method,
+        receivedAt: new Date(body.receivedAt),
+        attachmentId: body.attachmentId,
+        missingProofReason: body.missingProofReason,
+        notes: body.notes,
+      },
+    );
 
     return resultToResponse(result);
   }
 
   // EP1-FIN-003 — Payment lifecycle extension (void)
   @Post(':id/void')
+  @Permissions('payments:void')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Void a payment' })
+  @ApiUuidParam('id')
+  @ApiIfMatchHeader(true)
+  @ApiZodBody(voidPaymentSchema)
+  @ApiDataResponse(200, 'Payment voided')
+  @ApiStandardErrors()
   async voidPayment(
     @TenantId() tenantId: string,
     @Param('id') id: string,

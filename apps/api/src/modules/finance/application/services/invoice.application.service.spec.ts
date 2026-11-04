@@ -113,8 +113,10 @@ describe('InvoiceApplicationService', () => {
     publish = jest.fn();
     invoiceRepository = {
       create: jest.fn(),
+      createWithLineItems: jest.fn(),
       findById: jest.fn(),
       findByBookingId: jest.fn(),
+      findByCustomerId: jest.fn(),
       findMaxInvoiceNumber: jest.fn(),
       findAll: jest.fn(),
       hasDraftInvoiceForBooking: jest.fn(),
@@ -127,6 +129,7 @@ describe('InvoiceApplicationService', () => {
     eventRepository = {
       create: jest.fn(),
       findById: jest.fn(),
+      findByCustomerId: jest.fn(),
       findByQuotationId: jest.fn(),
       findMaxBookingNumber: jest.fn(),
       findByEventDate: jest.fn(),
@@ -238,8 +241,10 @@ describe('InvoiceApplicationService', () => {
     eventRepository.findById.mockResolvedValue(baseBooking);
     customerRepository.findById.mockResolvedValue(baseCustomer);
     invoiceRepository.findMaxInvoiceNumber.mockResolvedValue(0);
-    invoiceRepository.create.mockResolvedValue(baseInvoice);
-    lineItemRepository.create.mockResolvedValue(baseLineItem);
+    invoiceRepository.createWithLineItems.mockResolvedValue({
+      invoice: baseInvoice,
+      lineItems: [baseLineItem],
+    });
 
     const result = await service.createInvoice(tenantId, {
       bookingId,
@@ -255,15 +260,26 @@ describe('InvoiceApplicationService', () => {
       expect(result.value.status).toBe('draft');
       expect(result.value.lineItems).toHaveLength(1);
     }
-    expect(invoiceRepository.create).toHaveBeenCalledWith(tenantId, {
-      bookingId,
-      customerId,
-      invoiceNumber: 1,
-      subtotalAmount: 50000,
-      taxAmount: 0,
-      totalAmount: 50000,
-      notes: undefined,
-    });
+    expect(invoiceRepository.createWithLineItems).toHaveBeenCalledWith(
+      tenantId,
+      {
+        bookingId,
+        customerId,
+        invoiceNumber: 1,
+        subtotalAmount: 50000,
+        taxAmount: 0,
+        totalAmount: 50000,
+        notes: undefined,
+      },
+      [
+        {
+          description: 'Decor package',
+          quantity: 1,
+          unitPriceAmount: 50000,
+          sortOrder: 0,
+        },
+      ],
+    );
     expect(publish).toHaveBeenCalledWith(expect.any(InvoiceCreatedEvent));
   });
 

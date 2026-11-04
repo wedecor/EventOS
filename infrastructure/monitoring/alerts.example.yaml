@@ -1,0 +1,108 @@
+# R2-08 — alert rule catalog (repository template only).
+# Not AlertManager / PagerDuty / CloudWatch syntax.
+# Map each rule into your monitoring product. Thresholds match docs/16
+# and Engineering Backlog R2-08 AC.
+
+version: 1
+service: event-os-api
+source: docs/16-deployment-strategy.md#monitoring-and-alerting
+
+rules:
+  - id: health-check-fail-2m
+    name: Health check fails for > 2 minutes
+    severity: critical
+    condition:
+      metric: health_probe_failure
+      probes: [liveness, readiness]
+      # readiness failure = JSON body status != "ok" (HTTP may still be 200)
+      duration: 2m
+    action: page_on_call_and_auto_restart
+    docs16: true
+
+  - id: error-rate-5pct-5m
+    name: Error rate > 5% for 5 minutes
+    severity: high
+    condition:
+      metric: http_error_rate
+      threshold: 0.05
+      window: 5m
+      definition: "count(statusCode >= 500) / count(requests)"
+      sources: [access_logs, sentry_optional]
+    action: notify_team
+    docs16: true
+
+  - id: latency-p95-2s-10m
+    name: API p95 latency > 2s for 10 minutes
+    severity: medium
+    condition:
+      metric: http_latency_p95
+      threshold_ms: 2000
+      window: 10m
+      field: responseTime
+      source: access_logs
+    action: investigate
+    docs16: true
+
+  - id: db-pool-80pct
+    name: Database connection pool > 80%
+    severity: medium
+    condition:
+      metric: db_connection_pool_utilization
+      threshold: 0.80
+      source: managed_postgres_or_pgbouncer
+    action: investigate
+    docs16: true
+    note: Not exposed by the Nest API process today.
+
+  - id: disk-80pct
+    name: Disk usage > 80%
+    severity: medium
+    condition:
+      metric: disk_usage
+      threshold: 0.80
+      source: host_or_volume_metrics
+    action: plan_expansion
+    docs16: true
+
+  - id: ssl-expiry-14d
+    name: SSL certificate expiring < 14 days
+    severity: medium
+    condition:
+      metric: tls_certificate_days_remaining
+      threshold_days: 14
+      comparison: less_than
+      source: edge_tls_terminator
+    action: renew
+    docs16: true
+
+  - id: backup-failure
+    name: Backup failure
+    severity: high
+    condition:
+      metric: backup_job_failed
+      source: backup_provider_or_job
+    action: investigate_immediately
+    docs16: true
+    note: Operator enables provider backups and runs drills using infrastructure/disaster-recovery (R2-10 prep).
+
+# Recommended companion alerts (not listed verbatim in docs/16 table)
+companion_rules:
+  - id: readiness-degraded
+    name: Readiness degraded (postgres or redis down)
+    severity: critical
+    condition:
+      metric: readiness_json_status
+      equals: degraded
+      duration: 2m
+    action: page_on_call
+    aligns_with: health-check-fail-2m
+
+  - id: container-unhealthy
+    name: API container unhealthy
+    severity: high
+    condition:
+      metric: container_health
+      equals: unhealthy
+      duration: 2m
+    action: restart_or_replace_task
+    source: orchestrator

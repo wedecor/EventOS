@@ -35,6 +35,18 @@ export class EventRepositoryImpl
     return event ? this.mapEvent(event) : null;
   }
 
+  async findByCustomerId(
+    tenantId: string,
+    customerId: string,
+  ): Promise<EventRecord[]> {
+    const events = await this.prisma.event.findMany({
+      where: { tenantId, customerId },
+      orderBy: { eventStartDate: { sort: 'desc', nulls: 'last' } },
+    });
+
+    return events.map((event) => this.mapEvent(event));
+  }
+
   async findByQuotationId(
     tenantId: string,
     quotationId: string,

@@ -116,6 +116,7 @@ describe('FounderKpiQueryService', () => {
     leadRepository = {
       create: jest.fn(),
       findById: jest.fn(),
+      findByCustomerId: jest.fn(),
       findByPhone: jest.fn(),
       findAll: jest.fn().mockResolvedValue([]),
       findByStage: jest.fn(),
@@ -125,6 +126,7 @@ describe('FounderKpiQueryService', () => {
     eventRepository = {
       create: jest.fn(),
       findById: jest.fn(),
+      findByCustomerId: jest.fn(),
       findByQuotationId: jest.fn(),
       findMaxBookingNumber: jest.fn(),
       findByEventDate: jest.fn().mockResolvedValue([]),

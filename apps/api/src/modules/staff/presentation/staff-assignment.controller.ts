@@ -8,10 +8,23 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiQuery,
+  ApiTags,
+} from '@nestjs/swagger';
+import { Permissions } from '../../auth';
 import { ZodValidationPipe } from '../../../common/pipes/zod-validation.pipe';
 import { failure } from '../../../shared/application/result';
 import { IfMatchVersion } from '../../../shared/presentation/if-match.decorator';
+import {
+  ApiDataResponse,
+  ApiIfMatchHeader,
+  ApiStandardErrors,
+  ApiUuidParam,
+  ApiZodBody,
+} from '../../../shared/presentation/openapi.helpers';
 import { resultToResponse } from '../../../shared/presentation/result-to-response.helper';
 import { TenantId } from '../../../shared/presentation/tenant-context.decorator';
 import { StaffAssignmentApplicationService } from '../application/services/staff-assignment.application.service';
@@ -34,7 +47,15 @@ export class StaffAssignmentController {
 
   // EP1-STF-002 — List staff assignments for a booking (Event Workspace integration)
   @Get()
+  @Permissions('staff:read')
   @ApiOperation({ summary: 'List staff assignments for a booking' })
+  @ApiQuery({
+    name: 'bookingId',
+    required: true,
+    schema: { type: 'string', format: 'uuid' },
+  })
+  @ApiDataResponse(200, 'Staff assignments listed')
+  @ApiStandardErrors()
   async listAssignments(
     @TenantId() tenantId: string,
     @Query('bookingId') bookingId: string | undefined,
@@ -53,7 +74,11 @@ export class StaffAssignmentController {
   }
 
   @Get(':id')
+  @Permissions('staff:read')
   @ApiOperation({ summary: 'Retrieve a staff assignment by ID' })
+  @ApiUuidParam('id')
+  @ApiDataResponse(200, 'Staff assignment retrieved')
+  @ApiStandardErrors()
   async retrieveAssignment(
     @TenantId() tenantId: string,
     @Param('id') id: string,
@@ -67,8 +92,12 @@ export class StaffAssignmentController {
 
   // EP1-STF-002 — Propose a staff assignment for a booking (pending confirmation)
   @Post()
+  @Permissions('staff:write')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Propose a staff assignment for a booking' })
+  @ApiZodBody(createStaffAssignmentSchema)
+  @ApiDataResponse(201, 'Staff assignment proposed')
+  @ApiStandardErrors()
   async createAssignment(
     @TenantId() tenantId: string,
     @Body(new ZodValidationPipe(createStaffAssignmentSchema))
@@ -91,8 +120,14 @@ export class StaffAssignmentController {
 
   // EP1-AUT-004, EP1-AUT-001 — Human-confirmed staff assignment (no auto-assign)
   @Post(':id/confirm')
+  @Permissions('staff:write')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Confirm a proposed staff assignment' })
+  @ApiUuidParam('id')
+  @ApiIfMatchHeader(true)
+  @ApiZodBody(confirmStaffAssignmentSchema)
+  @ApiDataResponse(200, 'Staff assignment confirmed')
+  @ApiStandardErrors()
   async confirmAssignment(
     @TenantId() tenantId: string,
     @Param('id') id: string,
@@ -118,8 +153,14 @@ export class StaffAssignmentController {
 
   // Release a confirmed assignment once the event is complete
   @Post(':id/release')
+  @Permissions('staff:write')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Release a confirmed staff assignment' })
+  @ApiUuidParam('id')
+  @ApiIfMatchHeader(true)
+  @ApiZodBody(releaseStaffAssignmentSchema)
+  @ApiDataResponse(200, 'Staff assignment released')
+  @ApiStandardErrors()
   async releaseAssignment(
     @TenantId() tenantId: string,
     @Param('id') id: string,
@@ -145,8 +186,14 @@ export class StaffAssignmentController {
 
   // Withdraw a proposed or confirmed assignment
   @Post(':id/cancel')
+  @Permissions('staff:write')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Cancel a staff assignment' })
+  @ApiUuidParam('id')
+  @ApiIfMatchHeader(true)
+  @ApiZodBody(cancelStaffAssignmentSchema)
+  @ApiDataResponse(200, 'Staff assignment cancelled')
+  @ApiStandardErrors()
   async cancelAssignment(
     @TenantId() tenantId: string,
     @Param('id') id: string,

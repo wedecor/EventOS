@@ -7,7 +7,14 @@ import {
   Post,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Permissions } from '../../auth';
 import { ZodValidationPipe } from '../../../common/pipes/zod-validation.pipe';
+import {
+  ApiDataResponse,
+  ApiStandardErrors,
+  ApiUuidParam,
+  ApiZodBody,
+} from '../../../shared/presentation/openapi.helpers';
 import { resultToResponse } from '../../../shared/presentation/result-to-response.helper';
 import { TenantId } from '../../../shared/presentation/tenant-context.decorator';
 import { ProcurementLineApplicationService } from '../application/services/procurement-line.application.service';
@@ -27,8 +34,13 @@ export class ProcurementController {
 
   // EP1-VEN-002 — Add a planned procurement line under a procurement header
   @Post(':id/lines')
+  @Permissions('procurements:write')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Add a procurement line' })
+  @ApiUuidParam('id')
+  @ApiZodBody(addProcurementLineSchema)
+  @ApiDataResponse(201, 'Procurement line added')
+  @ApiStandardErrors()
   async addLine(
     @TenantId() tenantId: string,
     @Param('id') id: string,

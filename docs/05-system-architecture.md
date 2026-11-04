@@ -37,12 +37,14 @@ Event OS is a **modular monolith** deployed as a single application with a clear
 │                      APPLICATION (MODULAR MONOLITH)                          │
 │                                                                              │
 │  ┌──────┐ ┌──────┐ ┌───────────┐ ┌─────────┐ ┌──────────┐ ┌──────────┐   │
-│  │ CRM  │ │ Lead │ │ Quotation │ │ Booking │ │ Calendar │ │  Task    │   │
+│  │ CRM  │ │ Lead │ │ Quotation │ │ Booking │ │ Calendar*│ │  Task    │   │
 │  └──────┘ └──────┘ └───────────┘ └─────────┘ └──────────┘ └──────────┘   │
-│  ┌──────┐ ┌──────┐ ┌───────────┐ ┌─────────┐ ┌──────────┐                 │
-│  │Staff │ │Vendor│ │ Inventory │ │ Finance │ │ BI (P1)  │                 │
-│  └──────┘ └──────┘ └───────────┘ └─────────┘ └──────────┘                 │
-│       │           │            │             │           │                  │
+│                                          * read-only aggregation, no writes │
+│  ┌──────┐ ┌──────┐ ┌───────────┐ ┌─────────┐ ┌──────────┐ ┌──────────────┐   │
+│  │Staff │ │Vendor│ │ Inventory │ │ Finance │ │   Comm   │ │BI/Analytics* │   │
+│  └──────┘ └──────┘ └───────────┘ └─────────┘ └──────────┘ └──────────────┘   │
+│       │           │            │             │           │                      │
+│       │  * P1 /dashboards frozen; P2-12 /analytics read-only aggregation        │
 │  ┌────┴───────────┴────────────┴─────────────┴───────────┴────────────┐   │
 │  │                    SHARED KERNEL                                      │   │
 │  │  Auth Context │ Org Context │ Domain Events │ Common Value Objects  │   │
@@ -84,8 +86,10 @@ Authoritative business scope: [`docs/business/19-event-os-phase1-requirements.md
 | **Customer** | Customer timeline | CRM |
 | **Customer** | Issue notes | CRM |
 | **Customer** | Review tracking | CRM |
+| **Customer** | Communication Center (P2-09) | Communication (shared operational service) |
+| **Customer** | Customer 360° timeline & relationship intelligence (P2-11, read-only aggregation) | CRM / Customer Intelligence |
 | **Operations** | Tasks / checklists | Task |
-| **Operations** | Calendar milestones | Calendar |
+| **Operations** | Unified operations calendar & timeline (P2-10, read-only aggregation) | Calendar |
 | **Staff** | Staff master | Staff |
 | **Staff** | Assignment | Staff, Booking |
 | **Staff** | Movement permissions | Staff (RBAC) |
@@ -98,10 +102,10 @@ Authoritative business scope: [`docs/business/19-event-os-phase1-requirements.md
 | **Finance** | Payments | Finance |
 | **Finance** | Proofs | Finance, File Storage |
 | **Finance** | Expenses | Finance |
-| **Finance** | Profitability | Finance, BI (founder KPI) |
-| **Marketing** | Lead source visibility | BI (founder KPI), Lead |
+| **Finance** | Profitability | Finance, BI (founder KPI + P2-12 analytics) |
+| **Marketing** | Lead source visibility | BI (founder KPI + P2-12 analytics), Lead |
 | **Marketing** | Event content library | File Storage, Booking |
-| **BI** | Founder KPI dashboard only | BI (partial) |
+| **BI** | Founder KPI dashboard (Phase 1 `/dashboards/*`, frozen) + Analytics hub (P2-12 `/analytics/*`, read-only) | BI / Analytics |
 
 ---
 
@@ -156,12 +160,27 @@ Task module provides event-linked tasks and checklist templates. Checklists supp
 | Movement permissions | Staff (RBAC) | Who may confirm inventory movements |
 | Vendor procurement | Vendor | Orders, confirmations per event |
 | Inventory movements | Inventory | Packing, on-site, return states per event |
+| Inventory reservations / ops (P2-07) | Inventory | Booking-scoped holds, verification, damage; progress/activity composition |
+| Financial documents (P2-08) | Finance | Metadata-only proofs; progress/activity composition (no binary storage) |
+| Communications (P2-09) | Communication | Shared operational log, templates, manual reminders; progress/activity composition |
 
 Modules remain bounded; the workspace **reads and links** — it does not replace module aggregates.
 
+**HTTP realization:** Phase 1 OpenAPI keeps `GET /bookings/:id/workspace` as a **thin status DTO**. P2-01 Admin Portal composes sibling booking-scoped APIs into the workspace UI and adds additive progress/activity/notes endpoints — it does not embed collections on the thin workspace GET.
+
+**P2-07 Inventory ops:** Reservations, movements, verification, and damage remain **booking-scoped** under the Inventory module. Workspace stays a **thin composition** surface (progress counters + activity events such as reserved/packed/loaded/returned/damage); it does not own inventory aggregates.
+
+**P2-08 Finance documents:** Financial document metadata remains under the Finance module. Workspace stays a **thin composition** surface — additive progress `financeDocuments` counters and activity `document_*` events; `WorkspaceDto` is not expanded with document collections.
+
+**P2-09 Communication Center:** Communication records, templates, reminders, and preference storage live in a **shared Communication module** (`apps/api/src/modules/communication/`). Workspace stays a **thin composition** surface — additive progress `communications` counters and activity `communication_*` / `reminder_*` events; `WorkspaceDto` is not expanded with communication collections. No provider integrations and no reminder scheduler.
+
+**P2-11 Customer 360°:** Customer Intelligence is a **customer-centric read-only aggregation** inside the Customer module (`CustomerIntelligenceApplicationService` / `CustomerIntelligenceController` under `/clients/:customerId/...`). It projects overview, timeline, bookings, relationship, financial summary, and communications from existing CRM / Lead / Quotation / Booking / Communication / Finance repositories — **no new Prisma tables**, **no write ownership**, permission reuse **`clients:read`**. `WorkspaceDto` remains unchanged and **booking-centric**; Customer 360 does not embed into or expand the Event Workspace.
+
+**P2-12 Business Intelligence:** Analytics is a **tenant-wide read-only aggregation** in `apps/api/src/modules/analytics/` (`AnalyticsApplicationService` / `AnalyticsController` under `/analytics/...`). It projects founder/sales/finance/staff/vendor/inventory/customer/operations KPIs, historical trends, and CSV/SpreadsheetML export from existing module repositories — **no new Prisma tables**, **no write ownership**, permission **`analytics:read`**. Phase-1 **`/dashboards/*`** remains **frozen**; P2-12 is the additive BI surface. **No AI / predictive / forecasting.**
+
 ### Financial visibility
 
-Finance module data surfaced on the workspace: payments received, proof attachments, expenses logged, and event-level profitability summary. Founder-level rollups live in the BI founder KPI dashboard.
+Finance module data surfaced on the workspace: payments received, proof attachments / financial document metadata, expenses logged, and event-level profitability summary. Founder-level rollups live in the Phase-1 BI founder KPI dashboard (`/dashboards/founder`, frozen) and the additive P2-12 Analytics hub (`/analytics/*`).
 
 ---
 
@@ -220,7 +239,7 @@ The following are **explicitly out of Phase 1**. They must not block Phase 1 del
 | Full WhatsApp replacement | External WhatsApp continues; no in-app channel replacement |
 | Client portal | Marked future in client diagram |
 | Full CMS | Event content library only (adjunct to events) |
-| Advanced BI | Founder KPI dashboard only |
+| Advanced BI | Phase-1 founder `/dashboards/*` frozen; P2-12 adds read-only `/analytics/*` (still no custom widgets / ad-hoc BI) |
 | Full accounting ERP | Event-level finance only; no ERP integration |
 
 See [`11-roadmap.md`](./11-roadmap.md) for product-phase placement of deferred items.
@@ -380,19 +399,31 @@ Stored in `tenant_settings` table (JSONB for flexibility):
 
 ### Authorization Model: RBAC + Permissions
 
-| Role | Description | Typical Permissions |
-|------|-------------|---------------------|
-| `owner` | Full access | All |
-| `admin` | Administrative access | All except billing/tenant settings |
-| `sales_manager` | Sales team lead | CRM, leads, quotations, reports (sales) |
-| `sales` | Sales representative | CRM, leads, quotations (own) |
-| `operations_manager` | Operations lead | Bookings, calendar, tasks, staff, vendors, inventory |
-| `coordinator` | Event coordinator | Tasks (assigned), calendar (view), bookings (view) |
-| `finance` | Accounts | Invoices, payments, expenses, reports (finance) |
-| `marketing` | Marketing (Phase 1) | Lead source visibility, event content library |
-| `viewer` | Read-only | View-only across assigned modules |
+> **Authority (R3-08 / R3-09):** The canonical Phase 1 role × permission matrix lives in
+> [`docs/09-api-design.md`](./09-api-design.md) §Phase 1 Role × Permission Matrix and must match
+> `ROLE_PERMISSIONS` in `apps/api/src/modules/auth/domain/rbac.ts`. This table is a **summary** only.
+> Do not invent narrower admin rules here.
 
-Permissions are granular: `leads:read`, `leads:write`, `leads:assign`, `quotations:approve`, etc.
+Phase 1 model (matches implementation):
+
+- Single role per user (not multi-role assignment)
+- Single tenant (ADR-016)
+- Permission keys use `<resource>:<action>` (docs/14)
+- Enforcement in the application layer via `PermissionService` + `PermissionsGuard`
+
+| Role | Description | Phase 1 permission grant (summary) |
+|------|-------------|-------------------------------------|
+| `owner` | Full access | **All** Phase 1 permission keys |
+| `admin` | Administrative access | **All** Phase 1 permission keys — **including** `settings:read` / `settings:write` and finance permissions. docs/09 lists `admin` on Administration `/settings` and on module endpoints; there is **no** Phase 1 “except billing/tenant settings” carve-out. (Future SaaS billing/tenant-management separation is out of Phase 1 scope.) |
+| `sales_manager` | Sales team lead | Leads, clients/CRM (incl. reviews), quotations (incl. approve/reject/revise), dashboards |
+| `sales` | Sales representative | Leads (read/write/follow-ups), clients read, quotations read/write/send |
+| `operations_manager` | Operations lead | Operations surface: bookings, workspace, tasks, staff, vendors/procurement, inventory, CRM write/timeline/issues, quotation approve, suggestions |
+| `coordinator` | Event coordinator | Bookings/workspace/tasks (read + status/execution where documented), inventory movements, timeline/issues, suggestions read/accept/dismiss; narrower than operations_manager |
+| `finance` | Accounts | Payments, invoices, expenses, profitability; limited booking status/complete; procurements read |
+| `marketing` | Marketing (Phase 1 **placeholder**) | **No** API permission keys in Phase 1 (`ROLE_PERMISSIONS.marketing = []`). CMS / Instagram / content-library endpoints are Phase 4+; do not document those as Phase 1 grants |
+| `viewer` | Read-only | Union of documented `*:read` (and related read) permissions whose docs/09 role lists include `viewer` |
+
+Permissions are granular: `leads:read`, `leads:write`, `leads:assign`, `quotations:approve`, `settings:write`, etc. The full key list and role matrix are in [`docs/09-api-design.md`](./09-api-design.md) §Phase 1 Role × Permission Matrix (R3-09) and `rbac.ts`.
 
 Authorization checked at application layer, not just API layer.
 
@@ -411,14 +442,20 @@ Aggregate state change → Domain Event raised → Event Bus (in-process)
                                                       │
                               ┌────────────────────────┼────────────────────────┐
                               ▼                        ▼                        ▼
-                    Calendar Module             Task Module              In-app Alert
-                    (suggest milestone)       (suggest checklist)      (notify assignee)
+                     Task Module              Staff Module              In-app Alert
+                (suggest checklist)      (suggest assignment)         (notify assignee)
                               │                        │                        │
                               └────────────────────────┴────────────────────────┘
                                               Human confirms → business action
 ```
 
 Handlers **must not** auto-create assignments, send customer/vendor messages, approve changes, or advance execution stages without explicit user action.
+
+**Calendar (P2-10) does not participate in this event flow.** It has no handlers, no suggestion type, and no write path — it is a stateless GET-time aggregation over the current state of Event, Staff, Vendor, Inventory, Communication, and Finance records, computed fresh on every request.
+
+**Customer Intelligence (P2-11) likewise does not participate in this event flow.** It has no handlers, no suggestion type, and no write path — it is a customer-centric GET-time aggregation over Customer, Lead/FollowUp, Quotation, Event, Communication, Reminder, TimelineEntry, Invoice, Payment (via bookings), and FinancialDocument, computed fresh on every request.
+
+**Analytics (P2-12) likewise does not participate in this event flow.** It has no handlers, no suggestion type, and no write path — it is a tenant-wide GET-time aggregation over Lead, Quotation, Event, Customer, Payment, VendorExpense, Invoice, Staff, VendorProcurement, Inventory, Communication, and Reminder, computed fresh on every request. Phase-1 `/dashboards/*` remains frozen.
 
 ### Event Store
 
@@ -456,17 +493,31 @@ REST API with resource-oriented URLs. See [18-api-standards.md](./18-api-standar
 /api/v1/calendar
 /api/v1/tasks
 /api/v1/staff
+/api/v1/staff-availability
+/api/v1/staff-leave
+/api/v1/scheduling
 /api/v1/vendors
+/api/v1/vendor-procurements
+/api/v1/procurement-quotes
 /api/v1/inventory
+/api/v1/inventory-reservations
+/api/v1/inventory-verification
+/api/v1/inventory-damage
 /api/v1/finance/payments
 /api/v1/finance/expenses
 /api/v1/dashboards/founder
+/api/v1/analytics/dashboard
+/api/v1/analytics/sales
+/api/v1/analytics/finance
+/api/v1/analytics/trends
+/api/v1/analytics/export
 ...
 ```
 
 - Versioned (`/v1/`) from day one.
 - OpenAPI 3.1 specification generated from code or maintained alongside.
 - Consistent error format, pagination, filtering.
+- **P2-12:** Phase-1 `/dashboards/*` remains frozen; additive BI lives under `/analytics/*` (`analytics:read`).
 
 ---
 
@@ -475,21 +526,16 @@ REST API with resource-oriented URLs. See [18-api-standards.md](./18-api-standar
 ### Structure
 
 ```
-Single Page Application (React)
-├── App shell (layout, navigation, auth)
-├── Feature modules (mirror backend modules)
-│   ├── leads/
-│   ├── quotations/
-│   ├── bookings/          # includes event workspace
-│   ├── tasks/
-│   ├── staff/
-│   ├── vendors/
-│   ├── inventory/
-│   ├── finance/
-│   └── dashboards/        # founder KPI only (Phase 1)
-├── Shared components (design system)
-├── API client layer (typed, generated from OpenAPI)
-└── State management (React Query for server state, Zustand for UI state)
+Single Page Application (React / Next.js Admin Portal)
+├── App shell (layout, navigation, auth) — F1-01–F1-03
+├── Feature modules under `apps/web/src/features/` (mirror backend modules)
+│   ├── auth/, dashboard/, customers/ (API: clients), leads/, quotations/
+│   ├── bookings/, workspace/, vendors/, staff/, staff-assignments/, staff-scheduling/, inventory/, finance/
+│   ├── analytics/ (P2-12 BI hub — `/app/analytics`), calendar/, communications/
+│   └── (Reports / Settings placeholders pending F1-14 / F1-15)
+├── Shared components (design system / page kit)
+├── API client layer (Axios + Zod parse; types from frozen OpenAPI)
+└── State management (TanStack Query for server state, Zustand for auth/session UI)
 ```
 
 ### Key Decisions
@@ -498,6 +544,8 @@ Single Page Application (React)
 - **UI state** managed by Zustand or React context — sidebar, modals, filters.
 - **No Redux** — unnecessary complexity for this application profile.
 - **Route-based code splitting** — each module lazy-loaded.
+- **Phase 1 hosting:** Next.js **static export** (`output: 'export'`) — client-first; entity pages use `?id=` query params (no dynamic `[id]` segments). Matches ADR-007 SPA/static-asset intent.
+- **Hub-when-no-list:** when OpenAPI omits a list endpoint (`clients`, `quotations`, `bookings`, global finance lists), Admin Portal provides a hub + open-by-id (or booking-scoped panels) rather than inventing list APIs.
 
 ---
 
@@ -645,9 +693,11 @@ Each phase is triggered by measured need, not anticipation.
 
 *Review date: 2026-07-08. Alignment-only — no architecture redesign, no technology changes, no business requirement changes.*
 
+> **R3-12 (2026-07-13) — Historical audit superseded.** The capability GAP tables and finding codes (A2–A5, etc.) below are a **point-in-time review** from 2026-07-08. P0 documentation follow-ups were applied in **Phase 1 Architecture Alignment Update**. Phase 1 APIs for Staff, Vendor, Inventory, Finance, CRM timeline/issues/reviews, Suggestions, Tenant Settings, Auth/RBAC, and related modules are now **implemented** in `apps/api`. Do **not** treat the GAP rows below as current delivery status. Current architecture narrative is the sections above this review plus the Alignment Update.
+
 ### Status
 
-**Addressed (documentation alignment applied 2026-07-08)**
+**Addressed (documentation alignment applied 2026-07-08; delivery status synchronized R3-12)**
 
 P0 follow-ups from this review have been incorporated into the sections above. **A10** and **A11** resolved via ADR-016 and ADR-017 (2026-07-08). Remaining P2 follow-ups listed in **Phase 1 Architecture Alignment Update** below.
 
@@ -669,7 +719,7 @@ P0 follow-ups from this review have been incorporated into the sections above. *
 | Capability | EP1 refs | Verdict | Finding |
 |------------|----------|---------|---------|
 | Staff management | EP1-STF-001, 002 | **GAP** | Staff module absent from Architecture Overview diagram and API resource list |
-| Staff permissions | EP1-STF-003 | **PASS** (pattern) / **RISK** | RBAC + granular permissions support movement permissions; roles include deferred `marketing` → CMS/Instagram scope |
+| Staff permissions | EP1-STF-003 | **PASS** (pattern) / **RISK** | RBAC + granular permissions support movement permissions; `marketing` role id exists but has empty Phase 1 API grant (CMS deferred) |
 | Vendor procurement | EP1-VEN-001 – 006 | **GAP** | Vendor module not shown in overview diagram or `/api/v1` examples |
 | Inventory movement workflow | EP1-INV-003 – 007 | **GAP** | Inventory module not shown; no movement state machine in architecture narrative |
 
@@ -686,7 +736,8 @@ P0 follow-ups from this review have been incorporated into the sections above. *
 
 | Capability | EP1 refs | Verdict | Finding |
 |------------|----------|---------|---------|
-| Communication timeline | EP1-CUS-002 | **GAP** | CRM module present; per-event timeline not described |
+| Communication timeline | EP1-CUS-002 | **PASS** (P2-09 / P2-11) | Shared Communication module + CRM TimelineEntry; Customer 360 aggregates both into a unified customer timeline (read-only) |
+| Customer 360 / relationship intelligence | EP1-CUS-001, EP1-CUS-002 | **PASS** (P2-11) | Read-only aggregation under `/clients/:customerId/...`; `clients:read`; no new tables; Workspace unchanged |
 | Issue notes | EP1-CUS-004 | **GAP** | Not described |
 | Review tracking | EP1-CUS-003 | **GAP** | Not described; LM reuse not documented |
 
@@ -695,7 +746,13 @@ P0 follow-ups from this review have been incorporated into the sections above. *
 | Capability | EP1 refs | Verdict | Finding |
 |------------|----------|---------|---------|
 | Event-linked decor content library | EP1-MKT-003 | **PASS** (pattern) / **GAP** (doc) | File storage supports media; event-linked library adjunct not named (not full CMS) |
-| Lead source funnel visibility | EP1-MKT-001, 002 | **GAP** | BI/founder dashboard not in architecture overview |
+| Lead source funnel visibility | EP1-MKT-001, 002 | **PASS** (P2-12) | Additive `/analytics/sales` + dashboard KPIs; Phase-1 `/dashboards/*` frozen |
+
+#### BI
+
+| Capability | EP1 refs | Verdict | Finding |
+|------------|----------|---------|---------|
+| Founder / operational KPI dashboards | EP1-KPI-001–007 | **PASS** (P2-12) | Read-only `/analytics/*` with `analytics:read`; no AI/forecasting; export CSV/SpreadsheetML |
 
 #### Automation
 
@@ -715,7 +772,7 @@ P0 follow-ups from this review have been incorporated into the sections above. *
 | Advanced AI | Should not block | **RISK** | AI Provider in diagram; AI jobs in background processing — may imply Phase 1 dependency |
 | Full WhatsApp replacement | Should not block | **RISK** | WhatsApp in stack + infrastructure adapters; external WhatsApp continues per `19` — adapter must be optional/deferred |
 | Client portal | Should not block | **PASS** | Marked **Future** in client diagram |
-| Full CMS | Should not block | **RISK** | RBAC `marketing` role includes CMS/Instagram/SEO — deferred modules appear in auth model |
+| Full CMS | Should not block | **PASS** (after R3-08) | RBAC retains a `marketing` **role name** for future CMS/Instagram work, but Phase 1 grants **zero** API permissions — deferred modules are not authorized in Phase 1 |
 | Advanced BI | Should not block | **RISK** | Dashboard caching generic; no distinction between Phase 1 founder KPIs vs advanced BI |
 | Full accounting ERP | Should not block | **PASS** | Not described as Phase 1 architecture requirement |
 
@@ -743,7 +800,7 @@ P0 follow-ups from this review have been incorporated into the sections above. *
 | A6 | **RISK** | Tenancy | Multi-tenant narrative may drive premature SaaS complexity (single We Decor tenant Phase 1) |
 | A7 | **RISK** | AI / WhatsApp | Stack and background jobs list may encourage deferred scope in Phase 1 builds |
 | A8 | **RISK** | Domain events | Handler example auto-creates calendar/tasks/notifications — conflicts with `EP1-AUT-001` unless gated |
-| A9 | **RISK** | RBAC roles | Roles reference CMS, Instagram, marketing platform — deferred from Phase 1 |
+| A9 | **PASS** (after R3-08) | RBAC roles | `marketing` remains a Phase 1 role **identifier** with empty permission grant; CMS/Instagram capabilities deferred to Phase 4+ |
 | A10 | **RESOLVED** | Tenancy Phase 1 | ADR-016 — full plumbing, single seeded We Decor tenant |
 | A11 | **RESOLVED** | Event handlers | ADR-017 — suggestion-only handlers; accept via application service |
 
@@ -761,7 +818,7 @@ P0 follow-ups from this review have been incorporated into the sections above. *
 | **P0** | Add **Transitional integrations** subsection: LM extend, QB parallel-run, website lead intake | A5 |
 | **P1** | Clarify **Phase 1 tenancy mode**: single We Decor tenant; defer cross-tenant isolation / RLS to Phase 6 SaaS | A6, A10 — **Done** (ADR-016) |
 | **P1** | Mark **AI Provider**, **WhatsApp adapter**, **Client Portal** as deferred in diagrams/stack table for Phase 1 | A7 |
-| **P1** | Scope **RBAC roles** to Phase 1 modules; note CMS/Instagram roles as Phase 4+ | A9 |
+| **P1** | Scope **RBAC roles** to Phase 1 modules; note CMS/Instagram roles as Phase 4+ | A9 — **Done** (R3-08: `marketing` empty grant; docs/09 + `rbac.ts` authoritative) |
 | **P1** | Distinguish **Phase 1 founder KPI dashboard** (partial BI) from advanced BI in caching/observability sections | A7 |
 | **P2** | Extend API architecture example routes for `/staff`, `/vendors`, `/inventory`, `/finance`, `/dashboards` | A2 |
 | **P2** | ADR: domain-event handler behaviour in Phase 1 (suggest vs auto-execute) | A8, A11 — **Done** (ADR-017) |
@@ -823,6 +880,6 @@ P0 follow-ups from this review have been incorporated into the sections above. *
 
 ---
 
-*Last updated: 2026-07-08*  
+*Last updated: 2026-07-13 (R4-01)*  
 *Owner: Founding Engineering*  
 *Phase 1 alignment: review + update applied (`19`, `06`, `11`, `20`) — 2026-07-08*

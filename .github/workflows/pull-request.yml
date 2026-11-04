@@ -1,0 +1,116 @@
+# R2-03 — Pull Request CI (docs/15 §CI Pipeline, docs/16 §Pull Request Pipeline).
+#
+# Scope: quality gates only. Docker build, e2e, migrations, and deploy belong to
+# later backlog tasks (R2-04+). E2E is intentionally deferred to main-branch CI
+# per docs/15: "E2E tests run on merge to main (not on every PR, due to speed)."
+
+name: Pull Request CI
+
+"on":
+  pull_request:
+
+concurrency:
+  group: pr-ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: apps/api
+
+jobs:
+  quality:
+    name: Lint · Build · Test · Coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    env:
+      # prisma.config.ts requires DATABASE_URL at generate time (no DB connection).
+      DATABASE_URL: postgresql://eventos:eventos@127.0.0.1:5432/eventos?schema=public
+      # Unit suites that boot ConfigModule need a valid secret (R1-04).
+      JWT_SECRET: ci-test-jwt-secret-at-least-32-characters-long
+      NODE_ENV: test
+      CI: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Enable pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          # Reads packageManager from apps/api/package.json (pnpm@10.13.1).
+          package_json_file: apps/api/package.json
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          # .nvmrc → 22 (engines: ^22.12.0 / docs/22).
+          node-version-file: .nvmrc
+          cache: pnpm
+          cache-dependency-path: apps/api/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm prisma:generate
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Build
+        # Also re-runs prisma generate via the package.json `prebuild` hook.
+        run: pnpm build
+
+      - name: Unit tests
+        run: pnpm test
+
+      - name: Unit tests with coverage thresholds
+        # Enforces docs/15 line coverage floors configured in R1-11.
+        run: pnpm test:cov
+
+      - name: OpenAPI contract freeze drift check (R3-13 / R3-14)
+        # Regenerates openapi/openapi.v1.json and fails if it differs from the
+        # committed Phase 1 freeze artifact (docs/09 §Phase 1 OpenAPI Contract Freeze).
+        run: |
+          pnpm openapi:export
+          git diff --exit-code -- openapi/openapi.v1.json
+
+  web:
+    name: Web Lint · Typecheck · Test · Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: apps/web
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Enable pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          package_json_file: apps/web/package.json
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+          cache-dependency-path: apps/web/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Unit tests
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build

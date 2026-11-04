@@ -4,6 +4,11 @@ import {
   success,
   type Result,
 } from '../../../../shared/application/result';
+import {
+  AuditLogService,
+  AUDIT_ACTIONS,
+  AUDIT_ENTITY_TYPES,
+} from '../../../../shared/audit';
 import { ConcurrentModificationError } from '../../../../shared/database';
 import { DomainEventPublisher } from '../../../../shared/events/domain-event.base';
 import {
@@ -41,9 +46,46 @@ export class VendorExpenseApplicationService {
     private readonly vendorRepository: VendorRepository,
     private readonly procurementLineRepository: ProcurementLineRepository,
     private readonly eventPublisher: DomainEventPublisher,
+    private readonly auditLog: AuditLogService,
   ) {}
 
+  // R1-08 — audit wrapper. Emits exactly one audit record per authenticated vendor
+  // expense creation attempt, capturing the real outcome. On failure no VendorExpense
+  // exists, so `entityId` is empty and the attempted context (booking/vendor) is
+  // captured in `metadata`. The audit write is best-effort and outside the business
+  // transaction.
   async recordExpense(
+    actorId: string,
+    tenantId: string,
+    bookingId: string,
+    input: RecordExpenseInput,
+  ): Promise<Result<VendorExpenseDto>> {
+    const result = await this.recordExpenseInternal(tenantId, bookingId, input);
+
+    await this.auditLog.record({
+      actorId,
+      tenantId,
+      action: AUDIT_ACTIONS.VENDOR_EXPENSE_CREATED,
+      entityType: AUDIT_ENTITY_TYPES.VENDOR_EXPENSE,
+      entityId: result.ok ? result.value.id : '',
+      outcome: result.ok ? 'success' : 'failure',
+      metadata: result.ok
+        ? {
+            amount: result.value.amount,
+            bookingId,
+            vendorId: result.value.vendorId,
+          }
+        : {
+            errorCode: result.error.code,
+            bookingId,
+            vendorId: input.vendorId,
+          },
+    });
+
+    return result;
+  }
+
+  private async recordExpenseInternal(
     tenantId: string,
     bookingId: string,
     input: RecordExpenseInput,

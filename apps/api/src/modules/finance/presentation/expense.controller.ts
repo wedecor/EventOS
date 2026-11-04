@@ -7,9 +7,17 @@ import {
   Post,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Permissions } from '../../auth';
 import { ZodValidationPipe } from '../../../common/pipes/zod-validation.pipe';
 import { failure } from '../../../shared/application/result';
 import { IfMatchVersion } from '../../../shared/presentation/if-match.decorator';
+import {
+  ApiDataResponse,
+  ApiIfMatchHeader,
+  ApiStandardErrors,
+  ApiUuidParam,
+  ApiZodBody,
+} from '../../../shared/presentation/openapi.helpers';
 import { resultToResponse } from '../../../shared/presentation/result-to-response.helper';
 import { TenantId } from '../../../shared/presentation/tenant-context.decorator';
 import { VendorExpenseApplicationService } from '../application/services/vendor-expense.application.service';
@@ -28,8 +36,14 @@ export class ExpenseController {
 
   // EP1-FIN-004 — Void a vendor expense
   @Post(':id/void')
+  @Permissions('expenses:void')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Void a vendor expense' })
+  @ApiUuidParam('id')
+  @ApiIfMatchHeader(true)
+  @ApiZodBody(voidExpenseSchema)
+  @ApiDataResponse(200, 'Expense voided')
+  @ApiStandardErrors()
   async voidExpense(
     @TenantId() tenantId: string,
     @Param('id') id: string,

@@ -34,6 +34,9 @@ describe('VendorApplicationService', () => {
     paymentTerms: null,
     taxDetails: null,
     notes: null,
+    procurementCount: 0,
+    onTimeDeliveryCount: 0,
+    completedProcurementCount: 0,
     createdAt: new Date(),
     updatedAt: new Date(),
     version: 1,
@@ -62,6 +65,7 @@ describe('VendorApplicationService', () => {
       findById: jest.fn(),
       findMany: jest.fn(),
       update: jest.fn(),
+      incrementPerformance: jest.fn(),
     };
     vendorIssueNoteRepository = {
       create: jest.fn(),

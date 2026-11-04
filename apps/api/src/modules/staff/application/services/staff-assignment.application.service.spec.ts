@@ -19,8 +19,25 @@ import type {
 describe('StaffAssignmentApplicationService', () => {
   const tenantId = 'tenant-1';
   const bookingId = 'booking-1';
-  const staffMemberId = 'user-1';
+  const staffMemberId = 'staff-1';
   const assignmentId = 'assignment-1';
+
+  const baseStaffMember = {
+    id: staffMemberId,
+    tenantId,
+    userId: 'user-1',
+    name: 'Ravi Kumar',
+    role: 'decorator',
+    department: 'operations',
+    phone: '+919876543210',
+    email: 'ravi@wedecor.test',
+    employmentType: 'permanent' as const,
+    status: 'active' as const,
+    joinedAt: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    version: 1,
+  };
 
   const baseBooking: EventRecord = {
     id: bookingId,
@@ -52,6 +69,7 @@ describe('StaffAssignmentApplicationService', () => {
     tenantId,
     bookingId,
     staffMemberId,
+    legacyUserId: 'user-1',
     role: 'decorator',
     isOnSiteLead: false,
     reportingAt: null,
@@ -67,8 +85,15 @@ describe('StaffAssignmentApplicationService', () => {
   };
 
   let staffAssignmentRepository: jest.Mocked<StaffAssignmentRepository>;
+  let staffMemberRepository: {
+    findById: jest.Mock;
+    resolveForAssignment: jest.Mock;
+  };
   let eventRepository: jest.Mocked<EventRepository>;
   let eventPublisher: jest.Mocked<DomainEventPublisher>;
+  let schedulingService: {
+    detectConflictsForStaffOnBooking: jest.Mock;
+  };
   let service: StaffAssignmentApplicationService;
   let publish: jest.Mock;
 
@@ -79,22 +104,35 @@ describe('StaffAssignmentApplicationService', () => {
       findById: jest.fn(),
       findByBookingId: jest.fn(),
       findAll: jest.fn(),
+      findConfirmedByStaffMemberId: jest.fn(),
       update: jest.fn(),
+    };
+    staffMemberRepository = {
+      findById: jest.fn(),
+      resolveForAssignment: jest.fn(),
     };
     eventRepository = {
       create: jest.fn(),
       findById: jest.fn(),
+      findByCustomerId: jest.fn(),
       findByQuotationId: jest.fn(),
       findMaxBookingNumber: jest.fn(),
       findByEventDate: jest.fn(),
       update: jest.fn(),
     };
     eventPublisher = { publish };
+    schedulingService = {
+      detectConflictsForStaffOnBooking: jest
+        .fn()
+        .mockResolvedValue({ ok: true, value: [] }),
+    };
 
     service = new StaffAssignmentApplicationService(
       staffAssignmentRepository,
+      staffMemberRepository as never,
       eventRepository,
       eventPublisher,
+      schedulingService as never,
     );
   });
 
@@ -133,6 +171,9 @@ describe('StaffAssignmentApplicationService', () => {
 
   it('createAssignment creates assignment in proposed status and publishes StaffAssignmentCreated', async () => {
     eventRepository.findById.mockResolvedValue(baseBooking);
+    staffMemberRepository.resolveForAssignment.mockResolvedValue(
+      baseStaffMember,
+    );
     staffAssignmentRepository.create.mockResolvedValue(baseAssignment);
 
     const result = await service.createAssignment(tenantId, {
@@ -144,6 +185,7 @@ describe('StaffAssignmentApplicationService', () => {
     if (result.ok) {
       expect(result.value.id).toBe(assignmentId);
       expect(result.value.status).toBe('proposed');
+      expect(result.value.staffMember?.name).toBe('Ravi Kumar');
     }
     expect(publish).toHaveBeenCalledWith(
       expect.any(StaffAssignmentCreatedEvent),
@@ -152,6 +194,9 @@ describe('StaffAssignmentApplicationService', () => {
 
   it('createAssignment passes all fields to repository', async () => {
     eventRepository.findById.mockResolvedValue(baseBooking);
+    staffMemberRepository.resolveForAssignment.mockResolvedValue(
+      baseStaffMember,
+    );
     staffAssignmentRepository.create.mockResolvedValue(baseAssignment);
 
     const reportingAt = new Date('2026-08-01T07:00:00.000Z');
@@ -167,11 +212,30 @@ describe('StaffAssignmentApplicationService', () => {
     expect(staffAssignmentRepository.create).toHaveBeenCalledWith(tenantId, {
       bookingId,
       staffMemberId,
+      legacyUserId: 'user-1',
       role: 'on_site_lead',
       isOnSiteLead: true,
       reportingAt,
       note: 'Bring backdrop frame',
     });
+  });
+
+  it('createAssignment rejects inactive staff members', async () => {
+    eventRepository.findById.mockResolvedValue(baseBooking);
+    staffMemberRepository.resolveForAssignment.mockResolvedValue({
+      ...baseStaffMember,
+      status: 'inactive',
+    });
+
+    const result = await service.createAssignment(tenantId, {
+      bookingId,
+      staffMemberId,
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('INVALID_STATE');
+    }
   });
 
   // ── getAssignmentById ─────────────────────────────────────────────────
@@ -189,6 +253,7 @@ describe('StaffAssignmentApplicationService', () => {
 
   it('getAssignmentById returns the assignment when found', async () => {
     staffAssignmentRepository.findById.mockResolvedValue(baseAssignment);
+    staffMemberRepository.findById.mockResolvedValue(baseStaffMember);
 
     const result = await service.getAssignmentById(tenantId, assignmentId);
 
@@ -215,6 +280,7 @@ describe('StaffAssignmentApplicationService', () => {
     staffAssignmentRepository.findByBookingId.mockResolvedValue([
       baseAssignment,
     ]);
+    staffMemberRepository.findById.mockResolvedValue(baseStaffMember);
 
     const result = await service.listAssignmentsForBooking(tenantId, bookingId);
 
@@ -255,6 +321,7 @@ describe('StaffAssignmentApplicationService', () => {
 
   it('confirmAssignment confirms a proposed assignment and publishes StaffAssignmentConfirmed', async () => {
     staffAssignmentRepository.findById.mockResolvedValue(baseAssignment);
+    staffMemberRepository.findById.mockResolvedValue(baseStaffMember);
     staffAssignmentRepository.update.mockResolvedValue({
       ...baseAssignment,
       status: 'confirmed',
@@ -269,6 +336,9 @@ describe('StaffAssignmentApplicationService', () => {
       expect(result.value.status).toBe('confirmed');
       expect(result.value.confirmedAt).not.toBeNull();
     }
+    expect(
+      schedulingService.detectConflictsForStaffOnBooking,
+    ).toHaveBeenCalledWith(tenantId, staffMemberId, bookingId, assignmentId);
     expect(staffAssignmentRepository.update).toHaveBeenCalledWith(
       tenantId,
       assignmentId,
@@ -280,8 +350,31 @@ describe('StaffAssignmentApplicationService', () => {
     );
   });
 
+  it('confirmAssignment rejects when scheduling conflicts exist', async () => {
+    staffAssignmentRepository.findById.mockResolvedValue(baseAssignment);
+    staffMemberRepository.findById.mockResolvedValue(baseStaffMember);
+    schedulingService.detectConflictsForStaffOnBooking.mockResolvedValue({
+      ok: true,
+      value: [
+        {
+          code: 'approved_leave',
+          message: 'On leave',
+        },
+      ],
+    });
+
+    const result = await service.confirmAssignment(tenantId, assignmentId, 1);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('SCHEDULING_CONFLICT');
+    }
+    expect(staffAssignmentRepository.update).not.toHaveBeenCalled();
+  });
+
   it('confirmAssignment handles ConcurrentModificationError', async () => {
     staffAssignmentRepository.findById.mockResolvedValue(baseAssignment);
+    staffMemberRepository.findById.mockResolvedValue(baseStaffMember);
     staffAssignmentRepository.update.mockRejectedValue(
       new ConcurrentModificationError('StaffAssignment', assignmentId),
     );
@@ -314,6 +407,7 @@ describe('StaffAssignmentApplicationService', () => {
       confirmedAt: new Date(),
     };
     staffAssignmentRepository.findById.mockResolvedValue(confirmedAssignment);
+    staffMemberRepository.findById.mockResolvedValue(baseStaffMember);
     staffAssignmentRepository.update.mockResolvedValue({
       ...confirmedAssignment,
       status: 'released',
@@ -389,6 +483,7 @@ describe('StaffAssignmentApplicationService', () => {
 
   it('cancelAssignment cancels a proposed assignment and publishes StaffAssignmentCancelled', async () => {
     staffAssignmentRepository.findById.mockResolvedValue(baseAssignment);
+    staffMemberRepository.findById.mockResolvedValue(baseStaffMember);
     staffAssignmentRepository.update.mockResolvedValue({
       ...baseAssignment,
       status: 'cancelled',

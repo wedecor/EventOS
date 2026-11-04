@@ -159,6 +159,7 @@ describe('FinanceDashboardQueryService', () => {
       create: jest.fn(),
       findById: jest.fn(),
       findByBookingId: jest.fn(),
+      findByCustomerId: jest.fn(),
       findMaxInvoiceNumber: jest.fn(),
       findAll: jest.fn().mockResolvedValue([]),
       hasDraftInvoiceForBooking: jest.fn(),
@@ -167,6 +168,7 @@ describe('FinanceDashboardQueryService', () => {
     eventRepository = {
       create: jest.fn(),
       findById: jest.fn(),
+      findByCustomerId: jest.fn(),
       findByQuotationId: jest.fn(),
       findMaxBookingNumber: jest.fn(),
       findByEventDate: jest.fn().mockResolvedValue([]),
@@ -175,6 +177,7 @@ describe('FinanceDashboardQueryService', () => {
     quotationRepository = {
       create: jest.fn(),
       findById: jest.fn(),
+      findByCustomerId: jest.fn(),
       findLatestRevision: jest.fn(),
       findMaxQuotationNumber: jest.fn(),
       findByIds: jest.fn().mockResolvedValue([]),

@@ -1,0 +1,26 @@
+# Keep the Docker build context small and free of secrets / local artifacts.
+node_modules
+dist
+coverage
+.env
+.env.*
+!.env.example
+
+.git
+.gitignore
+.dockerignore
+Dockerfile
+
+# Tests are not part of the production image.
+test
+**/*.spec.ts
+**/*.e2e-spec.ts
+
+# Local / editor noise
+*.md
+*.log
+.tmp
+tmp
+.DS_Store
+.idea
+.vscode

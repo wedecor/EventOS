@@ -10,8 +10,16 @@ import {
   Post,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { CurrentUser, Permissions, type AuthenticatedUser } from '../../auth';
 import { ZodValidationPipe } from '../../../common/pipes/zod-validation.pipe';
 import { IfMatchVersion } from '../../../shared/presentation/if-match.decorator';
+import {
+  ApiDataResponse,
+  ApiIfMatchHeader,
+  ApiStandardErrors,
+  ApiUuidParam,
+  ApiZodBody,
+} from '../../../shared/presentation/openapi.helpers';
 import { resultToResponse } from '../../../shared/presentation/result-to-response.helper';
 import { TenantId } from '../../../shared/presentation/tenant-context.decorator';
 import { QuotationApplicationService } from '../application/services/quotation.application.service';
@@ -39,8 +47,12 @@ export class QuotationController {
   ) {}
 
   @Post()
+  @Permissions('quotations:write')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create a new quotation' })
+  @ApiZodBody(createQuotationSchema)
+  @ApiDataResponse(201, 'Quotation created')
+  @ApiStandardErrors()
   async createQuotation(
     @TenantId() tenantId: string,
     @Body(new ZodValidationPipe(createQuotationSchema))
@@ -57,7 +69,11 @@ export class QuotationController {
   }
 
   @Get(':id')
+  @Permissions('quotations:read')
   @ApiOperation({ summary: 'Retrieve a quotation by ID' })
+  @ApiUuidParam('id')
+  @ApiDataResponse(200, 'Quotation retrieved')
+  @ApiStandardErrors()
   async retrieveQuotation(
     @TenantId() tenantId: string,
     @Param('id') id: string,
@@ -67,7 +83,13 @@ export class QuotationController {
   }
 
   @Patch(':id')
+  @Permissions('quotations:write')
   @ApiOperation({ summary: 'Update a quotation' })
+  @ApiUuidParam('id')
+  @ApiIfMatchHeader()
+  @ApiZodBody(updateQuotationSchema)
+  @ApiDataResponse(200, 'Quotation updated')
+  @ApiStandardErrors()
   async updateQuotation(
     @TenantId() tenantId: string,
     @Param('id') id: string,
@@ -91,8 +113,13 @@ export class QuotationController {
   }
 
   @Post(':id/line-items')
+  @Permissions('quotations:write')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Add a line item to a quotation' })
+  @ApiUuidParam('id')
+  @ApiZodBody(addLineItemSchema)
+  @ApiDataResponse(201, 'Line item added')
+  @ApiStandardErrors()
   async addLineItem(
     @TenantId() tenantId: string,
     @Param('id') quotationId: string,
@@ -114,7 +141,14 @@ export class QuotationController {
   }
 
   @Patch(':id/line-items/:itemId')
+  @Permissions('quotations:write')
   @ApiOperation({ summary: 'Update a line item' })
+  @ApiUuidParam('id')
+  @ApiUuidParam('itemId')
+  @ApiIfMatchHeader()
+  @ApiZodBody(updateLineItemSchema)
+  @ApiDataResponse(200, 'Line item updated')
+  @ApiStandardErrors()
   async updateLineItem(
     @TenantId() tenantId: string,
     @Param('id') quotationId: string,
@@ -140,8 +174,13 @@ export class QuotationController {
   }
 
   @Delete(':id/line-items/:itemId')
+  @Permissions('quotations:write')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Remove a line item from a quotation' })
+  @ApiUuidParam('id')
+  @ApiUuidParam('itemId')
+  @ApiDataResponse(200, 'Line item removed')
+  @ApiStandardErrors()
   async removeLineItem(
     @TenantId() tenantId: string,
     @Param('id') quotationId: string,
@@ -159,7 +198,12 @@ export class QuotationController {
   }
 
   @Post(':id/send')
+  @Permissions('quotations:send')
   @ApiOperation({ summary: 'Send a quotation' })
+  @ApiUuidParam('id')
+  @ApiIfMatchHeader()
+  @ApiDataResponse(200, 'Quotation sent')
+  @ApiStandardErrors()
   async sendQuotation(
     @TenantId() tenantId: string,
     @Param('id') quotationId: string,
@@ -175,13 +219,20 @@ export class QuotationController {
   }
 
   @Post(':id/approve')
+  @Permissions('quotations:approve')
   @ApiOperation({ summary: 'Approve a quotation' })
+  @ApiUuidParam('id')
+  @ApiIfMatchHeader()
+  @ApiDataResponse(200, 'Quotation approved')
+  @ApiStandardErrors()
   async approveQuotation(
+    @CurrentUser() user: AuthenticatedUser,
     @TenantId() tenantId: string,
     @Param('id') quotationId: string,
     @IfMatchVersion() version: number | undefined,
   ) {
     const result = await this.quotationService.approveQuotation(
+      user.userId,
       tenantId,
       quotationId,
       version ?? 0,
@@ -191,7 +242,13 @@ export class QuotationController {
   }
 
   @Post(':id/reject')
+  @Permissions('quotations:reject')
   @ApiOperation({ summary: 'Reject a quotation' })
+  @ApiUuidParam('id')
+  @ApiIfMatchHeader()
+  @ApiZodBody(rejectQuotationSchema)
+  @ApiDataResponse(200, 'Quotation rejected')
+  @ApiStandardErrors()
   async rejectQuotation(
     @TenantId() tenantId: string,
     @Param('id') quotationId: string,
@@ -209,7 +266,12 @@ export class QuotationController {
   }
 
   @Post(':id/revise')
+  @Permissions('quotations:revise')
   @ApiOperation({ summary: 'Create a new revision of a quotation' })
+  @ApiUuidParam('id')
+  @ApiIfMatchHeader()
+  @ApiDataResponse(200, 'Quotation revised')
+  @ApiStandardErrors()
   async reviseQuotation(
     @TenantId() tenantId: string,
     @Param('id') quotationId: string,

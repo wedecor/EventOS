@@ -76,6 +76,11 @@ export abstract class EventRepository {
 
   abstract findById(tenantId: string, id: string): Promise<EventRecord | null>;
 
+  abstract findByCustomerId(
+    tenantId: string,
+    customerId: string,
+  ): Promise<EventRecord[]>;
+
   abstract findByQuotationId(
     tenantId: string,
     quotationId: string,

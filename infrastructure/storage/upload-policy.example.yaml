@@ -1,0 +1,35 @@
+# R2-09 — upload policy snapshot (docs/09 + docs/14).
+# Enforced by the future File upload API — not by this repository prep.
+
+version: 1
+max_size_bytes: 10485760 # 10 MiB default
+max_size_label: 10MB
+allowed_extensions:
+  - pdf
+  - jpg
+  - jpeg
+  - png
+  - webp
+  - docx
+  - xlsx
+allowed_mime_types:
+  - application/pdf
+  - image/jpeg
+  - image/png
+  - image/webp
+  - application/vnd.openxmlformats-officedocument.wordprocessingml.document
+  - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+validation:
+  - mime_and_extension_must_agree: true
+  - sanitize_display_filename: true
+  - object_key_uses_generated_uuid: true
+access:
+  bucket_public_access: forbidden
+  download: signed_url
+  signed_url_expiry_default: 1h
+rate_limit_future_api:
+  uploads_per_minute_per_user: 10
+retention:
+  financial_proofs_years: 7
+  soft_delete_metadata: true
+  blob_purge: deferred_to_future_job

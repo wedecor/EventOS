@@ -38,6 +38,18 @@ export class LeadRepositoryImpl
     return lead ? this.mapLead(lead) : null;
   }
 
+  async findByCustomerId(
+    tenantId: string,
+    customerId: string,
+  ): Promise<LeadRecord[]> {
+    const leads = await this.prisma.lead.findMany({
+      where: { tenantId, customerId },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return leads.map((lead) => this.mapLead(lead));
+  }
+
   async findByPhone(tenantId: string, phone: string): Promise<LeadRecord[]> {
     const leads = await this.prisma.lead.findMany({
       where: {

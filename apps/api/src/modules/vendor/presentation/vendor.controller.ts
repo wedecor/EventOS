@@ -10,9 +10,18 @@ import {
   Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Permissions } from '../../auth';
 import { ZodValidationPipe } from '../../../common/pipes/zod-validation.pipe';
 import { failure } from '../../../shared/application/result';
 import { IfMatchVersion } from '../../../shared/presentation/if-match.decorator';
+import {
+  ApiDataResponse,
+  ApiIfMatchHeader,
+  ApiStandardErrors,
+  ApiUuidParam,
+  ApiZodBody,
+  ApiZodQuery,
+} from '../../../shared/presentation/openapi.helpers';
 import { resultToResponse } from '../../../shared/presentation/result-to-response.helper';
 import { TenantId } from '../../../shared/presentation/tenant-context.decorator';
 import { VendorApplicationService } from '../application/services/vendor.application.service';
@@ -37,7 +46,16 @@ export class VendorController {
 
   // EP1-VEN-001 — List vendors
   @Get()
+  @Permissions('vendors:read')
   @ApiOperation({ summary: 'List vendors' })
+  @ApiZodQuery('status', listVendorsQuerySchema.shape.status, {
+    required: false,
+  })
+  @ApiZodQuery('category', listVendorsQuerySchema.shape.category, {
+    required: false,
+  })
+  @ApiDataResponse(200, 'Vendors listed')
+  @ApiStandardErrors()
   async listVendors(
     @TenantId() tenantId: string,
     @Query(new ZodValidationPipe(listVendorsQuerySchema))
@@ -52,8 +70,12 @@ export class VendorController {
 
   // EP1-VEN-001 — Create a vendor
   @Post()
+  @Permissions('vendors:write')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create a vendor' })
+  @ApiZodBody(createVendorSchema)
+  @ApiDataResponse(201, 'Vendor created')
+  @ApiStandardErrors()
   async createVendor(
     @TenantId() tenantId: string,
     @Body(new ZodValidationPipe(createVendorSchema)) body: CreateVendorBody,
@@ -64,7 +86,11 @@ export class VendorController {
 
   // EP1-VEN-001 — Retrieve a vendor by ID
   @Get(':id')
+  @Permissions('vendors:read')
   @ApiOperation({ summary: 'Retrieve a vendor by ID' })
+  @ApiUuidParam('id')
+  @ApiDataResponse(200, 'Vendor retrieved')
+  @ApiStandardErrors()
   async retrieveVendor(@TenantId() tenantId: string, @Param('id') id: string) {
     const result = await this.vendorService.getVendorById(tenantId, id);
     return resultToResponse(result);
@@ -72,8 +98,14 @@ export class VendorController {
 
   // EP1-VEN-001 — Update a vendor (status changes to paused/blocked require statusReason)
   @Patch(':id')
+  @Permissions('vendors:write')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Update a vendor' })
+  @ApiUuidParam('id')
+  @ApiIfMatchHeader(true)
+  @ApiZodBody(updateVendorSchema)
+  @ApiDataResponse(200, 'Vendor updated')
+  @ApiStandardErrors()
   async updateVendor(
     @TenantId() tenantId: string,
     @Param('id') id: string,
@@ -103,8 +135,13 @@ export class VendorController {
   // there); added for parity with the documented `VendorIssueNote` entity (`07-domain-model.md`
   // §Vendor, `08-data-model.md` §Notes & Timeline Storage) — see implementation report doc drift.
   @Post(':id/issue-notes')
+  @Permissions('vendors:write')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Add a vendor-level issue/feedback note' })
+  @ApiUuidParam('id')
+  @ApiZodBody(addVendorIssueNoteSchema)
+  @ApiDataResponse(201, 'Vendor issue note added')
+  @ApiStandardErrors()
   async addIssueNote(
     @TenantId() tenantId: string,
     @Param('id') id: string,

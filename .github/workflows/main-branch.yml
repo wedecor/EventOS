@@ -1,0 +1,141 @@
+# R2-04 / R3-14 — Main Branch CI (docs/15 §CI Pipeline, docs/16 §Main Branch Pipeline).
+#
+# Scope: quality gates + e2e + disposable-DB migration apply + Docker image build +
+# OpenAPI freeze drift check. Image publishing and cloud deploy remain deferred.
+
+name: Main Branch CI
+
+"on":
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: main-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: apps/api
+
+jobs:
+  main:
+    name: Quality · E2E · Migrate · Docker · OpenAPI
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    # Disposable Postgres for `prisma migrate deploy` only (docs/16 §Migration
+    # Workflow step 3). Never points at staging/production.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: eventos
+          POSTGRES_PASSWORD: eventos
+          POSTGRES_DB: eventos
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U eventos -d eventos"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://eventos:eventos@127.0.0.1:5432/eventos?schema=public
+      JWT_SECRET: ci-test-jwt-secret-at-least-32-characters-long
+      NODE_ENV: test
+      CI: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Enable pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          package_json_file: apps/api/package.json
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+          cache-dependency-path: apps/api/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm prisma:generate
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Build
+        run: pnpm build
+
+      - name: Unit tests
+        run: pnpm test
+
+      - name: Unit tests with coverage thresholds
+        run: pnpm test:cov
+
+      - name: E2E tests
+        # docs/15: "E2E tests run on merge to main (not on every PR, due to speed)."
+        # Suites stub Prisma/Redis providers; no live Redis service required.
+        run: pnpm test:e2e
+
+      - name: OpenAPI contract freeze drift check (R3-13 / R3-14)
+        run: |
+          pnpm openapi:export
+          git diff --exit-code -- openapi/openapi.v1.json
+
+      - name: Apply Prisma migrations (disposable CI database)
+        # Validates committed migration SQL against a throwaway Postgres.
+        # Intentionally not migrate-dev / migrate-reset / db-push (out of scope).
+        run: pnpm exec prisma migrate deploy
+
+      - name: Build production Docker image
+        # Reuses the R2-01 multi-stage Dockerfile; does not push/publish.
+        working-directory: ${{ github.workspace }}
+        run: docker build -t eventos-api:ci apps/api
+
+  web:
+    name: Web Lint · Typecheck · Test · Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: apps/web
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Enable pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          package_json_file: apps/web/package.json
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+          cache-dependency-path: apps/web/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Unit tests
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build

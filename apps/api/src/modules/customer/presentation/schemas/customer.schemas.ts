@@ -23,13 +23,3 @@ export const updateCustomerSchema = z.object({
 });
 
 export type UpdateCustomerBody = z.infer<typeof updateCustomerSchema>;
-
-// ── Add Contact ─────────────────────────────────────────────────────
-export const addContactSchema = z.object({
-  name: z.string().min(1, 'Contact name is required'),
-  email: z.string().email().optional(),
-  phone: z.string().optional(),
-  role: z.string().optional(),
-});
-
-export type AddContactBody = z.infer<typeof addContactSchema>;

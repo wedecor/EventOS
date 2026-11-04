@@ -1,3 +1,4 @@
+import { AUDIT_ACTIONS, type AuditLogService } from '../../../../shared/audit';
 import { ConcurrentModificationError } from '../../../../shared/database';
 import { DomainEventPublisher } from '../../../../shared/events/domain-event.base';
 import { PaymentRecordedEvent } from '../../../../shared/events/sprint1-domain.events';
@@ -15,6 +16,7 @@ import type {
 describe('PaymentApplicationService', () => {
   const tenantId = 'tenant-1';
   const bookingId = 'booking-1';
+  const actorId = 'user-1';
 
   const basePayment: PaymentRecord = {
     id: 'payment-1',
@@ -61,9 +63,11 @@ describe('PaymentApplicationService', () => {
   let service: PaymentApplicationService;
 
   let publish: jest.Mock;
+  let auditRecord: jest.Mock;
 
   beforeEach(() => {
     publish = jest.fn();
+    auditRecord = jest.fn().mockResolvedValue(undefined);
     paymentRepository = {
       create: jest.fn(),
       findById: jest.fn(),
@@ -77,6 +81,7 @@ describe('PaymentApplicationService', () => {
       create: jest.fn(),
       findById: jest.fn(),
       findByBookingId: jest.fn(),
+      findByCustomerId: jest.fn(),
       findMaxInvoiceNumber: jest.fn(),
       findAll: jest.fn(),
       hasDraftInvoiceForBooking: jest.fn(),
@@ -88,11 +93,12 @@ describe('PaymentApplicationService', () => {
       paymentRepository,
       invoiceRepository,
       eventPublisher,
+      { record: auditRecord } as unknown as AuditLogService,
     );
   });
 
   it('rejects recordPayment when amount is zero', async () => {
-    const result = await service.recordPayment(tenantId, {
+    const result = await service.recordPayment(actorId, tenantId, {
       amount: 0,
       method: 'upi',
       receivedAt: new Date(),
@@ -105,7 +111,7 @@ describe('PaymentApplicationService', () => {
   });
 
   it('rejects recordPayment when amount is negative', async () => {
-    const result = await service.recordPayment(tenantId, {
+    const result = await service.recordPayment(actorId, tenantId, {
       amount: -100,
       method: 'cash',
       receivedAt: new Date(),
@@ -120,7 +126,7 @@ describe('PaymentApplicationService', () => {
   it('creates a payment and publishes PaymentRecordedEvent', async () => {
     paymentRepository.create.mockResolvedValue(basePayment);
 
-    const result = await service.recordPayment(tenantId, {
+    const result = await service.recordPayment(actorId, tenantId, {
       bookingId,
       amount: 5000,
       method: 'upi',
@@ -133,6 +139,18 @@ describe('PaymentApplicationService', () => {
       expect(result.value.amount).toBe(5000);
     }
     expect(publish).toHaveBeenCalledWith(expect.any(PaymentRecordedEvent));
+    // R1-08 — a success audit record is emitted for the recorded payment.
+    expect(auditRecord).toHaveBeenCalledTimes(1);
+    expect(auditRecord).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorId,
+        tenantId,
+        action: AUDIT_ACTIONS.PAYMENT_RECORDED,
+        entityType: 'Payment',
+        entityId: 'payment-1',
+        outcome: 'success',
+      }),
+    );
   });
 
   it('passes all fields to repository on create', async () => {
@@ -140,7 +158,7 @@ describe('PaymentApplicationService', () => {
 
     const receivedAt = new Date('2026-07-10T10:00:00Z');
 
-    await service.recordPayment(tenantId, {
+    await service.recordPayment(actorId, tenantId, {
       bookingId: 'booking-1',
       leadId: 'lead-1',
       quotationId: 'quote-1',
@@ -206,7 +224,7 @@ describe('PaymentApplicationService', () => {
   it('rejects recordPayment when the referenced invoice does not exist', async () => {
     invoiceRepository.findById.mockResolvedValue(null);
 
-    const result = await service.recordPayment(tenantId, {
+    const result = await service.recordPayment(actorId, tenantId, {
       invoiceId: 'invoice-missing',
       amount: 5000,
       method: 'upi',
@@ -218,6 +236,16 @@ describe('PaymentApplicationService', () => {
       expect(result.error.code).toBe('NOT_FOUND');
     }
     expect(paymentRepository.create).not.toHaveBeenCalled();
+    // R1-08 — a failure audit record is emitted (no Payment created, empty entityId).
+    expect(auditRecord).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorId,
+        action: AUDIT_ACTIONS.PAYMENT_RECORDED,
+        entityId: '',
+        outcome: 'failure',
+        metadata: expect.objectContaining({ errorCode: 'NOT_FOUND' }),
+      }),
+    );
   });
 
   it('rejects recordPayment when the referenced invoice is void', async () => {
@@ -226,7 +254,7 @@ describe('PaymentApplicationService', () => {
       status: 'void',
     });
 
-    const result = await service.recordPayment(tenantId, {
+    const result = await service.recordPayment(actorId, tenantId, {
       invoiceId: baseInvoice.id,
       amount: 5000,
       method: 'upi',
@@ -247,7 +275,7 @@ describe('PaymentApplicationService', () => {
       invoiceId: baseInvoice.id,
     });
 
-    const result = await service.recordPayment(tenantId, {
+    const result = await service.recordPayment(actorId, tenantId, {
       invoiceId: baseInvoice.id,
       amount: 5000,
       method: 'upi',

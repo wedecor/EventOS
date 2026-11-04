@@ -40,6 +40,18 @@ export class QuotationRepositoryImpl
     return quotation ? this.mapQuotation(quotation) : null;
   }
 
+  async findByCustomerId(
+    tenantId: string,
+    customerId: string,
+  ): Promise<QuotationRecord[]> {
+    const quotations = await this.prisma.quotation.findMany({
+      where: { tenantId, customerId },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return quotations.map((quotation) => this.mapQuotation(quotation));
+  }
+
   async findLatestRevision(
     tenantId: string,
     quotationNumber: number,
@@ -70,6 +82,14 @@ export class QuotationRepositoryImpl
       where: { tenantId, id: { in: ids } },
     });
 
+    return quotations.map((quotation) => this.mapQuotation(quotation));
+  }
+
+  async findAll(tenantId: string): Promise<QuotationRecord[]> {
+    const quotations = await this.prisma.quotation.findMany({
+      where: { tenantId },
+      orderBy: { createdAt: 'desc' },
+    });
     return quotations.map((quotation) => this.mapQuotation(quotation));
   }
 

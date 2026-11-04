@@ -1,0 +1,11 @@
+export { AuthModule } from './auth.module';
+export { JwtAuthGuard } from './presentation/guards/jwt-auth.guard';
+export { PermissionsGuard } from './presentation/guards/permissions.guard';
+export { Public } from './presentation/decorators/public.decorator';
+export { CurrentUser } from './presentation/decorators/current-user.decorator';
+export { Permissions } from './presentation/decorators/permissions.decorator';
+export { Roles } from './presentation/decorators/roles.decorator';
+export { PermissionService } from './application/services/permission.service';
+export type { AuthenticatedUser } from './domain/authenticated-user';
+export type { Permission, Role } from './domain/rbac';
+export { PHASE1_ROLES, PERMISSIONS, ROLE_PERMISSIONS } from './domain/rbac';

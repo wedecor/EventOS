@@ -7,9 +7,17 @@ import {
   Post,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Permissions } from '../../auth';
 import { ZodValidationPipe } from '../../../common/pipes/zod-validation.pipe';
 import { failure } from '../../../shared/application/result';
 import { IfMatchVersion } from '../../../shared/presentation/if-match.decorator';
+import {
+  ApiDataResponse,
+  ApiIfMatchHeader,
+  ApiStandardErrors,
+  ApiUuidParam,
+  ApiZodBody,
+} from '../../../shared/presentation/openapi.helpers';
 import { resultToResponse } from '../../../shared/presentation/result-to-response.helper';
 import { TenantId } from '../../../shared/presentation/tenant-context.decorator';
 import { InvoiceApplicationService } from '../application/services/invoice.application.service';
@@ -29,8 +37,12 @@ export class InvoiceController {
 
   // EP1-FIN-002 — Create a draft invoice for a booking
   @Post()
+  @Permissions('invoices:write')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create an invoice' })
+  @ApiZodBody(createInvoiceSchema)
+  @ApiDataResponse(201, 'Invoice created')
+  @ApiStandardErrors()
   async createInvoice(
     @TenantId() tenantId: string,
     @Body(new ZodValidationPipe(createInvoiceSchema)) body: CreateInvoiceBody,
@@ -47,8 +59,14 @@ export class InvoiceController {
 
   // EP1-FIN-002 — Send a draft invoice to the customer
   @Post(':id/send')
+  @Permissions('invoices:send')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Send an invoice' })
+  @ApiUuidParam('id')
+  @ApiIfMatchHeader(true)
+  @ApiZodBody(sendInvoiceSchema)
+  @ApiDataResponse(200, 'Invoice sent')
+  @ApiStandardErrors()
   async sendInvoice(
     @TenantId() tenantId: string,
     @Param('id') id: string,
@@ -70,8 +88,14 @@ export class InvoiceController {
 
   // EP1-FIN-002 — Void an invoice
   @Post(':id/void')
+  @Permissions('invoices:void')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Void an invoice' })
+  @ApiUuidParam('id')
+  @ApiIfMatchHeader(true)
+  @ApiZodBody(voidInvoiceSchema)
+  @ApiDataResponse(200, 'Invoice voided')
+  @ApiStandardErrors()
   async voidInvoice(
     @TenantId() tenantId: string,
     @Param('id') id: string,

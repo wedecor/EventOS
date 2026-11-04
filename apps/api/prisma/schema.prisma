@@ -18,6 +18,7 @@ model Tenant {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   users      User[]
+  sessions   Session[]
   customers  Customer[]
   leads      Lead[]
   quotations Quotation[]
@@ -25,13 +26,61 @@ model Tenant {
   payments   Payment[]
   tasks      Task[]
   staffAssignments StaffAssignment[]
+  staffMembers     StaffMember[]
+  staffAvailability StaffAvailability[]
+  staffLeave       StaffLeave[]
+  inventoryItems     InventoryItem[]
   inventoryMovements InventoryMovement[]
+  inventoryReservations InventoryReservation[]
+  inventoryVerifications InventoryVerification[]
+  inventoryDamageReports InventoryDamageReport[]
+  suggestions        Suggestion[]
+  tenantSettings     TenantSettings?
   vendors            Vendor[]
   vendorProcurements VendorProcurement[]
+  procurementQuotes  ProcurementQuote[]
+  purchaseOrders     PurchaseOrder[]
+  procurementTimelineEvents ProcurementTimelineEvent[]
   invoices           Invoice[]
   vendorExpenses     VendorExpense[]
+  financialDocuments FinancialDocument[]
+  financialDocumentAuditEvents FinancialDocumentAuditEvent[]
+  communicationRecords CommunicationRecord[]
+  communicationTemplates CommunicationTemplate[]
+  communicationAttachments CommunicationAttachment[]
+  reminders Reminder[]
+  notificationPreferences NotificationPreference[]
+  auditLogs          AuditLog[]
+  passwordHistory    PasswordHistory[]
+  timelineEntries    TimelineEntry[]
+  contacts           Contact[]
+  issueNotes         IssueNote[]
+  reviewRequests     ReviewRequest[]
+  eventNotes         EventNote[]
+  checklistTemplates ChecklistTemplate[]
+  eventChecklists    EventChecklist[]
 
   @@map("tenants")
+}
+
+/// Phase 1 tenant settings (R3-04 / EP1-KPI-007). Typed columns only — no JSONB bag.
+/// One row per tenant (ADR-016 single We Decor tenant in Phase 1).
+model TenantSettings {
+  id                     String   @id @default(uuid()) @db.Uuid
+  tenantId               String   @unique @map("tenant_id") @db.Uuid
+  businessName           String   @map("business_name")
+  monthlyEventTarget     Int?     @map("monthly_event_target")
+  monthlyRevenueTarget   Decimal? @map("monthly_revenue_target") @db.Decimal(12, 2)
+  monthlyLeadTarget      Int?     @map("monthly_lead_target")
+  averageBookingTarget   Decimal? @map("average_booking_target") @db.Decimal(12, 2)
+  conversionRateTarget   Decimal? @map("conversion_rate_target") @db.Decimal(8, 6)
+  createdAt              DateTime @default(now()) @map("created_at")
+  updatedAt              DateTime @updatedAt @map("updated_at")
+  version                Int      @default(1)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@map("tenant_settings")
 }
 
 model User {
@@ -46,14 +95,95 @@ model User {
   version      Int      @default(1)
 
   tenant              Tenant              @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  sessions            Session[]
+  passwordHistory     PasswordHistory[]
   assignedLeads       Lead[]              @relation("LeadAssignee")
   leadStageChanges    LeadStageHistory[]  @relation("LeadStageChangedBy")
   executionOwnedEvents Event[]             @relation("EventExecutionOwner")
-  staffAssignments    StaffAssignment[]   @relation("StaffAssignmentStaffMember")
+  /// Legacy expand-contract column on assignments (P2-04); remove after Phase 3 cutover.
+  legacyStaffAssignments StaffAssignment[] @relation("StaffAssignmentLegacyUser")
+  linkedStaffMember   StaffMember?
+  reviewedStaffLeave  StaffLeave[]        @relation("StaffLeaveReviewedBy")
+  recordedTimelineEntries TimelineEntry[] @relation("TimelineEntryRecordedBy")
+  eventNotes          EventNote[]         @relation("EventNoteCreatedBy")
+  completedChecklistItems EventChecklistItem[] @relation("EventChecklistItemCompletedBy")
+  packedInventoryMovements InventoryMovement[] @relation("InventoryMovementPackedBy")
+  inventoryVerifications   InventoryVerification[] @relation("InventoryVerificationVerifiedBy")
+  uploadedFinancialDocuments FinancialDocument[] @relation("FinancialDocumentUploadedBy")
+  verifiedFinancialDocuments FinancialDocument[] @relation("FinancialDocumentVerifiedBy")
+  createdCommunicationRecords CommunicationRecord[] @relation("CommunicationRecordCreatedBy")
+  assignedReminders Reminder[] @relation("ReminderAssignedTo")
+  notificationPreferences NotificationPreference[]
 
   @@unique([tenantId, email])
   @@index([tenantId])
   @@map("users")
+}
+
+// R1-10 — Password history for reuse prevention (docs/14 §Password Requirements:
+// "Password history — Prevent reuse of last 5 passwords"). One row per retired
+// password hash; rows are only inserted (never mutated) and are compared against a
+// new password using bcrypt, never plaintext. Tenant-scoped per ADR-016.
+model PasswordHistory {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  userId       String   @map("user_id") @db.Uuid
+  passwordHash String   @map("password_hash")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, userId, createdAt])
+  @@map("password_history")
+}
+
+// ADR-008 — Refresh-token session store (SessionRepository per docs/10 §Auth Module).
+// One row per issued refresh token. Rotation revokes the presented row and creates a
+// new one; logout / force-logout set `revokedAt`. Access tokens remain stateless (JWT);
+// only refresh tokens are tracked here. tenant-scoped per ADR-016.
+model Session {
+  id               String    @id @default(uuid()) @db.Uuid
+  tenantId         String    @map("tenant_id") @db.Uuid
+  userId           String    @map("user_id") @db.Uuid
+  refreshTokenHash String    @map("refresh_token_hash")
+  expiresAt        DateTime  @map("expires_at")
+  revokedAt        DateTime? @map("revoked_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, userId])
+  @@map("sessions")
+}
+
+// R1-08 — Structured audit logging for sensitive business operations.
+// docs/14-security-principles.md §Audit Logging (dedicated, immutable/append-only,
+// tamper-evident table) + docs/10-implementation-specification.md §Audit Strategy
+// (actor, tenantId, action, target aggregate ids, timestamp, outcome; before/after
+// status summaries but no sensitive payloads — captured in `metadata`).
+//
+// Append-only: rows are only ever inserted, never updated or deleted (no `version`
+// or `updated_at`). `actorId` is stored as a denormalized value (no FK to `users`)
+// so audit history survives independently of user lifecycle and retention rules.
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  actorId    String   @map("actor_id") @db.Uuid
+  action     String
+  entityType String   @map("entity_type")
+  entityId   String   @map("entity_id")
+  outcome    String
+  metadata   Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, entityType, entityId])
+  @@index([tenantId, createdAt])
+  @@map("audit_logs")
 }
 
 // ---------------------------------------------------------------------------
@@ -162,6 +292,15 @@ enum WorkspaceStatus {
   @@map("workspace_status")
 }
 
+/// R3-05 / EP1-CUS-002 — Communication timeline entry type (`docs/09` POST body).
+enum TimelineEntryType {
+  note
+  issue
+  other
+
+  @@map("timeline_entry_type")
+}
+
 model Customer {
   id           String         @id @default(uuid()) @db.Uuid
   tenantId     String         @map("tenant_id") @db.Uuid
@@ -175,15 +314,105 @@ model Customer {
   updatedAt    DateTime       @updatedAt @map("updated_at")
   version      Int            @default(1)
 
-  tenant     Tenant      @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  leads      Lead[]
-  quotations Quotation[]
-  events     Event[]
-  invoices   Invoice[]
+  tenant          Tenant          @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  leads           Lead[]
+  quotations      Quotation[]
+  events          Event[]
+  invoices        Invoice[]
+  timelineEntries TimelineEntry[]
+  contacts        Contact[]
+  issueNotes      IssueNote[]
+  reviewRequests  ReviewRequest[]
+  communicationRecords CommunicationRecord[]
+  reminders Reminder[]
+  notificationPreferences NotificationPreference[]
 
   @@unique([tenantId, displayName])
   @@index([tenantId, status])
   @@map("customers")
+}
+
+/// R3-06 / EP1-CUS-001 — Owned Contact entity under Customer (docs/07).
+/// Physical table `contacts` per docs/06 + decision 1A. No version column.
+model Contact {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  customerId String   @map("customer_id") @db.Uuid
+  name       String
+  role       String
+  phone      String?
+  email      String?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, customerId])
+  @@map("contacts")
+}
+
+/// R3-05 / EP1-CUS-002 — Per-event communication timeline (append-only).
+/// Physical table `client_interactions` per docs/06 + decision 1B. No version column.
+model TimelineEntry {
+  id               String            @id @default(uuid()) @db.Uuid
+  tenantId         String            @map("tenant_id") @db.Uuid
+  customerId       String            @map("customer_id") @db.Uuid
+  eventId          String            @map("event_id") @db.Uuid
+  type             TimelineEntryType
+  message          String
+  occurredAt       DateTime          @map("occurred_at")
+  recordedByUserId String            @map("recorded_by_user_id") @db.Uuid
+  createdAt        DateTime          @default(now()) @map("created_at")
+
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  event      Event    @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  recordedBy User     @relation("TimelineEntryRecordedBy", fields: [recordedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, eventId, createdAt])
+  @@index([tenantId, customerId, occurredAt])
+  @@map("client_interactions")
+}
+
+/// R3-07 / EP1-CUS-004 — Lightweight customer issue note per event (docs/07 Issue).
+/// Create-only in Phase 1 (no resolve PATCH). Table `issue_notes`.
+model IssueNote {
+  id         String            @id @default(uuid()) @db.Uuid
+  tenantId   String            @map("tenant_id") @db.Uuid
+  eventId    String            @map("event_id") @db.Uuid
+  customerId String            @map("customer_id") @db.Uuid
+  message    String
+  severity   IssueNoteSeverity @default(medium)
+  notes      String?
+  status     IssueNoteStatus   @default(open)
+  createdAt  DateTime          @default(now()) @map("created_at")
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  event    Event    @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, eventId, createdAt])
+  @@map("issue_notes")
+}
+
+/// R3-07 / EP1-CUS-003 — Review request per event (at most one; docs/07 Event ||--o| ReviewRequest).
+/// Create-only in Phase 1. Table `review_requests`.
+model ReviewRequest {
+  id            String               @id @default(uuid()) @db.Uuid
+  tenantId      String               @map("tenant_id") @db.Uuid
+  eventId       String               @unique @map("event_id") @db.Uuid
+  customerId    String               @map("customer_id") @db.Uuid
+  channel       ReviewRequestChannel
+  channelDetail String?              @map("channel_detail")
+  status        ReviewRequestStatus  @default(pending)
+  createdAt     DateTime             @default(now()) @map("created_at")
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  event    Event    @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, customerId])
+  @@map("review_requests")
 }
 
 model Lead {
@@ -333,10 +562,22 @@ model Event {
   tasks          Task[]
   staffAssignments StaffAssignment[]
   inventoryMovements InventoryMovement[]
+  inventoryReservations InventoryReservation[]
+  inventoryVerifications InventoryVerification[]
+  inventoryDamageReports InventoryDamageReport[]
   vendorProcurements VendorProcurement[]
   procurementLines   ProcurementLine[]
+  procurementTimelineEvents ProcurementTimelineEvent[]
   invoices           Invoice[]
   vendorExpenses     VendorExpense[]
+  financialDocuments FinancialDocument[]
+  communicationRecords CommunicationRecord[]
+  reminders Reminder[]
+  timelineEntries    TimelineEntry[]
+  issueNotes         IssueNote[]
+  reviewRequest      ReviewRequest?
+  eventNotes         EventNote[]
+  eventChecklists    EventChecklist[]
 
   @@unique([tenantId, bookingNumber])
   @@index([tenantId, status, eventStartDate])
@@ -371,6 +612,7 @@ model Payment {
   tenant  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   booking Event?   @relation(fields: [bookingId], references: [id], onDelete: Restrict)
   invoice Invoice? @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  financialDocuments FinancialDocument[]
 
   @@index([tenantId, bookingId])
   @@index([tenantId, leadId])
@@ -417,20 +659,46 @@ enum TaskStatus {
   @@map("task_status")
 }
 
+/// P2-01 — Operational task category (checklist grouping via category).
+enum TaskCategory {
+  general
+  pre_event
+  dayheets
+  vendor
+  inventory
+  venue
+  wrap_up
+
+  @@map("task_category")
+}
+
+/// P2-01 — Operational task priority.
+enum TaskPriority {
+  low
+  medium
+  high
+  urgent
+
+  @@map("task_priority")
+}
+
 /// Event-linked execution checklist / operational task (Task module, `07-domain-model.md` §Task).
 model Task {
-  id          String     @id @default(uuid()) @db.Uuid
-  tenantId    String     @map("tenant_id") @db.Uuid
-  bookingId   String     @map("booking_id") @db.Uuid
-  title       String
-  description String?
-  assignedTo  String?    @map("assigned_to") @db.Uuid
-  dueAt       DateTime?  @map("due_at")
-  status      TaskStatus @default(pending)
-  completedAt DateTime?  @map("completed_at")
-  createdAt   DateTime   @default(now()) @map("created_at")
-  updatedAt   DateTime   @updatedAt @map("updated_at")
-  version     Int        @default(1)
+  id              String       @id @default(uuid()) @db.Uuid
+  tenantId        String       @map("tenant_id") @db.Uuid
+  bookingId       String       @map("booking_id") @db.Uuid
+  title           String
+  description     String?
+  category        TaskCategory @default(general)
+  priority        TaskPriority @default(medium)
+  assignedTo      String?      @map("assigned_to") @db.Uuid
+  dueAt           DateTime?    @map("due_at")
+  status          TaskStatus   @default(pending)
+  completedAt     DateTime?    @map("completed_at")
+  completionNotes String?      @map("completion_notes")
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
+  version         Int          @default(1)
 
   tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   booking        Event           @relation(fields: [bookingId], references: [id], onDelete: Restrict)
@@ -439,7 +707,27 @@ model Task {
   @@index([tenantId, bookingId])
   @@index([tenantId, status])
   @@index([tenantId, assignedTo])
+  @@index([tenantId, category])
   @@map("tasks")
+}
+
+/// P2-01 — Internal operational notes (not customer-visible; distinct from TimelineEntry).
+model EventNote {
+  id              String   @id @default(uuid()) @db.Uuid
+  tenantId        String   @map("tenant_id") @db.Uuid
+  bookingId       String   @map("booking_id") @db.Uuid
+  body            String
+  createdByUserId String   @map("created_by_user_id") @db.Uuid
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  version         Int      @default(1)
+
+  tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  booking   Event  @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  createdBy User   @relation("EventNoteCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, bookingId, createdAt])
+  @@map("event_notes")
 }
 
 /// Owned checklist row under a Task (`07-domain-model.md` §Task — ChecklistItem entity).
@@ -462,6 +750,256 @@ model ChecklistItem {
 }
 
 // ---------------------------------------------------------------------------
+// P2-02 — Checklist Templates & Event Checklists
+// ---------------------------------------------------------------------------
+
+enum ChecklistTemplateStatus {
+  active
+  inactive
+  archived
+
+  @@map("checklist_template_status")
+}
+
+/// Reusable checklist template (P2-02). Independent of Task; generates EventChecklist copies.
+model ChecklistTemplate {
+  id               String                  @id @default(uuid()) @db.Uuid
+  tenantId         String                  @map("tenant_id") @db.Uuid
+  name             String
+  description      String?
+  /// Event type labels this template applies to (empty = all types).
+  eventTypes       String[]                @default([]) @map("event_types")
+  /// Aligns with TaskCategory values for workspace grouping continuity.
+  category         TaskCategory            @default(general)
+  status           ChecklistTemplateStatus @default(active)
+  /// Human-visible template revision (increments on versioned duplicate).
+  templateVersion  Int                     @default(1) @map("template_version")
+  sortOrder        Int                     @default(0) @map("sort_order")
+  /// Stable family id across versioned duplicates (defaults to own id).
+  rootTemplateId   String                  @map("root_template_id") @db.Uuid
+  createdAt        DateTime                @default(now()) @map("created_at")
+  updatedAt        DateTime                @updatedAt @map("updated_at")
+  version          Int                     @default(1)
+
+  tenant   Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  items    ChecklistTemplateItem[]
+  generated EventChecklist[]
+
+  @@index([tenantId, status])
+  @@index([tenantId, rootTemplateId, templateVersion])
+  @@index([tenantId, category])
+  @@map("checklist_templates")
+}
+
+model ChecklistTemplateItem {
+  id                       String   @id @default(uuid()) @db.Uuid
+  tenantId                 String   @map("tenant_id") @db.Uuid
+  templateId               String   @map("template_id") @db.Uuid
+  title                    String
+  description              String?
+  isRequired               Boolean  @default(true) @map("is_required")
+  defaultAssigneeRole      String?  @map("default_assignee_role")
+  estimatedDurationMinutes Int?     @map("estimated_duration_minutes")
+  sortOrder                Int      @default(0) @map("sort_order")
+  createdAt                DateTime @default(now()) @map("created_at")
+  updatedAt                DateTime @updatedAt @map("updated_at")
+  version                  Int      @default(1)
+
+  template ChecklistTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, templateId, sortOrder])
+  @@map("checklist_template_items")
+}
+
+/// Event-specific checklist copy generated from a template (immutable vs future template edits).
+model EventChecklist {
+  id              String       @id @default(uuid()) @db.Uuid
+  tenantId        String       @map("tenant_id") @db.Uuid
+  bookingId       String       @map("booking_id") @db.Uuid
+  templateId      String?      @map("template_id") @db.Uuid
+  templateVersion Int?         @map("template_version")
+  name            String
+  description     String?
+  category        TaskCategory @default(general)
+  sortOrder       Int          @default(0) @map("sort_order")
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
+  version         Int          @default(1)
+
+  tenant   Tenant               @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  booking  Event                @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  template ChecklistTemplate?   @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  items    EventChecklistItem[]
+
+  @@index([tenantId, bookingId])
+  @@index([tenantId, templateId])
+  @@map("event_checklists")
+}
+
+model EventChecklistItem {
+  id                       String    @id @default(uuid()) @db.Uuid
+  tenantId                 String    @map("tenant_id") @db.Uuid
+  checklistId              String    @map("checklist_id") @db.Uuid
+  title                    String
+  description              String?
+  isRequired               Boolean   @default(true) @map("is_required")
+  defaultAssigneeRole      String?   @map("default_assignee_role")
+  estimatedDurationMinutes Int?      @map("estimated_duration_minutes")
+  sortOrder                Int       @default(0) @map("sort_order")
+  isCompleted              Boolean   @default(false) @map("is_completed")
+  completedAt              DateTime? @map("completed_at")
+  completedByUserId        String?   @map("completed_by_user_id") @db.Uuid
+  notes                    String?
+  createdAt                DateTime  @default(now()) @map("created_at")
+  updatedAt                DateTime  @updatedAt @map("updated_at")
+  version                  Int       @default(1)
+
+  checklist   EventChecklist @relation(fields: [checklistId], references: [id], onDelete: Cascade)
+  completedBy User?          @relation("EventChecklistItemCompletedBy", fields: [completedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, checklistId, sortOrder])
+  @@map("event_checklist_items")
+}
+
+// ---------------------------------------------------------------------------
+// R3-01 — Staff Master (EP1-STF-001)
+// ---------------------------------------------------------------------------
+
+enum StaffMemberStatus {
+  active
+  inactive
+  on_leave
+
+  @@map("staff_member_status")
+}
+
+enum StaffEmploymentType {
+  permanent
+  temporary
+
+  @@map("staff_employment_type")
+}
+
+/// Staff master profile (`07-domain-model.md` §StaffMember, P2-03/P2-04).
+/// Operational workforce identity. Optional `userId` links to Auth User without
+/// duplicating authentication. StaffAssignment references this aggregate.
+model StaffMember {
+  id               String              @id @default(uuid()) @db.Uuid
+  tenantId         String              @map("tenant_id") @db.Uuid
+  /// Optional auth link — User remains authentication boundary only.
+  userId           String?             @unique @map("user_id") @db.Uuid
+  name             String
+  /// Operational role (decorator / coordinator / helper, etc.).
+  role             String
+  department       String?
+  phone            String
+  email            String?
+  employmentType   StaffEmploymentType @default(temporary) @map("employment_type")
+  status           StaffMemberStatus   @default(active)
+  joinedAt         DateTime?           @map("joined_at")
+  createdAt        DateTime            @default(now()) @map("created_at")
+  updatedAt        DateTime            @updatedAt @map("updated_at")
+  version          Int                 @default(1)
+
+  tenant      Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  user        User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
+  assignments StaffAssignment[]
+  availability StaffAvailability[]
+  leaveRequests StaffLeave[]
+  communicationRecords CommunicationRecord[]
+  reminders Reminder[]
+
+  @@index([tenantId, status])
+  @@index([tenantId, employmentType])
+  @@map("staff_members")
+}
+
+// ---------------------------------------------------------------------------
+// P2-05 — Staff Availability & Leave (scheduling owned by StaffMember)
+// ---------------------------------------------------------------------------
+
+enum StaffAvailabilityKind {
+  available
+  unavailable
+  partial_day
+  holiday
+
+  @@map("staff_availability_kind")
+}
+
+/// Date-specific or weekly recurring availability window for a StaffMember.
+model StaffAvailability {
+  id            String                @id @default(uuid()) @db.Uuid
+  tenantId      String                @map("tenant_id") @db.Uuid
+  staffMemberId String                @map("staff_member_id") @db.Uuid
+  /// Specific calendar day (null when weekday recurrence is used).
+  date          DateTime?             @db.Date
+  /// Recurring weekly day 0=Sunday … 6=Saturday (null when date-specific).
+  weekday       Int?
+  /// Optional time window "HH:mm" (null = all-day).
+  startTime     String?               @map("start_time")
+  endTime       String?               @map("end_time")
+  kind          StaffAvailabilityKind @default(available)
+  reason        String?
+  notes         String?
+  createdAt     DateTime              @default(now()) @map("created_at")
+  updatedAt     DateTime              @updatedAt @map("updated_at")
+  version       Int                   @default(1)
+
+  tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  staffMember StaffMember @relation(fields: [staffMemberId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, staffMemberId, date])
+  @@index([tenantId, staffMemberId, weekday])
+  @@map("staff_availability")
+}
+
+enum StaffLeaveType {
+  casual
+  sick
+  vacation
+  emergency
+  other
+
+  @@map("staff_leave_type")
+}
+
+enum StaffLeaveStatus {
+  requested
+  approved
+  rejected
+  cancelled
+
+  @@map("staff_leave_status")
+}
+
+/// Leave request for a StaffMember. Approved leave blocks availability for conflict checks.
+model StaffLeave {
+  id              String           @id @default(uuid()) @db.Uuid
+  tenantId        String           @map("tenant_id") @db.Uuid
+  staffMemberId   String           @map("staff_member_id") @db.Uuid
+  leaveType       StaffLeaveType   @map("leave_type")
+  status          StaffLeaveStatus @default(requested)
+  startDate       DateTime         @map("start_date") @db.Date
+  endDate         DateTime         @map("end_date") @db.Date
+  reason          String?
+  notes           String?
+  reviewedByUserId String?         @map("reviewed_by_user_id") @db.Uuid
+  reviewedAt      DateTime?        @map("reviewed_at")
+  createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @updatedAt @map("updated_at")
+  version         Int              @default(1)
+
+  tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  staffMember StaffMember @relation(fields: [staffMemberId], references: [id], onDelete: Cascade)
+  reviewedBy  User?       @relation("StaffLeaveReviewedBy", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, staffMemberId, status])
+  @@index([tenantId, startDate, endDate])
+  @@map("staff_leave")
+}
+
+// ---------------------------------------------------------------------------
 // Sprint 2C — Staff Assignment (EP1-STF-002, EP1-AUT-004)
 // ---------------------------------------------------------------------------
 
@@ -475,14 +1013,15 @@ enum StaffAssignmentStatus {
 }
 
 /// Staff member assigned to an event (Staff module, `07-domain-model.md` §Staff Assignment).
-/// `staffMemberId` references the existing `User` model — Phase 1 reuses the auth identity already
-/// used for `Lead.assignedToId` / `Event.executionOwnerId` since a dedicated `StaffMember` staff
-/// master (EP1-STF-001) is out of scope for Sprint 2C (see implementation report).
+/// P2-04: `staffMemberId` references StaffMember (operational identity).
+/// `legacyUserId` preserves pre-P2-04 User FK values during expand-contract (Phase 3 drop later).
 model StaffAssignment {
   id                 String                @id @default(uuid()) @db.Uuid
   tenantId           String                @map("tenant_id") @db.Uuid
   bookingId          String                @map("booking_id") @db.Uuid
   staffMemberId      String                @map("staff_member_id") @db.Uuid
+  /// Expand-contract: previous User identity; nullable after backfill; drop in Phase 3.
+  legacyUserId       String?               @map("legacy_user_id") @db.Uuid
   role               String?
   isOnSiteLead       Boolean               @default(false) @map("is_on_site_lead")
   reportingAt        DateTime?             @map("reporting_at")
@@ -496,61 +1035,209 @@ model StaffAssignment {
   updatedAt          DateTime              @updatedAt @map("updated_at")
   version            Int                   @default(1)
 
-  tenant      Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  booking     Event  @relation(fields: [bookingId], references: [id], onDelete: Restrict)
-  staffMember User   @relation("StaffAssignmentStaffMember", fields: [staffMemberId], references: [id], onDelete: Restrict)
+  tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  booking     Event       @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  staffMember StaffMember @relation(fields: [staffMemberId], references: [id], onDelete: Restrict)
+  legacyUser  User?       @relation("StaffAssignmentLegacyUser", fields: [legacyUserId], references: [id], onDelete: SetNull)
 
   @@index([tenantId, bookingId])
   @@index([tenantId, staffMemberId])
   @@index([tenantId, status])
+  @@index([tenantId, legacyUserId])
   @@map("staff_assignments")
 }
 
 // ---------------------------------------------------------------------------
+// R3-02 — Inventory Item Master (EP1-INV-001, EP1-INV-002)
+// ---------------------------------------------------------------------------
+
+enum InventoryItemTaxonomy {
+  reusable
+  consumable
+  per_event
+
+  @@map("inventory_item_taxonomy")
+}
+
+enum InventoryItemCondition {
+  good
+  fair
+  damaged
+  retired
+
+  @@map("inventory_item_condition")
+}
+
+enum InventoryItemStatus {
+  active
+  inactive
+  retired
+
+  @@map("inventory_item_status")
+}
+
+/// Inventory master (`07-domain-model.md` §InventoryItem, docs/09 §Inventory).
+/// `quantityAtJpNagar` is Phase 1 denormalized LocationQuantity (R3-02 decision 3A).
+/// P2-07: available qty = quantityAtJpNagar − active reservations − unlinked active movements.
+model InventoryItem {
+  id                String                 @id @default(uuid()) @db.Uuid
+  tenantId          String                 @map("tenant_id") @db.Uuid
+  name              String
+  sku               String?
+  category          String
+  taxonomy          InventoryItemTaxonomy
+  unit              String
+  condition         InventoryItemCondition @default(good)
+  quantityAtJpNagar Int                    @default(0) @map("quantity_at_jp_nagar")
+  status            InventoryItemStatus    @default(active)
+  createdAt         DateTime               @default(now()) @map("created_at")
+  updatedAt         DateTime               @updatedAt @map("updated_at")
+  version           Int                    @default(1)
+
+  tenant        Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  reservations  InventoryReservation[]
+  damageReports InventoryDamageReport[]
+
+  @@index([tenantId, status])
+  @@index([tenantId, taxonomy])
+  @@index([tenantId, category])
+  @@map("inventory_items")
+}
+
+// ---------------------------------------------------------------------------
 // Sprint 3 — Inventory Movement (EP1-INV-003, EP1-INV-005, EP1-INV-006)
+// P2-07 — Expanded operational statuses + packing/dispatch/return fields
 // ---------------------------------------------------------------------------
 
 enum InventoryMovementStatus {
   planned
   picked
+  packing_started
   packed
+  verified
+  ready_for_dispatch
   loaded
+  dispatched
   at_venue
   returned
+  return_verified
   cleaned_ready
+  cancelled
 
   @@map("inventory_movement_status")
 }
 
-/// Per-event stock movement through preparation and return (`07-domain-model.md` §Inventory
-/// Movement, `docs/business/08-inventory-workflow.md` §11). `inventoryItemId` is stored as a plain
-/// tenant-scoped identifier (no FK) because the `InventoryItem` master (EP1-INV-001/EP1-INV-002) is
-/// out of scope for Sprint 3 — same deferral pattern as `Payment.attachmentId` for the not-yet-built
-/// `Attachment` aggregate (see implementation report).
-model InventoryMovement {
-  id              String                  @id @default(uuid()) @db.Uuid
-  tenantId        String                  @map("tenant_id") @db.Uuid
-  bookingId       String                  @map("booking_id") @db.Uuid
-  inventoryItemId String                  @map("inventory_item_id") @db.Uuid
-  quantity        Int                     @default(1)
-  notes           String?
-  status          InventoryMovementStatus @default(planned)
-  pickedAt        DateTime?               @map("picked_at")
-  packedAt        DateTime?               @map("packed_at")
-  loadedAt        DateTime?               @map("loaded_at")
-  atVenueAt       DateTime?               @map("at_venue_at")
-  returnedAt      DateTime?               @map("returned_at")
-  cleanedReadyAt  DateTime?               @map("cleaned_ready_at")
-  createdAt       DateTime                @default(now()) @map("created_at")
-  updatedAt       DateTime                @updatedAt @map("updated_at")
-  version         Int                     @default(1)
+enum InventoryReservationStatus {
+  reserved
+  released
+  cancelled
 
-  tenant      Tenant                        @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  booking     Event                         @relation(fields: [bookingId], references: [id], onDelete: Restrict)
-  damageNotes InventoryMovementDamageNote[]
+  @@map("inventory_reservation_status")
+}
+
+enum InventoryVerificationResult {
+  pass
+  fail
+  partial
+
+  @@map("inventory_verification_result")
+}
+
+enum InventoryDamageType {
+  breakage
+  loss
+  water_damage
+  wear
+  other
+
+  @@map("inventory_damage_type")
+}
+
+enum InventoryDamageSeverity {
+  low
+  medium
+  high
+  critical
+
+  @@map("inventory_damage_severity")
+}
+
+/// P2-07 — Booking-scoped reservation that holds available quantity.
+model InventoryReservation {
+  id                  String                      @id @default(uuid()) @db.Uuid
+  tenantId            String                      @map("tenant_id") @db.Uuid
+  bookingId           String                      @map("booking_id") @db.Uuid
+  inventoryItemId     String                      @map("inventory_item_id") @db.Uuid
+  quantity            Int                         @default(1)
+  status              InventoryReservationStatus  @default(reserved)
+  notes               String?
+  /// Optional link to a completed vendor procurement (no duplicate purchasing).
+  vendorProcurementId String?                     @map("vendor_procurement_id") @db.Uuid
+  createdAt           DateTime                    @default(now()) @map("created_at")
+  updatedAt           DateTime                    @updatedAt @map("updated_at")
+  version             Int                         @default(1)
+
+  tenant            Tenant               @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  booking           Event                @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  inventoryItem     InventoryItem        @relation(fields: [inventoryItemId], references: [id], onDelete: Restrict)
+  vendorProcurement VendorProcurement?   @relation(fields: [vendorProcurementId], references: [id], onDelete: SetNull)
+  movements         InventoryMovement[]
+
+  @@index([tenantId, bookingId])
+  @@index([tenantId, inventoryItemId, status])
+  @@map("inventory_reservations")
+}
+
+/// Per-event stock movement through preparation and return (`07-domain-model.md` §Inventory
+/// Movement, `docs/business/08-inventory-workflow.md` §11). P2-07 adds packing/dispatch/return
+/// operational fields and optional reservation link. FK to InventoryItem added in P2-07.
+model InventoryMovement {
+  id                  String                  @id @default(uuid()) @db.Uuid
+  tenantId            String                  @map("tenant_id") @db.Uuid
+  bookingId           String                  @map("booking_id") @db.Uuid
+  inventoryItemId     String                  @map("inventory_item_id") @db.Uuid
+  reservationId       String?                 @map("reservation_id") @db.Uuid
+  quantity            Int                     @default(1)
+  notes               String?
+  status              InventoryMovementStatus @default(planned)
+  /// Packing
+  packedByUserId      String?                 @map("packed_by_user_id") @db.Uuid
+  packingStartedAt    DateTime?               @map("packing_started_at")
+  verificationNotes   String?                 @map("verification_notes")
+  verifiedAt          DateTime?               @map("verified_at")
+  readyForDispatchAt  DateTime?               @map("ready_for_dispatch_at")
+  /// Dispatch
+  vehicle             String?
+  driverName          String?                 @map("driver_name")
+  dispatchedAt        DateTime?               @map("dispatched_at")
+  /// Return
+  returnedQuantity    Int?                    @map("returned_quantity")
+  missingQuantity     Int?                    @map("missing_quantity")
+  damagedQuantity     Int?                    @map("damaged_quantity")
+  returnVerificationNotes String?             @map("return_verification_notes")
+  returnVerifiedAt    DateTime?               @map("return_verified_at")
+  /// Phase 1 timestamps
+  pickedAt            DateTime?               @map("picked_at")
+  packedAt            DateTime?               @map("packed_at")
+  loadedAt            DateTime?               @map("loaded_at")
+  atVenueAt           DateTime?               @map("at_venue_at")
+  returnedAt          DateTime?               @map("returned_at")
+  cleanedReadyAt      DateTime?               @map("cleaned_ready_at")
+  createdAt           DateTime                @default(now()) @map("created_at")
+  updatedAt           DateTime                @updatedAt @map("updated_at")
+  version             Int                     @default(1)
+
+  tenant        Tenant                        @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  booking       Event                         @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  reservation   InventoryReservation?         @relation(fields: [reservationId], references: [id], onDelete: SetNull)
+  packedBy      User?                         @relation("InventoryMovementPackedBy", fields: [packedByUserId], references: [id], onDelete: SetNull)
+  damageNotes   InventoryMovementDamageNote[]
+  verifications InventoryVerification[]
+  damageReports InventoryDamageReport[]
 
   @@index([tenantId, bookingId, status])
   @@index([tenantId, inventoryItemId, status])
+  @@index([tenantId, reservationId])
   @@map("inventory_movements")
 }
 
@@ -569,6 +1256,57 @@ model InventoryMovementDamageNote {
 
   @@index([tenantId, movementId])
   @@map("inventory_movement_damage_notes")
+}
+
+/// P2-07 — Structured expected vs actual verification for a movement.
+model InventoryVerification {
+  id               String                       @id @default(uuid()) @db.Uuid
+  tenantId         String                       @map("tenant_id") @db.Uuid
+  movementId       String                       @map("movement_id") @db.Uuid
+  bookingId        String                       @map("booking_id") @db.Uuid
+  expectedQuantity Int                          @map("expected_quantity")
+  actualQuantity   Int                          @map("actual_quantity")
+  difference       Int
+  result           InventoryVerificationResult
+  notes            String?
+  verifiedAt       DateTime                     @map("verified_at")
+  verifiedByUserId String?                      @map("verified_by_user_id") @db.Uuid
+  createdAt        DateTime                     @default(now()) @map("created_at")
+
+  tenant   Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  movement InventoryMovement @relation(fields: [movementId], references: [id], onDelete: Cascade)
+  booking  Event             @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  verifiedBy User?           @relation("InventoryVerificationVerifiedBy", fields: [verifiedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, movementId])
+  @@index([tenantId, bookingId])
+  @@map("inventory_verifications")
+}
+
+/// P2-07 — Structured damage report (photo metadata only; no image storage).
+model InventoryDamageReport {
+  id                 String                   @id @default(uuid()) @db.Uuid
+  tenantId           String                   @map("tenant_id") @db.Uuid
+  movementId         String                   @map("movement_id") @db.Uuid
+  bookingId          String                   @map("booking_id") @db.Uuid
+  inventoryItemId    String?                  @map("inventory_item_id") @db.Uuid
+  damageType         InventoryDamageType      @map("damage_type")
+  severity           InventoryDamageSeverity  @default(medium)
+  quantity           Int                      @default(1)
+  notes              String?
+  photoName          String?                  @map("photo_name")
+  photoMimeType      String?                  @map("photo_mime_type")
+  photoSizeBytes     Int?                     @map("photo_size_bytes")
+  createdAt          DateTime                 @default(now()) @map("created_at")
+
+  tenant        Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  movement      InventoryMovement  @relation(fields: [movementId], references: [id], onDelete: Cascade)
+  booking       Event              @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  inventoryItem InventoryItem?     @relation(fields: [inventoryItemId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, movementId])
+  @@index([tenantId, bookingId])
+  @@map("inventory_damage_reports")
 }
 
 // ---------------------------------------------------------------------------
@@ -594,8 +1332,65 @@ enum ProcurementLineStatus {
   confirmed
   delivered
   completed
+  cancelled
 
   @@map("procurement_line_status")
+}
+
+/// P2-06 — Header-level operational procurement workflow (extends Phase 1 line FSM).
+enum VendorProcurementWorkflowStatus {
+  draft
+  quotation_requested
+  quotation_received
+  approved
+  purchase_ordered
+  vendor_confirmed
+  materials_delivered
+  completed
+  cancelled
+
+  @@map("vendor_procurement_workflow_status")
+}
+
+enum ProcurementDeliveryStatus {
+  pending
+  partial
+  delivered
+  cancelled
+
+  @@map("procurement_delivery_status")
+}
+
+enum ProcurementQuoteStatus {
+  submitted
+  approved
+  rejected
+  expired
+
+  @@map("procurement_quote_status")
+}
+
+enum PurchaseOrderStatus {
+  draft
+  issued
+  cancelled
+
+  @@map("purchase_order_status")
+}
+
+enum ProcurementTimelineEventType {
+  request_created
+  quote_requested
+  quote_received
+  approved
+  po_issued
+  vendor_confirmed
+  delivered
+  completed
+  cancelled
+  note_added
+
+  @@map("procurement_timeline_event_type")
 }
 
 // Fixed reason list per `docs/business/07-vendor-management.md` §11 "Cost Variance Reason
@@ -621,6 +1416,35 @@ enum IssueNoteSeverity {
   @@map("issue_note_severity")
 }
 
+/// R3-07 / EP1-CUS-004 — Customer issue note status (docs/07 lifecycle open → resolved).
+/// Phase 1 API is create-only; status defaults to open.
+enum IssueNoteStatus {
+  open
+  resolved
+
+  @@map("issue_note_status")
+}
+
+/// R3-07 / EP1-CUS-003 — Review request channel (docs/09 request model).
+enum ReviewRequestChannel {
+  google
+  instagram
+  other
+
+  @@map("review_request_channel")
+}
+
+/// R3-07 / EP1-CUS-003 — Review request status (docs/07 lifecycle).
+/// Phase 1 API is create-only; status defaults to pending.
+enum ReviewRequestStatus {
+  pending
+  sent
+  acknowledged
+  skipped
+
+  @@map("review_request_status")
+}
+
 /// Vendor directory with status + lightweight issue history (`07-domain-model.md` §Vendor,
 /// EP1-VEN-001, EP1-VEN-006). Tax details are optional per `07-vendor-management.md` §11A.
 model Vendor {
@@ -637,6 +1461,10 @@ model Vendor {
   paymentTerms      String?      @map("payment_terms")
   taxDetails        String?      @map("tax_details")
   notes             String?
+  /// P2-06 — Operational performance counters (not an analytics dashboard).
+  procurementCount           Int @default(0) @map("procurement_count")
+  onTimeDeliveryCount        Int @default(0) @map("on_time_delivery_count")
+  completedProcurementCount  Int @default(0) @map("completed_procurement_count")
   createdAt         DateTime     @default(now()) @map("created_at")
   updatedAt         DateTime     @updatedAt @map("updated_at")
   version           Int          @default(1)
@@ -645,6 +1473,10 @@ model Vendor {
   issueNotes   VendorIssueNote[]
   procurements VendorProcurement[]
   expenses     VendorExpense[]
+  quotes       ProcurementQuote[]
+  purchaseOrders PurchaseOrder[]
+  communicationRecords CommunicationRecord[]
+  reminders Reminder[]
 
   @@index([tenantId, status])
   @@index([tenantId, category])
@@ -669,27 +1501,116 @@ model VendorIssueNote {
 }
 
 /// Procurement header per event-vendor pairing (`07-domain-model.md` §Vendor Procurement AR,
-/// EP1-VEN-002). `status` mirrors `ProcurementLineStatus` for the header summary; Phase 1 exposes
-/// no dedicated header-transition endpoint (see implementation report).
+/// EP1-VEN-002). `status` mirrors Phase 1 line enum for backward-compatible clients.
+/// P2-06 adds `workflowStatus` as the operational lifecycle source of truth.
 model VendorProcurement {
-  id        String                 @id @default(uuid()) @db.Uuid
-  tenantId  String                 @map("tenant_id") @db.Uuid
-  bookingId String                 @map("booking_id") @db.Uuid
-  vendorId  String                 @map("vendor_id") @db.Uuid
-  status    ProcurementLineStatus  @default(planned)
-  notes     String?
-  createdAt DateTime               @default(now()) @map("created_at")
-  updatedAt DateTime               @updatedAt @map("updated_at")
-  version   Int                    @default(1)
+  id              String                           @id @default(uuid()) @db.Uuid
+  tenantId        String                           @map("tenant_id") @db.Uuid
+  bookingId       String                           @map("booking_id") @db.Uuid
+  vendorId        String                           @map("vendor_id") @db.Uuid
+  /// Legacy Phase 1 summary status (synced from workflowStatus for backward compatibility).
+  status          ProcurementLineStatus            @default(planned)
+  /// P2-06 operational workflow status.
+  workflowStatus  VendorProcurementWorkflowStatus  @default(draft) @map("workflow_status")
+  serviceCategory String?                          @map("service_category")
+  requiredDate    DateTime?                        @map("required_date") @db.Date
+  estimatedCost   Decimal?                         @map("estimated_cost") @db.Decimal(12, 2)
+  approvedCost    Decimal?                         @map("approved_cost") @db.Decimal(12, 2)
+  actualCost      Decimal?                         @map("actual_cost") @db.Decimal(12, 2)
+  deliveryStatus  ProcurementDeliveryStatus        @default(pending) @map("delivery_status")
+  deliveryNotes   String?                          @map("delivery_notes")
+  notes           String?
+  createdAt       DateTime                         @default(now()) @map("created_at")
+  updatedAt       DateTime                         @updatedAt @map("updated_at")
+  version         Int                              @default(1)
 
-  tenant  Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  booking Event             @relation(fields: [bookingId], references: [id], onDelete: Restrict)
-  vendor  Vendor            @relation(fields: [vendorId], references: [id], onDelete: Restrict)
-  lines   ProcurementLine[]
+  tenant         Tenant                      @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  booking        Event                       @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  vendor         Vendor                      @relation(fields: [vendorId], references: [id], onDelete: Restrict)
+  lines          ProcurementLine[]
+  quotes         ProcurementQuote[]
+  purchaseOrders PurchaseOrder[]
+  timelineEvents ProcurementTimelineEvent[]
+  inventoryReservations InventoryReservation[]
+  financialDocuments FinancialDocument[]
 
   @@index([tenantId, bookingId])
   @@index([tenantId, vendorId])
+  @@index([tenantId, workflowStatus])
   @@map("vendor_procurements")
+}
+
+/// P2-06 — Vendor quotation against a procurement header (multiple allowed; one may be approved).
+model ProcurementQuote {
+  id                 String                 @id @default(uuid()) @db.Uuid
+  tenantId           String                 @map("tenant_id") @db.Uuid
+  vendorProcurementId String                @map("vendor_procurement_id") @db.Uuid
+  vendorId           String                 @map("vendor_id") @db.Uuid
+  amount             Decimal                @db.Decimal(12, 2)
+  currency           String                 @default("INR")
+  validUntil         DateTime?              @map("valid_until") @db.Date
+  notes              String?
+  /// Attachment metadata only — file storage deferred (no PDF/binary in P2-06).
+  attachmentName     String?                @map("attachment_name")
+  attachmentMimeType String?                @map("attachment_mime_type")
+  attachmentSizeBytes Int?                  @map("attachment_size_bytes")
+  status             ProcurementQuoteStatus @default(submitted)
+  createdAt          DateTime               @default(now()) @map("created_at")
+  updatedAt          DateTime               @updatedAt @map("updated_at")
+  version            Int                    @default(1)
+
+  tenant             Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  vendorProcurement  VendorProcurement @relation(fields: [vendorProcurementId], references: [id], onDelete: Cascade)
+  vendor             Vendor            @relation(fields: [vendorId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, vendorProcurementId])
+  @@index([tenantId, vendorId])
+  @@map("procurement_quotes")
+}
+
+/// P2-06 — Purchase order generated from an approved procurement (PDF deferred).
+model PurchaseOrder {
+  id                  String             @id @default(uuid()) @db.Uuid
+  tenantId            String             @map("tenant_id") @db.Uuid
+  vendorProcurementId String             @map("vendor_procurement_id") @db.Uuid
+  vendorId            String             @map("vendor_id") @db.Uuid
+  poNumber            String             @map("po_number")
+  issueDate           DateTime           @map("issue_date") @db.Date
+  totalAmount         Decimal            @map("total_amount") @db.Decimal(12, 2)
+  currency            String             @default("INR")
+  notes               String?
+  status              PurchaseOrderStatus @default(draft)
+  createdAt           DateTime           @default(now()) @map("created_at")
+  updatedAt           DateTime           @updatedAt @map("updated_at")
+  version             Int                @default(1)
+
+  tenant            Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  vendorProcurement VendorProcurement @relation(fields: [vendorProcurementId], references: [id], onDelete: Cascade)
+  vendor            Vendor            @relation(fields: [vendorId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, poNumber])
+  @@index([tenantId, vendorProcurementId])
+  @@map("purchase_orders")
+}
+
+/// P2-06 — Append-only procurement timeline for workspace activity integration.
+model ProcurementTimelineEvent {
+  id                  String                       @id @default(uuid()) @db.Uuid
+  tenantId            String                       @map("tenant_id") @db.Uuid
+  vendorProcurementId String                       @map("vendor_procurement_id") @db.Uuid
+  bookingId           String                       @map("booking_id") @db.Uuid
+  eventType           ProcurementTimelineEventType @map("event_type")
+  message             String
+  occurredAt          DateTime                     @map("occurred_at")
+  createdAt           DateTime                     @default(now()) @map("created_at")
+
+  tenant            Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  vendorProcurement VendorProcurement @relation(fields: [vendorProcurementId], references: [id], onDelete: Cascade)
+  booking           Event             @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, vendorProcurementId, occurredAt])
+  @@index([tenantId, bookingId, occurredAt])
+  @@map("procurement_timeline_events")
 }
 
 /// Procurement line item (`07-domain-model.md` §Vendor Procurement — ProcurementLine entity,
@@ -802,6 +1723,7 @@ model VendorExpense {
   booking         Event            @relation(fields: [bookingId], references: [id], onDelete: Restrict)
   vendor          Vendor           @relation(fields: [vendorId], references: [id], onDelete: Restrict)
   procurementLine ProcurementLine? @relation(fields: [procurementLineId], references: [id], onDelete: SetNull)
+  financialDocuments FinancialDocument[]
 
   @@index([tenantId, bookingId])
   @@index([tenantId, vendorId])
@@ -834,6 +1756,7 @@ model Invoice {
   customer  Customer            @relation(fields: [customerId], references: [id], onDelete: Restrict)
   lineItems InvoiceLineItem[]
   payments  Payment[]
+  financialDocuments FinancialDocument[]
 
   @@unique([tenantId, invoiceNumber])
   @@index([tenantId, bookingId])
@@ -862,3 +1785,343 @@ model InvoiceLineItem {
   @@index([tenantId, invoiceId])
   @@map("invoice_line_items")
 }
+
+// ---------------------------------------------------------------------------
+// R3-03 — Suggestion queue (ADR-017, EP1-AUT-001–005)
+// ---------------------------------------------------------------------------
+
+enum SuggestionStatus {
+  pending
+  accepted
+  dismissed
+  expired
+
+  @@map("suggestion_status")
+}
+
+/// Platform Suggestion AR (`docs/08-data-model.md` §Suggestion Persistence, ADR-017).
+/// `type` is stored as a string so values like `workspace.create` match docs/09 exactly.
+/// Event handlers that *create* suggestions are out of scope for R3-03 (decision 2A).
+model Suggestion {
+  id            String           @id @default(uuid()) @db.Uuid
+  tenantId      String           @map("tenant_id") @db.Uuid
+  type          String
+  status        SuggestionStatus @default(pending)
+  aggregateType String           @map("aggregate_type")
+  aggregateId   String           @map("aggregate_id") @db.Uuid
+  payload       Json             @default("{}")
+  sourceEventId String?          @map("source_event_id")
+  comment       String?
+  createdAt     DateTime         @default(now()) @map("created_at")
+  resolvedAt    DateTime?        @map("resolved_at")
+  resolvedBy    String?          @map("resolved_by") @db.Uuid
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, status, type])
+  @@index([tenantId, aggregateType, aggregateId])
+  @@map("suggestions")
+}
+
+// ---------------------------------------------------------------------------
+// P2-08 — Financial Documents & Attachments (metadata only; no binary storage)
+// ---------------------------------------------------------------------------
+
+enum FinancialDocumentType {
+  payment_proof
+  expense_receipt
+  vendor_invoice
+  customer_invoice
+  credit_note
+  debit_note
+  other
+
+  @@map("financial_document_type")
+}
+
+enum FinancialDocumentVerificationStatus {
+  pending
+  verified
+  rejected
+
+  @@map("financial_document_verification_status")
+}
+
+enum FinancialDocumentAuditEventType {
+  uploaded
+  updated
+  verified
+  rejected
+  deleted
+
+  @@map("financial_document_audit_event_type")
+}
+
+/// Booking-owned financial evidence metadata (`docs/07` §Attachment strategy, P2-08).
+/// Binary upload / PDF generation remain out of scope — `storageKey` is metadata only.
+model FinancialDocument {
+  id                     String                                 @id @default(uuid()) @db.Uuid
+  tenantId               String                                 @map("tenant_id") @db.Uuid
+  bookingId              String                                 @map("booking_id") @db.Uuid
+  documentType           FinancialDocumentType                  @map("document_type")
+  verificationStatus     FinancialDocumentVerificationStatus    @default(pending) @map("verification_status")
+  description            String?
+  /// Attachment metadata only
+  fileName               String?                                @map("file_name")
+  mimeType               String?                                @map("mime_type")
+  fileSizeBytes          Int?                                   @map("file_size_bytes")
+  storageKey             String?                                @map("storage_key")
+  /// Optional links (booking is always required)
+  paymentId              String?                                @map("payment_id") @db.Uuid
+  vendorExpenseId        String?                                @map("vendor_expense_id") @db.Uuid
+  vendorProcurementId    String?                                @map("vendor_procurement_id") @db.Uuid
+  invoiceId              String?                                @map("invoice_id") @db.Uuid
+  uploadedByUserId       String?                                @map("uploaded_by_user_id") @db.Uuid
+  uploadedAt             DateTime                               @default(now()) @map("uploaded_at")
+  verifiedByUserId       String?                                @map("verified_by_user_id") @db.Uuid
+  verifiedAt             DateTime?                              @map("verified_at")
+  verificationNotes      String?                                @map("verification_notes")
+  deletedAt              DateTime?                              @map("deleted_at")
+  createdAt              DateTime                               @default(now()) @map("created_at")
+  updatedAt              DateTime                               @updatedAt @map("updated_at")
+  version                Int                                    @default(1)
+
+  tenant            Tenant              @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  booking           Event               @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  payment           Payment?            @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  vendorExpense     VendorExpense?      @relation(fields: [vendorExpenseId], references: [id], onDelete: SetNull)
+  vendorProcurement VendorProcurement?  @relation(fields: [vendorProcurementId], references: [id], onDelete: SetNull)
+  invoice           Invoice?            @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  uploadedBy        User?               @relation("FinancialDocumentUploadedBy", fields: [uploadedByUserId], references: [id], onDelete: SetNull)
+  verifiedBy        User?               @relation("FinancialDocumentVerifiedBy", fields: [verifiedByUserId], references: [id], onDelete: SetNull)
+  auditEvents       FinancialDocumentAuditEvent[]
+
+  @@index([tenantId, bookingId, deletedAt])
+  @@index([tenantId, paymentId])
+  @@index([tenantId, vendorExpenseId])
+  @@index([tenantId, vendorProcurementId])
+  @@index([tenantId, verificationStatus])
+  @@map("financial_documents")
+}
+
+/// Append-only audit trail for financial document lifecycle (P2-08).
+model FinancialDocumentAuditEvent {
+  id                  String                           @id @default(uuid()) @db.Uuid
+  tenantId            String                           @map("tenant_id") @db.Uuid
+  financialDocumentId String                           @map("financial_document_id") @db.Uuid
+  eventType           FinancialDocumentAuditEventType  @map("event_type")
+  message             String
+  actorUserId         String?                          @map("actor_user_id") @db.Uuid
+  occurredAt          DateTime                         @default(now()) @map("occurred_at")
+  createdAt           DateTime                         @default(now()) @map("created_at")
+
+  tenant   Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  document FinancialDocument @relation(fields: [financialDocumentId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, financialDocumentId, occurredAt])
+  @@map("financial_document_audit_events")
+}
+
+// ---------------------------------------------------------------------------
+// P2-09 — Communication Center (metadata only; no provider integrations)
+// ---------------------------------------------------------------------------
+
+enum CommunicationChannel {
+  whatsapp
+  email
+  sms
+  phone_call
+  internal_note
+  manual_meeting
+
+  @@map("communication_channel")
+}
+
+enum CommunicationDirection {
+  incoming
+  outgoing
+
+  @@map("communication_direction")
+}
+
+enum CommunicationStatus {
+  draft
+  queued
+  sent
+  delivered
+  read
+  failed
+  cancelled
+  completed
+
+  @@map("communication_status")
+}
+
+enum CommunicationTemplateStatus {
+  active
+  archived
+
+  @@map("communication_template_status")
+}
+
+enum ReminderStatus {
+  pending
+  completed
+  cancelled
+
+  @@map("reminder_status")
+}
+
+enum ReminderCategory {
+  payment_follow_up
+  event_reminder
+  vendor_follow_up
+  customer_follow_up
+  staff_follow_up
+  other
+
+  @@map("reminder_category")
+}
+
+/// Booking-scoped operational communication log (P2-09). No WhatsApp/email/SMS provider.
+model CommunicationRecord {
+  id               String                  @id @default(uuid()) @db.Uuid
+  tenantId         String                  @map("tenant_id") @db.Uuid
+  bookingId        String?                 @map("booking_id") @db.Uuid
+  customerId       String?                 @map("customer_id") @db.Uuid
+  vendorId         String?                 @map("vendor_id") @db.Uuid
+  staffMemberId    String?                 @map("staff_member_id") @db.Uuid
+  templateId       String?                 @map("template_id") @db.Uuid
+  channel          CommunicationChannel
+  direction        CommunicationDirection
+  status           CommunicationStatus     @default(draft)
+  subject          String?
+  body             String?
+  failureReason    String?                 @map("failure_reason")
+  createdByUserId  String?                 @map("created_by_user_id") @db.Uuid
+  occurredAt       DateTime                @default(now()) @map("occurred_at")
+  sentAt           DateTime?               @map("sent_at")
+  deliveredAt      DateTime?               @map("delivered_at")
+  readAt           DateTime?               @map("read_at")
+  failedAt         DateTime?               @map("failed_at")
+  deletedAt        DateTime?               @map("deleted_at")
+  createdAt        DateTime                @default(now()) @map("created_at")
+  updatedAt        DateTime                @updatedAt @map("updated_at")
+  version          Int                     @default(1)
+
+  tenant      Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  booking     Event?                   @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  customer    Customer?                @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  vendor      Vendor?                  @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  staffMember StaffMember?             @relation(fields: [staffMemberId], references: [id], onDelete: SetNull)
+  template    CommunicationTemplate?   @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  createdBy   User?                    @relation("CommunicationRecordCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  attachments CommunicationAttachment[]
+  reminders   Reminder[]
+
+  @@index([tenantId, bookingId, occurredAt])
+  @@index([tenantId, customerId, occurredAt])
+  @@index([tenantId, status, deletedAt])
+  @@index([tenantId, channel])
+  @@map("communication_records")
+}
+
+model CommunicationTemplate {
+  id         String                       @id @default(uuid()) @db.Uuid
+  tenantId   String                       @map("tenant_id") @db.Uuid
+  name       String
+  category   String
+  channel    CommunicationChannel?
+  subject    String?
+  body       String
+  status     CommunicationTemplateStatus  @default(active)
+  createdAt  DateTime                     @default(now()) @map("created_at")
+  updatedAt  DateTime                     @updatedAt @map("updated_at")
+  version    Int                          @default(1)
+
+  tenant Tenant                @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  records CommunicationRecord[]
+
+  @@index([tenantId, status])
+  @@index([tenantId, category])
+  @@map("communication_templates")
+}
+
+/// Metadata-only attachment on a communication (same approach as FinancialDocument).
+model CommunicationAttachment {
+  id                    String    @id @default(uuid()) @db.Uuid
+  tenantId              String    @map("tenant_id") @db.Uuid
+  communicationRecordId String    @map("communication_record_id") @db.Uuid
+  fileName              String?   @map("file_name")
+  mimeType              String?   @map("mime_type")
+  fileSizeBytes         Int?      @map("file_size_bytes")
+  storageKey            String?   @map("storage_key")
+  deletedAt             DateTime? @map("deleted_at")
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+  version               Int       @default(1)
+
+  tenant Tenant              @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  record CommunicationRecord @relation(fields: [communicationRecordId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, communicationRecordId, deletedAt])
+  @@map("communication_attachments")
+}
+
+/// Manual reminder / follow-up (no background scheduler in P2-09).
+model Reminder {
+  id                    String           @id @default(uuid()) @db.Uuid
+  tenantId              String           @map("tenant_id") @db.Uuid
+  bookingId             String?          @map("booking_id") @db.Uuid
+  customerId            String?          @map("customer_id") @db.Uuid
+  vendorId              String?          @map("vendor_id") @db.Uuid
+  staffMemberId         String?          @map("staff_member_id") @db.Uuid
+  communicationRecordId String?          @map("communication_record_id") @db.Uuid
+  category              ReminderCategory @default(other)
+  title                 String
+  notes                 String?
+  dueAt                 DateTime         @map("due_at")
+  status                ReminderStatus   @default(pending)
+  assignedToUserId      String?          @map("assigned_to_user_id") @db.Uuid
+  completedAt           DateTime?        @map("completed_at")
+  cancelledAt           DateTime?        @map("cancelled_at")
+  createdAt             DateTime         @default(now()) @map("created_at")
+  updatedAt             DateTime         @updatedAt @map("updated_at")
+  version               Int              @default(1)
+
+  tenant      Tenant               @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  booking     Event?               @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  customer    Customer?            @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  vendor      Vendor?              @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  staffMember StaffMember?         @relation(fields: [staffMemberId], references: [id], onDelete: SetNull)
+  communicationRecord CommunicationRecord? @relation(fields: [communicationRecordId], references: [id], onDelete: SetNull)
+  assignedTo  User?                @relation("ReminderAssignedTo", fields: [assignedToUserId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, status, dueAt])
+  @@index([tenantId, bookingId, dueAt])
+  @@index([tenantId, assignedToUserId, status])
+  @@map("reminders")
+}
+
+/// Future-ready customer notification preferences (no delivery in P2-09).
+model NotificationPreference {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  customerId String?  @map("customer_id") @db.Uuid
+  userId     String?  @map("user_id") @db.Uuid
+  whatsapp   Boolean  @default(true)
+  email      Boolean  @default(true)
+  sms        Boolean  @default(false)
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+  version    Int      @default(1)
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  customer Customer? @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  user     User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, customerId])
+  @@index([tenantId, userId])
+  @@map("notification_preferences")
+}
+

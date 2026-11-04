@@ -1,0 +1,34 @@
+# R2-10 — backup retention schedule (docs/16 §Backup Strategy)
+
+version: 1
+
+schedule:
+  - component: postgresql
+    method: automated_managed_backup_plus_wal_archiving
+    frequency:
+      wal: continuous
+      full: daily
+    retention:
+      daily: 30 days
+      monthly: 12 months
+
+  - component: redis
+    method: rdb_snapshots
+    frequency: daily
+    retention: 7 days
+    note: Cache data; acceptable loss
+
+  - component: object_storage
+    method: provider_native_replication
+    frequency: continuous
+    retention: indefinite
+    lifecycle: per_infrastructure_storage_R2-09
+
+  - component: configuration
+    method: version_controlled_git
+    frequency: every_change
+    retention: indefinite
+
+testing:
+  monthly: restore_database_backup_to_staging
+  quarterly: full_disaster_recovery_drill

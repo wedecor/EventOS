@@ -14,6 +14,9 @@ export type VendorDto = {
   paymentTerms: string | null;
   taxDetails: string | null;
   notes: string | null;
+  procurementCount: number;
+  onTimeDeliveryCount: number;
+  completedProcurementCount: number;
   createdAt: Date;
   updatedAt: Date;
   version: number;

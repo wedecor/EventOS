@@ -35,6 +35,11 @@ export abstract class FollowUpRepository {
     id: string,
   ): Promise<FollowUpRecord | null>;
 
+  abstract findByLeadIds(
+    tenantId: string,
+    leadIds: string[],
+  ): Promise<FollowUpRecord[]>;
+
   abstract update(
     tenantId: string,
     id: string,

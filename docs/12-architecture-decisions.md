@@ -160,7 +160,7 @@ Event OS starts with one tenant (We Decor) but must architect for thousands. Cho
 
 ### Decision
 
-Shared schema with `tenant_id` on all tenant-scoped tables. PostgreSQL RLS added in Phase 2 as defense-in-depth.
+Shared schema with `tenant_id` on all tenant-scoped tables. PostgreSQL RLS added in **Phase 6** (multi-tenant SaaS) as defense-in-depth — aligned with ADR-016.
 
 ### Rationale
 
@@ -168,7 +168,7 @@ Shared schema with `tenant_id` on all tenant-scoped tables. PostgreSQL RLS added
 - Schema-per-tenant: migration complexity multiplied by tenant count
 - Row-level: simple, proven pattern used by Linear, Notion, and most SaaS companies
 - `tenant_id` marginal cost is near zero; retrofit cost is months of engineering
-- Application-level enforcement in Phase 1; RLS in Phase 2 for defense-in-depth
+- Application-level enforcement in Phase 1; RLS in **Phase 6** for defense-in-depth (ADR-016)
 
 ### Consequences
 
@@ -291,6 +291,10 @@ React SPA with TypeScript, served as static assets. PWA capabilities for mobile.
 - **Positive:** Frontend deploys independently as static assets
 - **Negative:** Initial load time (mitigated by code splitting, lazy loading)
 - **Negative:** No SSR for admin pages (not needed)
+
+### Implementation note (R4-01 — does not change this ADR)
+
+Phase 1 Admin Portal is implemented as **Next.js App Router with `output: 'export'`** (static assets), client-first React UI, TanStack Query, and Axios against the frozen OpenAPI. This realizes ADR-007’s SPA / static-asset decision; it does not introduce SSR for admin pages.
 
 ---
 

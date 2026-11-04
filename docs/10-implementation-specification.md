@@ -7,9 +7,9 @@
 | **Document Owner** | Founding Engineering |
 | **Primary Reviewer** | Ilyas + Zakir (We Decor Events) |
 | **Status** | Draft — engineering handoff |
-| **Version** | 1.1 |
+| **Version** | 1.7 |
 | **Created Date** | 2026-07-08 |
-| **Last Updated** | 2026-07-08 |
+| **Last Updated** | 2026-07-29 |
 | **Next Review Date** | Not Defined |
 | **Document Purpose** | Define exactly how Phase 1 will be implemented (engineering playbook) without writing application code. This document is an implementation handoff from the approved architecture phase into Sprint execution. |
 
@@ -21,6 +21,12 @@
 |---------|------|---------|---------------------|
 | 1.0 | 2026-07-08 | Founding Engineering | Initial Phase 1 implementation playbook based on domain, data, API, ADR-016 and ADR-017 |
 | 1.1 | 2026-07-08 | Founding Engineering | Sprint API lists synchronized with `docs/09-api-design.md` — complete command and read endpoint coverage per workflow |
+| 1.2 | 2026-07-13 | Founding Engineering | R3-12: Auth/Tenant service names and Sprint 2 dependency notes aligned to shipped modules |
+| 1.3 | 2026-07-19 | Founding Engineering | P2-08: Finance module financial document services, controllers, audit repo, migration |
+| 1.4 | 2026-07-19 | Founding Engineering | P2-09: Communication module services/controllers/repos + migration `20260719110000_p2_09_communication_center` |
+| 1.5 | 2026-07-19 | Founding Engineering | P2-10: Calendar module re-specified as read-only aggregation service (`CalendarApplicationService`); no repository, no domain events, no migration |
+| 1.6 | 2026-07-29 | Founding Engineering | P2-11: Customer Intelligence read-only aggregation (`CustomerIntelligenceApplicationService` + `CustomerIntelligenceController` under `/clients/:customerId/`); additive `findByCustomerId` / `findByLeadIds` repo methods; no migration; `WorkspaceDto` unchanged |
+| 1.7 | 2026-07-29 | Founding Engineering | P2-12: Analytics read-only BI (`AnalyticsApplicationService` + `AnalyticsController` under `/analytics/`); `analytics:read`; additive `findAll` on Quotation + Customer repos; no migration; Phase-1 `/dashboards/*` frozen |
 
 ---
 
@@ -123,15 +129,19 @@ Code package structure must follow `docs/10-folder-structure.md`.
 ### Repository / module layout
 
 - Backend application lives under `apps/api/src/`
-- Each Phase 1 module is implemented as a NestJS module under `apps/api/src/modules/{module-name}/`
-- Each module follows the standard folder structure:
+- Admin Portal frontend lives under `apps/web/` (Next.js 15 App Router, **static export**, F1-01–F1-13 as of R4-01)
+- Each Phase 1 backend module is implemented as a NestJS module under `apps/api/src/modules/{module-name}/`
+- Each backend module follows the standard folder structure:
   - `domain/` (entities, value objects, domain services, domain events, repository interfaces, errors)
   - `application/` (commands, queries, DTOs, application service orchestrators)
   - `infrastructure/` (persistence implementations, event handlers)
   - `presentation/` (controllers and request validation — not produced here)
   - `__tests__/` (unit/integration tests)
+- Frontend feature modules live under `apps/web/src/features/{name}/` with `api/`, `schemas/`, `hooks/`, `components/` (Zod-parse OpenAPI `data` envelopes; TanStack Query; permission gates using backend keys only)
 
 This implementation specification focuses on what goes where and how it behaves, not on writing code.
+
+**Wire contract:** `apps/api/openapi/openapi.v1.json` is frozen (R3-13). Documentation wording must not contradict it; see `docs/09-api-design.md` v1.5 (R4-01).
 
 ---
 
@@ -167,6 +177,12 @@ Use the architectural dependency rule from `docs/05-system-architecture.md`:
 ### Application layer
 
 - Authenticate/authorize via TenantContext and permission checks
+- Phase 1 RBAC: single role per user; permission keys and role grants follow
+  [`docs/09-api-design.md`](./09-api-design.md) §Phase 1 Role × Permission Matrix (R3-09)
+  and `apps/api/src/modules/auth/domain/rbac.ts` (implemented `ROLE_PERMISSIONS`).
+  Summary table in [`docs/05-system-architecture.md`](./05-system-architecture.md) must stay
+  consistent with docs/09. ADR-016 (single tenant) and ADR-017 (suggestion-only
+  automation) remain binding.
 - Validate request payloads (schema-level) + enforce business preconditions (hard blocks)
 - Orchestrate transactions around one or more aggregate changes
 - Call domain services; persist aggregates through repositories
@@ -242,8 +258,11 @@ All repositories must:
 ### Aggregate root persistence
 
 - Implement “save/load by aggregate root id” for each aggregate root:
-  - Customer, Lead, Quotation, Event, StaffMember, Vendor, InventoryItem, InventoryMovement, Task, Payment, Invoice, VendorExpense, Suggestion, CalendarEntry
+  - Customer, Lead, Quotation, Event, StaffMember, Vendor, InventoryItem, InventoryMovement, Task, Payment, Invoice, VendorExpense, Suggestion
 - Owned entities are persisted via child tables or embedded records under the aggregate root owner.
+- **Calendar (P2-10) is explicitly excluded** — it owns no aggregate root and has no persistence method; it is a read-only composition over the aggregates above.
+- **Customer Intelligence (P2-11) is explicitly excluded** — it owns no aggregate root and has no persistence method; it is a customer-centric read-only composition over Customer, Lead/FollowUp, Quotation, Event, Communication, Reminder, TimelineEntry, Invoice, Payment (via booking), and FinancialDocument.
+- **Analytics (P2-12) is explicitly excluded** — it owns no aggregate root and has no persistence method; it is a tenant-wide read-only composition over Lead, Quotation, Event, Customer, Payment, VendorExpense, Invoice, Staff, VendorProcurement, Inventory, Communication, and Reminder. Additive `findAll` on Quotation and Customer repositories only; no Prisma migration.
 
 ### Optimistic concurrency
 
@@ -540,15 +559,35 @@ flowchart TD
   Tenant --> Finance[Finance Module]
   Tenant --> Notification[Notification Module]
   Tenant --> File[File Module]
+  Tenant --> Analytics[Analytics Module]
 
   Lead --> Quotation
   Lead --> Customer
   Quotation --> Booking
-  Booking --> Calendar
   Booking --> Task
   Booking --> Vendor
   Booking --> Inventory
   Booking --> Finance
+
+  Calendar -.read-only.-> Booking
+  Calendar -.read-only.-> Staff
+  Calendar -.read-only.-> Vendor
+  Calendar -.read-only.-> Inventory
+  Calendar -.read-only.-> Finance
+
+  Customer -.read-only P2-11.-> Lead
+  Customer -.read-only P2-11.-> Quotation
+  Customer -.read-only P2-11.-> Booking
+  Customer -.read-only P2-11.-> Finance
+
+  Analytics -.read-only P2-12.-> Lead
+  Analytics -.read-only P2-12.-> Quotation
+  Analytics -.read-only P2-12.-> Booking
+  Analytics -.read-only P2-12.-> Customer
+  Analytics -.read-only P2-12.-> Finance
+  Analytics -.read-only P2-12.-> Staff
+  Analytics -.read-only P2-12.-> Vendor
+  Analytics -.read-only P2-12.-> Inventory
 
   Policy[Policy/Rules Layer] --> Booking
   Policy --> Finance
@@ -595,25 +634,26 @@ Each module entry includes:
 #### Auth Module
 
 - **Package name:** `apps/api/src/modules/auth/`
-- **Application services:** `AuthService`
-- **Domain services:** none (auth mostly infrastructure)
-- **Repositories:** `UserRepository`, `SessionRepository`
-- **Domain events published:** `UserLoggedIn`, `PasswordChanged` (optional in-process events)
+- **Application services:** `AuthApplicationService`, `TokenService`, `PasswordService`, `PasswordPolicyService`, `PasswordChangeService`, `LoginThrottleService`, `PermissionService`
+- **Domain services:** none (auth mostly application + infrastructure)
+- **Repositories:** `UserRepository`, `SessionRepository`, `PasswordHistoryRepository`, `LoginAttemptRepository` (Redis-backed)
+- **Domain events published:** optional in-process auth signals only (not required for ADR-017 suggestion flows)
 - **Domain events consumed:** none
-- **External integrations:** none
+- **External integrations:** HIBP breached-password check (k-anonymity; fail-open)
 - **Transaction boundary:** token/session updates only
 - **Related EP1 IDs:** EP1-STF-003 (through authorization checks on protected operations)
 
 #### Tenant Module (minimal We Decor single tenant)
 
 - **Package name:** `apps/api/src/modules/tenant/`
-- **Application services:** `TenantService`, `TenantSettingsService` (read + update only in Phase 1)
+- **Application services:** `TenantSettingsApplicationService` (read + update only in Phase 1)
 - **Domain services:** none
-- **Repositories:** `TenantRepository`, `TenantSettingsRepository`
+- **Repositories:** `TenantSettingsRepository`
 - **Domain events published:** `TenantSettingsUpdated` (if updated)
 - **Domain events consumed:** none
 - **External integrations:** none
 - **Transaction boundary:** settings updates atomic
+- **Authorization (R3-08):** `GET/PATCH /api/v1/settings` require `settings:read` / `settings:write` for roles `owner` and `admin` only (docs/09 §Administration). `admin` is **not** excluded from tenant settings in Phase 1.
 - **Related EP1 IDs:** none dedicated (supports all modules)
 
 #### Notification Module
@@ -681,22 +721,27 @@ Each module entry includes:
 
 #### Customer (CRM) Module
 
-- **Package name:** `apps/api/src/modules/crm/`
-- **Application services:** `CustomerService`, `TimelineService`, `IssueService`, `ReviewRequestService`
+- **Package name:** `apps/api/src/modules/customer/`
+- **Application services:** `CustomerApplicationService`, `TimelineApplicationService`, `IssueApplicationService`, `ReviewRequestApplicationService`, `ContactApplicationService`, `CustomerIntelligenceApplicationService` (P2-11 — read-only aggregation: `getOverview`, `getTimeline`, `getBookings`, `getRelationship`, `getFinancialSummary`, `getCommunications`)
 - **Domain services:** customer invariant enforcement helpers
-- **Repositories:** `CustomerRepository`, `ContactRepository`, `TimelineRepository`, `IssueNoteRepository`, `ReviewRequestRepository`
+- **Repositories:** `CustomerRepository`, `ContactRepository`, `TimelineEntryRepository`, `IssueNoteRepository`, `ReviewRequestRepository` — plus **additive read methods** used by intelligence: `findByCustomerId` on Lead, Event, Quotation, CommunicationRecord, Reminder, Invoice, Contact, TimelineEntry; `findByLeadIds` on FollowUp; payments/financial documents via booking IDs
+- **Controllers:** existing CRM controllers; `CustomerIntelligenceController` `@Controller('clients/:customerId')` — `GET overview|timeline|bookings|relationship|financial-summary|communications` all `@Permissions('clients:read')`
 - **Domain events published:**
   - `ClientCreated` / `ContactAdded`
   - `TimelineEntryAdded`
   - `IssueNoteCreated`
   - `ReviewRequestCreated`
+  - *(P2-11 publishes none — read-only)*
 - **Domain events consumed:**
   - `LeadConverted` (optional: link or update customer references)
+  - *(P2-11 consumes none — every response computed fresh per request)*
 - **External integrations:** none
 - **Transaction boundary:**
   - create/update customer
   - append timeline
   - create issue/review request
+  - *(P2-11: none — all intelligence operations are read-only GET)*
+- **P2-11 constraints (explicit):** no new Prisma tables/migration; no write ownership; HTTP resource remains `clients`; permission reuse `clients:read` (no intelligence permission); `WorkspaceDto` unchanged (Workspace booking-centric; Customer 360 customer-centric); health rule-based (no AI); payment rollup via bookings; follow-ups lead-scoped via `findByLeadIds`
 - **Related EP1 IDs:** EP1-CUS-001–004, EP1-SUP-001–003
 
 #### Quotation Module
@@ -743,20 +788,20 @@ Each module entry includes:
   - status updates
   - cancel/complete commands (complete enforces EP1-BR-002)
   - execution milestone advance enforces EP1-BR-003
+- **P2-09 composition:** booking-scoped `GET /bookings/:id/communications` and `GET /bookings/:id/reminders`; workspace progress/activity include additive `communications` counters and `communication_*` / `reminder_*` events without expanding thin `WorkspaceDto`
 - **Related EP1 IDs:** EP1-OPS-001, EP1-OPS-004, EP1-OPS-005, EP1-BR-002–EP1-BR-003, EP1-AUT-002
 
-#### Calendar Module
+#### Calendar Module (P2-10 — Unified Operations Calendar & Timeline)
 
 - **Package name:** `apps/api/src/modules/calendar/`
-- **Application services:** `CalendarService`
-- **Domain services:** calendar conflict helpers (warn-only where permitted by Phase 1 policy)
-- **Repositories:** `CalendarEntryRepository`
-- **Domain events published:**
-  - `CalendarEntryCreated`
-- **Domain events consumed:**
-  - `EventWorkspaceActivated` to create ops milestones entries
+- **Application services:** `CalendarApplicationService` — `getPlanningDashboard`, `getEvents`, `getAgenda`, `getTimeline`, `getConflicts`; aggregates from `EventRepository`, `StaffMemberRepository`/`StaffAssignmentRepository`/`StaffLeaveRepository`/`StaffAvailabilityRepository`, `VendorProcurementRepository`, `InventoryMovementRepository`/`InventoryReservationRepository`, `ReminderRepository`, `CommunicationRecordRepository`, `FinancialDocumentRepository`; reuses `SchedulingApplicationService.detectConflictsForStaffOnBooking` and `InventoryAvailabilityService` for display-only conflict detection
+- **Domain services:** none owned — Calendar delegates conflict detection to the Staff and Inventory modules rather than implementing its own rules
+- **Repositories:** none — Calendar has **no `CalendarEntryRepository`** and reads exclusively through the repositories owned by other modules (listed above)
+- **Domain events published:** none — Calendar is stateless and raises no domain events
+- **Domain events consumed:** none — every response is computed fresh per request from current source-module state; there is no cached or subscribed projection to keep in sync
 - **External integrations:** none
-- **Transaction boundary:** create/update entries in same transaction as conversion if required for atomic user experience
+- **Transaction boundary:** none — all operations are read-only (`GET`); no write transaction exists in this module
+- **P2-10 constraints (explicit):** no persisted `calendar_entries` table; no Prisma migration; `WorkspaceDto` unchanged (thin); Event Workspace only deep-links into `/app/calendar/`, it does not embed calendar data
 - **Related EP1 IDs:** EP1-OPS-005
 
 #### Task Module
@@ -779,23 +824,25 @@ Each module entry includes:
 #### Staff Module
 
 - **Package name:** `apps/api/src/modules/staff/`
-- **Application services:** `StaffService`, `StaffAssignmentService` (assignment recommendations)
-- **Domain services:** staff validity rules
-- **Repositories:** `StaffMemberRepository`, `StaffAssignmentRepository` (or event-linked assignment table)
+- **Application services:** `StaffService`, `StaffAssignmentService`, `StaffAvailabilityApplicationService`, `StaffLeaveApplicationService`, `SchedulingApplicationService`
+- **Domain services:** staff validity rules; P2-05 conflict + recommendation rules
+- **Repositories:** `StaffMemberRepository`, `StaffAssignmentRepository`, `StaffAvailabilityRepository`, `StaffLeaveRepository`
+- **Controllers:** `/staff`, `/staff-assignments`, `/staff-availability`, `/staff-leave`, `/scheduling`
 - **Domain events published:**
   - `StaffAssignmentConfirmed`
 - **Domain events consumed:**
   - `EventWorkspaceActivated` (optional: refresh assignment recommendations)
 - **External integrations:** none
-- **Transaction boundary:** staff master CRUD commands and staff assignment acceptance actions in one transaction
+- **Transaction boundary:** staff master CRUD commands and staff assignment acceptance actions in one transaction; leave review and availability mutations are separate commands. Confirm fails with `SCHEDULING_CONFLICT` when leave/availability/overlap conflicts exist.
 - **Related EP1 IDs:** EP1-STF-001–002, EP1-AUT-004, EP1-STF-003 (authorization gates)
 
 #### Vendor Procurement Module
 
 - **Package name:** `apps/api/src/modules/vendor/`
 - **Application services:** `VendorService`, `VendorProcurementService`, `ProcurementLineService`
-- **Domain services:** procurement state machine rules and issue note rules
-- **Repositories:** `VendorRepository`, `VendorProcurementRepository`, `ProcurementLineRepository`, `VendorIssueNoteRepository`, `ProcurementLineIssueNoteRepository`
+- **Domain services:** procurement state machine rules and issue note rules; P2-06 header workflow, quotes, POs, delivery, cost summary
+- **Repositories:** `VendorRepository`, `VendorProcurementRepository`, `ProcurementLineRepository`, `VendorIssueNoteRepository`, `ProcurementLineIssueNoteRepository`, `ProcurementQuoteRepository`, `PurchaseOrderRepository`, `ProcurementTimelineEventRepository`
+- **Controllers:** `/vendors`, booking-scoped `/bookings/:id/procurements`, `/procurements/:id/lines`, `/procurement/lines/...`, `/vendor-procurements`, `/procurement-quotes`
 - **Domain events published:**
   - `ProcurementLineStatusChanged`
   - `ProcurementLineIssueNoteAdded` (where applicable)
@@ -807,38 +854,57 @@ Each module entry includes:
 #### Inventory Module
 
 - **Package name:** `apps/api/src/modules/inventory/`
-- **Application services:** `InventoryService`, `InventoryMovementService`, `PackingListService`
-- **Domain services:** movement state machine, packing list generation rules (draft generation becomes a suggestion until accepted)
-- **Repositories:** `InventoryItemRepository`, `InventoryMovementRepository`, `PackingListRepository`, `DamageNoteRepository`, plus attachment linkage references
+- **Application services:** `InventoryService`, `InventoryMovementService`, `PackingListService`; P2-07: `InventoryReservationApplicationService`, `InventoryVerificationApplicationService`, `InventoryDamageReportApplicationService`, `InventoryAvailabilityService`
+- **Domain services:** movement state machine (Phase 1 path + P2-07 packing/dispatch/return-verify statuses), packing list generation rules (draft generation becomes a suggestion until accepted), availability = JP Nagar qty − active reservations − unlinked active movements
+- **Repositories:** `InventoryItemRepository`, `InventoryMovementRepository`, `PackingListRepository`, `DamageNoteRepository`; P2-07: `InventoryReservationRepository`, `InventoryVerificationRepository`, `InventoryDamageReportRepository`; plus attachment linkage references
+- **Controllers:** item/movement controllers; P2-07: `InventoryReservationController`, `InventoryVerificationController`, `InventoryDamageController`; booking-scoped reservation list on Booking controller
 - **Domain events published:**
   - `InventoryMovementStateChanged`
 - **Domain events consumed:** optional `PackingListDraftReady` notifications as internal signals
-- **External integrations:** none
-- **Transaction boundary:** create movement in planned state, transition movement states, attach photos, append damage notes each as atomic command transactions
+- **External integrations:** none (no barcode/QR; no image storage)
+- **Transaction boundary:** create movement in planned state, transition movement states, attach photos, append damage notes, create/release/cancel reservations, record verification/damage each as atomic command transactions
 - **Related EP1 IDs:** EP1-INV-001–007, EP1-AUT-003, EP1-AUT-005, EP1-STF-003
+- **Migration:** `20260719090000_p2_07_inventory_operations`
 
 #### Finance Module
 
 - **Package name:** `apps/api/src/modules/finance/`
-- **Application services:** `PaymentService`, `InvoiceService`, `ExpenseService`, `ProfitabilityService`
+- **Application services:** `PaymentService`, `InvoiceService`, `ExpenseService`, `ProfitabilityService`; P2-08: `FinancialDocumentApplicationService`
 - **Domain services:**
   - `PaymentLifecycleDomainService`
   - `ExpenseLifecycleDomainService`
   - `ProfitabilityDerivationDomainService`
-- **Repositories:** `PaymentRepository`, `InvoiceRepository`, `VendorExpenseRepository`
+- **Repositories:** `PaymentRepository`, `InvoiceRepository`, `VendorExpenseRepository`; P2-08: `FinancialDocumentRepository`, `FinancialDocumentAuditEventRepository`
+- **Controllers:** payment/invoice/expense/profitability controllers; P2-08: `FinancialDocumentController`, `PaymentDocumentController`, `ExpenseDocumentController`; booking-scoped `GET /bookings/:id/financial-documents` on Booking controller
 - **Domain events published:**
   - `PaymentRecorded`
   - `InvoiceCreated` / `InvoiceSent` / `InvoiceVoided` (if invoicing is part of the Phase 1 revenue basis)
   - `ExpenseRecorded` / `ExpenseVoided` (vendor expense proof lifecycle)
 - **Domain events consumed:**
   - `EventCompleted` and/or `PaymentRecorded` to refresh profitability read models
-- **External integrations:** none in Phase 1 (no payment gateway integration)
-- **Transaction boundary:** record payment, void payment, record expense, create/send/void invoice, and compute profitability reads (read models) via derived projection logic
+- **External integrations:** none in Phase 1 (no payment gateway; no binary object storage upload in P2-08)
+- **Transaction boundary:** record payment, void payment, record expense, create/send/void invoice, and compute profitability reads (read models) via derived projection logic; P2-08 document create/update/verify/reject/soft-delete persists audit events in the same use-case boundary
 - **Related EP1 IDs:** EP1-FIN-001–005, EP1-BR-001–002, EP1-KPI-004
+- **Migration:** `20260719100000_p2_08_financial_documents` (enums + `financial_documents` + `financial_document_audit_events`; metadata only — no binary/PDF columns)
 
-#### BI / Dashboard Module (Founder KPIs only)
+#### Communication Module (P2-09)
 
-- **Package name:** `apps/api/src/modules/bi/`
+- **Package name:** `apps/api/src/modules/communication/`
+- **Application services:** `CommunicationApplicationService`, `CommunicationTemplateApplicationService`, `ReminderApplicationService`, `NotificationPreferenceApplicationService`
+- **Domain services:** communication status transition rules (manual channels may complete); reminder complete/cancel; template archive
+- **Repositories:** `CommunicationRecordRepository`, `CommunicationAttachmentRepository`, `CommunicationTemplateRepository`, `ReminderRepository`, `NotificationPreferenceRepository`
+- **Controllers:** `CommunicationController` (`/communications`), `CommunicationTemplateController` (`/communication-templates`), `ReminderController` (`/reminders`), `NotificationPreferenceController` (`/notification-preferences`); booking-scoped `GET /bookings/:id/communications` and `GET /bookings/:id/reminders` on Booking controller
+- **Workspace composition:** additive progress `communications` + activity `communication_*` / `reminder_*`; thin `WorkspaceDto` unchanged
+- **Domain events published:** none required in P2-09 (manual lifecycle; activity derived from record timestamps)
+- **Domain events consumed:** none
+- **External integrations:** none (no WhatsApp/email/SMS provider; no background reminder scheduler; no AI generation)
+- **Transaction boundary:** create/update/transition/soft-delete communication; create/complete/cancel reminder; template create/update/archive; preference upsert — each as an atomic command
+- **Related EP1 IDs:** EP1-CUS-002 (operational communication tracking)
+- **Migration:** `20260719110000_p2_09_communication_center` (enums + `communication_templates` + `communication_records` + `communication_attachments` + `reminders` + `notification_preferences`; metadata-only attachments)
+
+#### BI / Dashboard Module (Founder KPIs — Phase 1, frozen)
+
+- **Package name:** `apps/api/src/modules/bi/` (Phase-1 founder surface)
 - **Application services:** `DashboardService`
 - **Domain services:** KPI derivation helpers (read model only)
 - **Repositories:** read model repositories
@@ -846,7 +912,23 @@ Each module entry includes:
 - **Domain events consumed:** payment/expense/lead events that change KPI aggregates
 - **External integrations:** none
 - **Transaction boundary:** update or refresh read models transactionally with source-of-truth operations if implemented synchronously; otherwise via background jobs (Phase 2+). For Phase 1, keep refresh consistent and deterministic for UAT.
+- **P2-12 note:** Phase-1 `/dashboards/*` (`dashboards:read`) remains **frozen**. Additive BI ships in the Analytics module below.
 - **Related EP1 IDs:** EP1-KPI-001–007, EP1-MKT-001–002
+
+#### Analytics Module (P2-12 — Business Intelligence KPI Dashboards)
+
+- **Package name:** `apps/api/src/modules/analytics/`
+- **Application services:** `AnalyticsApplicationService` — `getDashboard`, `getSales`, `getFinance`, `getStaff`, `getVendors`, `getInventory`, `getCustomers`, `getOperations`, `getTrends`, `exportDataset`
+- **Domain services:** none owned — Analytics composes existing repositories; P&L uses confirmed payments/expenses (same basis as `ProfitabilityApplicationService`); customer health mirrors P2-11 ladder
+- **Repositories:** none — Analytics has **no analytics repository**; additive read methods only: `QuotationRepository.findAll`, `CustomerRepository.findAll` (no Prisma migration)
+- **Controllers:** `AnalyticsController` `@Controller('analytics')` — ten `GET` routes all `@Permissions('analytics:read')`
+- **Domain events published:** none — read-only
+- **Domain events consumed:** none — every response computed fresh per request
+- **External integrations:** none (no AI / predictive / forecasting; export is CSV text or SpreadsheetML, not a binary xlsx library)
+- **Transaction boundary:** none — all operations are read-only `GET`
+- **Frontend:** `/app/analytics` hub — Founder / Sales / Finance / Operations / Trends / Export tabs; gated by `analytics:read`
+- **P2-12 constraints (explicit):** no new Prisma tables/migration; no write ownership; Phase-1 `/dashboards/*` frozen; permission `analytics:read` for `sales_manager`, `operations_manager`, `coordinator`, `finance`, `viewer` (plus `owner`/`admin`); trends = historical buckets only; Excel export = SpreadsheetML (`.xls`); inventory reservation rollup walks bookings via `findByBookingId`
+- **Related EP1 IDs:** EP1-KPI-001–007, EP1-MKT-001–002, P2-12
 
 ---
 
@@ -855,7 +937,7 @@ Each module entry includes:
 #### Administration / Suggestions
 
 - **Package name:** `apps/api/src/modules/admin/` (or `suggestions/` shared platform module)
-- **Application services:** `SuggestionService`, `TenantSettingsService` (Phase 1 minimal update)
+- **Application services:** `SuggestionApplicationService`, `TenantSettingsApplicationService` (Phase 1 minimal update)
 - **Domain services:** suggestion type routing and lifecycle rules
 - **Repositories:** `SuggestionRepository` (and optional in-app alert repository if separate)
 - **Domain events published:**
@@ -1067,14 +1149,12 @@ Per `docs/09-api-design.md`. Endpoint paths below are sprint-bound for W1 implem
 
 6) **Dependencies**
 
-- Suggestion persistence and accept/dismiss routing is **not** yet built as of Sprint 1 and must be
-  delivered within this sprint for the `checklist.generate` and `staff.assign` suggestion flows.
+- Suggestion persistence and accept/dismiss routing **is shipped** (`modules/admin/`, R3-03). Accept handlers execute `workspace.create` and `staff.assign`; `checklist.generate` marks accepted then returns `NOT_IMPLEMENTED` until checklist generation is built.
 - Workspace activation (EP1-OPS-001, EP1-AUT-002) does **not** depend on the Suggestion subsystem:
   `POST /api/v1/bookings/:id/activate-workspace` is a direct human command per ADR-017 and is usable
   independent of Suggestion delivery status. Suggestion acceptance (`workspace.create`) remains an
-  optional future entry point into the same `WorkspaceService.activateWorkspace()` use case once the
-  Suggestion subsystem is built — it is not a prerequisite for this workflow.
-- Staff master CRUD for EP1-STF-001 exists by end of Sprint 2
+  optional entry point into the same `WorkspaceService.activateWorkspace()` use case.
+- Staff master CRUD for EP1-STF-001 **is shipped** (`GET/POST/PATCH /api/v1/staff`, R3-01). P2-04 aligned `StaffAssignment.staffMemberId` to `StaffMember` (expand-contract with `legacyUserId` retained for Phase 3 drop).
 
 7) **Risks**
 

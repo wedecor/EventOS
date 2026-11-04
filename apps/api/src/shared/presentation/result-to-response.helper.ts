@@ -3,13 +3,23 @@ import { HttpException, HttpStatus } from '@nestjs/common';
 import type { ApplicationError, Result } from '../application/result';
 
 const ERROR_CODE_TO_STATUS: Record<string, HttpStatus> = {
+  FORBIDDEN: HttpStatus.FORBIDDEN,
+  NOT_IMPLEMENTED: HttpStatus.NOT_IMPLEMENTED,
   NOT_FOUND: HttpStatus.NOT_FOUND,
   VALIDATION_ERROR: HttpStatus.BAD_REQUEST,
+  INVALID_CREDENTIALS: HttpStatus.UNAUTHORIZED,
+  UNAUTHENTICATED: HttpStatus.UNAUTHORIZED,
+  // R1-05 (docs/14 §Brute Force Protection) — login locked out after too many
+  // failed attempts.
+  RATE_LIMITED: HttpStatus.TOO_MANY_REQUESTS,
   CONCURRENT_MODIFICATION: HttpStatus.CONFLICT,
   INVALID_STATE: HttpStatus.CONFLICT,
   INVALID_TRANSITION: HttpStatus.CONFLICT,
+  SCHEDULING_CONFLICT: HttpStatus.CONFLICT,
+  INSUFFICIENT_INVENTORY: HttpStatus.CONFLICT,
   DUPLICATE_CUSTOMER: HttpStatus.CONFLICT,
   DUPLICATE_EVENT: HttpStatus.CONFLICT,
+  DUPLICATE_REVIEW_REQUEST: HttpStatus.CONFLICT,
   'EP1-BR-001': HttpStatus.UNPROCESSABLE_ENTITY,
   'EP1-BR-002': HttpStatus.UNPROCESSABLE_ENTITY,
   'EP1-BR-003': HttpStatus.UNPROCESSABLE_ENTITY,

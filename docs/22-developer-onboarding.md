@@ -6,9 +6,9 @@
 |-------|-------|
 | **Document Owner** | Founding Engineering |
 | **Status** | Active |
-| **Version** | 1.0 |
+| **Version** | 1.1 |
 | **Created Date** | 2026-07-08 |
-| **Last Updated** | 2026-07-08 |
+| **Last Updated** | 2026-07-13 |
 | **Purpose** | Single source of truth for setting up a new development machine and continuing Event OS development |
 
 ---
@@ -34,9 +34,9 @@ One-line definition (from [`docs/02-product-vision.md`](./02-product-vision.md))
 | Data model | **Frozen** — [`docs/08-data-model.md`](./08-data-model.md) |
 | API design | **Frozen** — [`docs/09-api-design.md`](./09-api-design.md) |
 | Implementation specification | **Frozen** — [`docs/10-implementation-specification.md`](./10-implementation-specification.md) |
-| Backend application code | **In progress** — NestJS API in `apps/api/` |
-| Frontend application | **Not started** — `apps/web/` planned per folder structure |
-| Production deployment | **Not started** |
+| Backend application code | **Phase 1 RC1** — NestJS API in `apps/api/` (`1.0.0-rc1`, OpenAPI frozen) |
+| Frontend application | **In progress** — Admin Portal in `apps/web/` (F1-01–F1-13 complete; F1-14 Reports / F1-15 Settings pending) |
+| Production deployment | **Not started** (local/CI ready; cloud staging deferred) |
 
 ### Current implementation phase
 
@@ -71,7 +71,7 @@ Implementation technology was selected in **ADR-018** (NestJS). That ADR changes
 | Migrations | **Prisma Migrate** |
 | Cache / queue broker | **Redis 7** |
 | Job queue | **BullMQ** (wired, not yet used for business jobs) |
-| Authentication | **Passport JWT** (ADR-008 — not yet implemented) |
+| Authentication | **Passport JWT** (ADR-008 — **implemented** in `modules/auth/`) |
 | Request validation | **Zod** (ADR-013) |
 | API documentation | **Swagger / OpenAPI** |
 | Logging | **Pino** (ADR-015) |
@@ -91,12 +91,11 @@ EventOS/
 │   └── api/                       # NestJS backend (modular monolith) — START HERE
 │       ├── prisma/                # Schema, migrations, seed
 │       ├── src/                   # Application source
-│       │   ├── modules/           # Business modules (lead, customer, quotation, booking)
-│       │   ├── shared/            # Result types, domain events, shared ports
+│       │   ├── modules/           # Business + platform modules (auth, lead, customer, …)
+│       │   ├── shared/            # Result types, domain events, audit, shared ports
 │       │   ├── common/            # Health checks, filters, pipes
 │       │   ├── config/            # Environment validation (Zod)
-│       │   ├── database/          # PrismaModule, PrismaService, Redis provider
-│       │   └── auth/              # Auth placeholder (Passport JWT — Sprint 1+)
+│       │   └── database/          # PrismaModule, PrismaService, Redis provider
 │       ├── test/                  # E2E tests
 │       ├── .env.example           # Environment template (copy to .env)
 │       └── README.md              # API-specific quick start
@@ -136,11 +135,12 @@ EventOS/
 | Goal | Location |
 |------|----------|
 | Backend implementation | `apps/api/` |
+| Admin Portal frontend | `apps/web/` (static export; `pnpm validate` in that package) |
 | Architecture / requirements | `docs/` and `docs/business/` |
 | Local database & Redis | `infrastructure/docker/docker-compose.yml` |
 | Understanding existing We Decor tools | `current-systems/` (read-only reference) |
 
-**Note:** The full monorepo layout (`apps/web/`, `packages/`, root `pnpm-workspace.yaml`) is defined in [`docs/10-folder-structure.md`](./10-folder-structure.md) but not yet scaffolded. All active backend work lives in `apps/api/` today.
+**Note:** `apps/web/` Admin Portal is scaffolded and F1-01–F1-13 are implemented against frozen OpenAPI. Backend remains `apps/api/`. Wire contract: `apps/api/openapi/openapi.v1.json`.
 
 ---
 
@@ -269,7 +269,7 @@ pnpm prisma:seed
 This creates:
 
 - Tenant: **We Decor Events** (`we-decor`)
-- Admin placeholder: `admin@wedecor.events` (no password yet — auth not implemented)
+- Admin user: `admin@wedecor.events` — set password via `SEED_ADMIN_PASSWORD` when seeding (never hardcoded)
 
 ### Step 9 — Start the backend
 
@@ -559,70 +559,47 @@ Read [`12-architecture-decisions.md`](./12-architecture-decisions.md), focusing 
 
 ## 10. Current Progress
 
-*Last verified: 2026-07-08*
+*Last verified: 2026-07-13 (R3-12)*
 
 ### Completed
 
 | Layer | Status | Location |
 |-------|--------|----------|
 | Business requirements (EP1) | ✓ Approved & frozen | `docs/business/19-event-os-phase1-requirements.md` |
-| Architecture docs | ✓ Complete & frozen | `docs/05` – `docs/10`, ADRs |
-| NestJS backend scaffold | ✓ Done | `apps/api/` |
+| Architecture docs | ✓ Complete; synced R3-12 | `docs/05` – `docs/16`, ADRs |
+| NestJS backend | ✓ Phase 1 API surface | `apps/api/` |
 | Docker Compose (PostgreSQL + Redis) | ✓ Done | `infrastructure/docker/docker-compose.yml` |
-| Prisma configured | ✓ Done | `apps/api/prisma/`, `PrismaService` |
-| Sprint 1 schema (W5 subset) | ✓ Done | Migration `20260708144526_sprint1_w5_lead_to_booking` |
-| Database seed (tenant + admin) | ✓ Done | `apps/api/prisma/seed.ts` |
-| Health endpoints | ✓ Done | `GET /health`, `GET /health/ready` |
-| Swagger scaffold | ✓ Done | `GET /docs` |
-| Repository layer | ✓ Done | Lead, Customer, Quotation, Event, FollowUp |
-| Application services | ✓ Done | Lead, Customer, Quotation, Booking |
-| Domain events (publish only) | ✓ Done | `src/shared/events/sprint1-domain.events.ts` |
-| Unit tests (services + repos) | ✓ Done | 81+ tests, >90% service coverage |
+| Prisma + migrations + seed | ✓ Done | `apps/api/prisma/` |
+| Auth (login/refresh/logout/change-password) | ✓ Done | `modules/auth/` |
+| RBAC (JWT + permissions guards) | ✓ Done | `rbac.ts`, guards |
+| Domain modules (Lead → Finance + CRM adjuncts) | ✓ Done | `modules/*` |
+| Staff Master + Inventory Item Master | ✓ Done | `/staff`, `/inventory/items` |
+| Suggestions + Tenant Settings | ✓ Done | `/suggestions`, `/settings` |
+| Issue Notes + Review Requests | ✓ Done | `/events/:eventId/issues`, `/review-requests` |
+| Audit logging + login throttle + password policy | ✓ Done | R1 hardening |
+| Health + Swagger | ✓ Done | `/health`, `/docs` |
+| CI (PR + main) | ✓ Done | `.github/workflows/` |
+| Unit + e2e tests | ✓ Done | `*.spec.ts`, `test/*` |
 
-### Sprint 1 schema scope (what exists in Prisma today)
+### Prisma models (representative — see `schema.prisma`)
 
-**Included:** `Tenant`, `User`, `Customer`, `Lead`, `LeadStageHistory`, `FollowUp`, `Quotation`, `Event` (Booking)
+**Included:** Tenant, TenantSettings, User, Session, PasswordHistory, AuditLog, Customer, Contact, TimelineEntry (`client_interactions`), IssueNote, ReviewRequest, Lead, Quotation (+ line items), Event/workspace/execution, Task, StaffMember, StaffAssignment, Vendor/procurement, InventoryItem, InventoryMovement, Payment, Invoice, VendorExpense, Suggestion, and related Sprint tables.
 
-**Intentionally deferred** (required later in Sprint 1 or subsequent sprints):
-
-- `EventWorkspace`
-- `QuotationLineItem`
-- `Payment` (advance gating — stub port exists)
-- `Contact`
-- `Suggestion`
-- Staff, Tasks, Inventory, Vendors, Finance, Attachments
-
-### Not yet implemented
+### Not yet implemented / deferred
 
 | Item | Status |
 |------|--------|
-| REST controllers (`/api/v1/*`) | ✗ Not started |
-| JWT authentication / guards | ✗ Not started |
-| Zod request DTOs at API boundary | ✗ Not started |
-| Domain event handlers | ✗ Not started (publish only) |
-| Payment persistence | ✗ Not started |
-| Frontend (`apps/web/`) | ✗ Not started |
-| CI/CD pipelines | ✗ Not started |
+| Frontend (`apps/web/`) | ✓ F1-01–F1-13 (Reports/Settings UI pending F1-14/F1-15) |
+| Domain event handlers that auto-execute work | ✗ By design (ADR-017 — suggestion-only) |
+| `GET /clients` list route | ✗ Not shipped (Admin Portal hub-when-no-list) |
+| Inventory photo upload (`inventory:photos:write`) | ✗ Unbound permission |
+| `checklist.generate` suggestion execution | ✗ Accept marks accepted → `NOT_IMPLEMENTED` |
+| Cloud staging deploy / live Sentry sink / DR drills | ✗ Repo prep only (`infrastructure/*`) |
+| Multi-tenant SaaS / RLS | ✗ Phase 6 (ADR-016) |
 
 ### Current next task
 
-**Implement Sprint 1 REST controllers** for the W5 Lead → Booking workflow.
-
-Wire NestJS controllers to the existing application services. Follow [`docs/09-api-design.md`](./09-api-design.md) and Sprint 1 API list in [`docs/10-implementation-specification.md`](./10-implementation-specification.md) § Sprint 1.
-
-Priority endpoints:
-
-- **Lead:** `POST /api/v1/leads`, `PATCH /api/v1/leads/:id/stage`, `POST /api/v1/leads/:id/assign`, `POST /api/v1/leads/:id/follow-ups`, `GET /api/v1/leads/:id`
-- **Customer:** `POST /api/v1/clients`, `PATCH /api/v1/clients/:id`, `GET /api/v1/clients/:id`
-- **Quotation:** `POST /api/v1/quotations`, `POST /api/v1/quotations/:id/revise`, `POST /api/v1/quotations/:id/approve`, `GET /api/v1/quotations/:id`
-- **Booking:** `GET /api/v1/bookings/:id` (and commands wired through quotation approve → event creation flow)
-
-Controllers must:
-
-- Map `Result<T>` from application services to the standard error envelope ([`docs/18-api-standards.md`](./18-api-standards.md))
-- Validate requests with Zod
-- Not import Prisma directly
-- Not implement auth until the Auth module task is explicitly started (may stub tenant context for dev)
+Phase 1 backend is RC1; Admin Portal F1-01–F1-13 are synchronized in docs (R4-01). Next frontend milestones: **F1-14 Reports**, **F1-15 Settings**. Do **not** begin Phase 2 product work from this onboarding doc without an explicit backlog item.
 
 ---
 
@@ -849,37 +826,41 @@ Technology stack is fixed by ADR-018: NestJS + TypeScript + PostgreSQL + Prisma 
 ## Authoritative documents (read before coding)
 - Business: docs/business/19-event-os-phase1-requirements.md (EP1 IDs, W1–W5 UAT)
 - Domain: docs/07-domain-model.md (aggregates, invariants, domain event names)
-- API: docs/09-api-design.md (REST contracts)
-- Implementation: docs/10-implementation-specification.md (sprint plan)
+- API: docs/09-api-design.md (REST contracts) — includes R3-09 permission matrix
+- Data: docs/08-data-model.md
+- Implementation: docs/10-implementation-specification.md
+- Security: docs/14-security-principles.md
 - Onboarding: docs/22-developer-onboarding.md
+- ADRs: docs/12-architecture-decisions.md (especially ADR-016, ADR-017)
 
-## Current sprint
-Sprint 1 — W5 Lead → Booking
-Goal: lead capture through to Approved Event (Booking), with workspace activation suggestion queued (ADR-017).
+## Phase 1 delivery status (R4-01)
+Backend Phase 1 RC1 + OpenAPI freeze. Admin Portal F1-01–F1-13 implemented. Documentation synchronized 2026-07-13 (R4-01).
+Do NOT begin Phase 2 work unless explicitly requested.
 
 ## Completed work (do NOT redo)
-✓ NestJS scaffold in apps/api/
-✓ Docker Compose: PostgreSQL 16 + Redis 7 (infrastructure/docker/docker-compose.yml)
-✓ Prisma 7 configured with PrismaService, migrations, seed (tenant we-decor, admin@wedecor.events)
-✓ Sprint 1 Prisma schema: Tenant, User, Customer, Lead, LeadStageHistory, FollowUp, Quotation, Event
-✓ Repository layer: Lead, FollowUp, Customer, Quotation, Event (tenant-scoped, optimistic concurrency)
-✓ Application services: LeadApplicationService, CustomerApplicationService, QuotationApplicationService, BookingApplicationService
-✓ Domain events published (not handled): LeadCreated, LeadStageChanged, LeadAssigned, FollowUpCreated, ClientCreated, QuotationCreated, QuotationSuperseded, QuotationApproved, EventCreated, BookingStatusChanged
-✓ Result<T> pattern, unit tests (>90% service coverage), health + Swagger scaffold
-✓ EP1-BR-001 enforced via AdvancePaymentQuery port (stub returns false until Payment model exists)
+✓ Full Phase 1 modular monolith under apps/api/src/modules/ (auth, lead, customer, quotation, booking, task, staff, vendor, inventory, payment, finance, dashboard, admin/suggestions, tenant/settings)
+✓ Auth: login / refresh / logout / change-password; JWT + session refresh; login throttle; password policy/history/HIBP
+✓ RBAC: PermissionsGuard + rbac.ts matrix (marketing = empty grant)
+✓ CRM adjuncts: timeline (client_interactions), contacts, issue notes, review requests
+✓ Staff Master (/staff) + Inventory Item Master (/inventory/items) + Suggestions + Tenant Settings
+✓ Audit logging (representative sensitive ops), Docker, Compose, PR/main CI, Sentry SDK (optional DSN)
+✓ Domain events published suggestion-only (ADR-017) — no auto-execution handlers
+✓ Result<T>, Zod validation, tenant-scoped repositories (ADR-016)
+✓ Admin Portal apps/web F1-01–F1-13 (auth, shell, dashboard, customers, leads, quotations, bookings, workspace, vendors, staff, inventory, finance)
 
-## NOT implemented (do NOT assume these exist)
-✗ REST controllers (/api/v1/* business routes)
-✗ JWT authentication / tenant context from auth
-✗ Payment, QuotationLineItem, Contact, Suggestion, EventWorkspace models
-✗ Domain event handlers
-✗ Frontend (apps/web/)
+## NOT implemented / deferred (do NOT invent)
+✗ Admin Portal F1-14 Reports / F1-15 Settings UI (placeholders only)
+✗ GET /clients, GET /quotations, GET /bookings lists; quotation PDF; inventory item GET-by-id; inventory photo upload; attachment upload pipeline
+✗ Checklist.generate suggestion execution; procurement/staff-assignment/task Admin Portal UIs (APIs exist; not in F1-01–F1-13)
+✗ Cloud staging auto-deploy, live log aggregator, live DR drills (repo prep only)
+✗ Multi-tenant SaaS / PostgreSQL RLS (Phase 6)
+✗ Auto-executing domain event handlers (forbidden by ADR-017)
 
 ## Implementation rules
 1. Services depend ONLY on repository interfaces — no Prisma outside infrastructure/persistence
 2. Controllers depend on application services — map Result<T> to HTTP error envelope (docs/18-api-standards.md)
 3. Validate API input with Zod (ADR-013)
-4. Publish domain events with canonical names from docs/07-domain-model.md — do not implement handlers
+4. Publish domain events with canonical names from docs/07 — do not add auto-execution handlers
 5. No auto-execution (ADR-017) — suggestions/alerts only
 6. One task at a time; minimal diff; match existing code conventions
 7. Run: cd apps/api && pnpm build && pnpm lint && pnpm test && pnpm test:e2e
@@ -887,15 +868,13 @@ Goal: lead capture through to Approved Event (Booking), with workspace activatio
 ## Dev environment
 - Node.js 22 LTS (>=22.12 <23), pnpm 10.13+
 - cd apps/api && cp .env.example .env
+- Set JWT_SECRET (>=32 chars). Optionally SEED_ADMIN_PASSWORD before prisma:seed
 - docker compose -f infrastructure/docker/docker-compose.yml up -d
 - pnpm install && pnpm prisma:generate && pnpm prisma:migrate && pnpm prisma:seed
 - pnpm start:dev → http://localhost:3000 (Swagger at /docs)
 
 ## Current next task
-Implement Sprint 1 REST controllers for W5 Lead → Booking:
-Wire NestJS controllers to existing application services per docs/09-api-design.md and docs/10-implementation-specification.md Sprint 1 API list.
-Priority: Lead, Customer, Quotation, Booking endpoints listed in docs/22-developer-onboarding.md §10.
-Do NOT implement auth module unless explicitly requested — stub tenant context for local dev if needed.
+Follow the explicit user backlog item only. After R3-12, do not start Phase 2 unless asked.
 ```
 
 ---
@@ -911,5 +890,5 @@ Do NOT implement auth module unless explicitly requested — stub tenant context
 
 ---
 
-*Last updated: 2026-07-10*
+*Last updated: 2026-07-13 (R3-12)*
 *Owner: Founding Engineering*

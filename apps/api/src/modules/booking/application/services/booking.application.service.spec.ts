@@ -90,6 +90,7 @@ describe('BookingApplicationService', () => {
     eventRepository = {
       create: jest.fn(),
       findById: jest.fn(),
+      findByCustomerId: jest.fn(),
       findByQuotationId: jest.fn(),
       findMaxBookingNumber: jest.fn(),
       findByEventDate: jest.fn(),
@@ -98,6 +99,7 @@ describe('BookingApplicationService', () => {
     quotationRepository = {
       create: jest.fn(),
       findById: jest.fn(),
+      findByCustomerId: jest.fn(),
       findLatestRevision: jest.fn(),
       findMaxQuotationNumber: jest.fn(),
       findByIds: jest.fn(),
@@ -110,6 +112,7 @@ describe('BookingApplicationService', () => {
       create: jest.fn(),
       findById: jest.fn(),
       findByBookingId: jest.fn(),
+      findByCustomerId: jest.fn(),
       findMaxInvoiceNumber: jest.fn(),
       findAll: jest.fn(),
       hasDraftInvoiceForBooking: jest.fn().mockResolvedValue(false),
@@ -187,6 +190,28 @@ describe('BookingApplicationService', () => {
 
     expect(result.ok).toBe(true);
     expect(publish).toHaveBeenCalledWith(expect.any(EventCreatedEvent));
+  });
+
+  // EP1-BR-003 — no execution owner is assigned at booking creation; assignment is a
+  // separate, explicit command (ExecutionProgressService.assignExecutionOwner).
+  it('creates an event without an execution owner (assigned later via a separate command)', async () => {
+    quotationRepository.findById.mockResolvedValue(approvedQuotation);
+    advancePaymentQuery.hasConfirmedAdvance.mockResolvedValue(true);
+    eventRepository.findByQuotationId.mockResolvedValue(null);
+    eventRepository.findMaxBookingNumber.mockResolvedValue(5000);
+    eventRepository.create.mockResolvedValue(baseEvent);
+
+    const result = await service.createEventFromApprovedQuotation(
+      tenantId,
+      quotationId,
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.executionOwnerId).toBeNull();
+    }
+    const createArgs = eventRepository.create.mock.calls[0]?.[1];
+    expect(createArgs).not.toHaveProperty('executionOwnerId');
   });
 
   it('enforces EP1-BR-001 when creating an event', async () => {

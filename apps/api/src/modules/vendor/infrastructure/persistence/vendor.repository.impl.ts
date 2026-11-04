@@ -113,9 +113,41 @@ export class VendorRepositoryImpl
       paymentTerms: vendor.paymentTerms,
       taxDetails: vendor.taxDetails,
       notes: vendor.notes,
+      procurementCount: vendor.procurementCount,
+      onTimeDeliveryCount: vendor.onTimeDeliveryCount,
+      completedProcurementCount: vendor.completedProcurementCount,
       createdAt: vendor.createdAt,
       updatedAt: vendor.updatedAt,
       version: vendor.version,
     };
+  }
+
+  async incrementPerformance(
+    tenantId: string,
+    id: string,
+    deltas: {
+      procurementCount?: number;
+      onTimeDeliveryCount?: number;
+      completedProcurementCount?: number;
+    },
+  ): Promise<void> {
+    await this.prisma.vendor.updateMany({
+      where: { id, tenantId },
+      data: {
+        ...(deltas.procurementCount
+          ? { procurementCount: { increment: deltas.procurementCount } }
+          : {}),
+        ...(deltas.onTimeDeliveryCount
+          ? { onTimeDeliveryCount: { increment: deltas.onTimeDeliveryCount } }
+          : {}),
+        ...(deltas.completedProcurementCount
+          ? {
+              completedProcurementCount: {
+                increment: deltas.completedProcurementCount,
+              },
+            }
+          : {}),
+      },
+    });
   }
 }

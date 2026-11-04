@@ -55,10 +55,13 @@ describe('TaskApplicationService', () => {
     bookingId,
     title: 'Confirm venue access',
     description: null,
+    category: 'general',
+    priority: 'medium',
     assignedTo: null,
     dueAt: null,
     status: 'pending',
     completedAt: null,
+    completionNotes: null,
     createdAt: new Date(),
     updatedAt: new Date(),
     version: 1,
@@ -102,6 +105,7 @@ describe('TaskApplicationService', () => {
     eventRepository = {
       create: jest.fn(),
       findById: jest.fn(),
+      findByCustomerId: jest.fn(),
       findByQuotationId: jest.fn(),
       findMaxBookingNumber: jest.fn(),
       findByEventDate: jest.fn(),
@@ -425,7 +429,7 @@ describe('TaskApplicationService', () => {
     expect(taskRepository.update).toHaveBeenCalledWith(
       tenantId,
       taskId,
-      { status: 'in_progress', completedAt: null },
+      { status: 'in_progress', completedAt: null, completionNotes: null },
       1,
     );
     expect(publish).toHaveBeenCalledWith(expect.any(TaskUpdatedEvent));

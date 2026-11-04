@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import type { TaskCategory, TaskPriority } from '@prisma/client';
 import {
   failure,
   success,
@@ -23,6 +24,8 @@ export type CreateTaskInput = {
   bookingId: string;
   title: string;
   description?: string | null;
+  category?: TaskCategory;
+  priority?: TaskPriority;
   assignedTo?: string | null;
   dueAt?: Date | null;
 };
@@ -30,12 +33,15 @@ export type CreateTaskInput = {
 export type UpdateTaskInput = {
   title?: string;
   description?: string | null;
+  category?: TaskCategory;
+  priority?: TaskPriority;
   assignedTo?: string | null;
   dueAt?: Date | null;
 };
 
 export type UpdateTaskStatusInput = {
   status: TaskRecord['status'];
+  completionNotes?: string | null;
 };
 
 const ALLOWED_TRANSITIONS: Record<
@@ -86,6 +92,8 @@ export class TaskApplicationService {
       bookingId: input.bookingId,
       title: input.title,
       description: input.description,
+      category: input.category,
+      priority: input.priority,
       assignedTo: input.assignedTo,
       dueAt: input.dueAt,
     });
@@ -165,6 +173,8 @@ export class TaskApplicationService {
         {
           title: input.title,
           description: input.description,
+          category: input.category,
+          priority: input.priority,
           assignedTo: input.assignedTo,
           dueAt: input.dueAt,
         },
@@ -214,6 +224,10 @@ export class TaskApplicationService {
         {
           status: input.status,
           completedAt: input.status === 'completed' ? new Date() : null,
+          completionNotes:
+            input.status === 'completed'
+              ? (input.completionNotes ?? existing.completionNotes)
+              : existing.completionNotes,
         },
         version,
       );

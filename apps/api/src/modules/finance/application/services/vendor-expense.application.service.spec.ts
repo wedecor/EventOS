@@ -1,3 +1,4 @@
+import { AUDIT_ACTIONS, type AuditLogService } from '../../../../shared/audit';
 import { ConcurrentModificationError } from '../../../../shared/database';
 import { DomainEventPublisher } from '../../../../shared/events/domain-event.base';
 import {
@@ -27,6 +28,7 @@ describe('VendorExpenseApplicationService', () => {
   const bookingId = 'booking-1';
   const vendorId = 'vendor-1';
   const procurementLineId = 'line-1';
+  const actorId = 'user-1';
 
   const baseBooking: EventRecord = {
     id: bookingId,
@@ -123,9 +125,11 @@ describe('VendorExpenseApplicationService', () => {
   let service: VendorExpenseApplicationService;
 
   let publish: jest.Mock;
+  let auditRecord: jest.Mock;
 
   beforeEach(() => {
     publish = jest.fn();
+    auditRecord = jest.fn().mockResolvedValue(undefined);
     vendorExpenseRepository = {
       create: jest.fn(),
       findById: jest.fn(),
@@ -136,6 +140,7 @@ describe('VendorExpenseApplicationService', () => {
     eventRepository = {
       create: jest.fn(),
       findById: jest.fn(),
+      findByCustomerId: jest.fn(),
       findByQuotationId: jest.fn(),
       findMaxBookingNumber: jest.fn(),
       findByEventDate: jest.fn(),
@@ -162,6 +167,7 @@ describe('VendorExpenseApplicationService', () => {
       vendorRepository,
       procurementLineRepository,
       eventPublisher,
+      { record: auditRecord } as unknown as AuditLogService,
     );
   });
 
@@ -170,7 +176,7 @@ describe('VendorExpenseApplicationService', () => {
   it('rejects recordExpense when booking is not found', async () => {
     eventRepository.findById.mockResolvedValue(null);
 
-    const result = await service.recordExpense(tenantId, bookingId, {
+    const result = await service.recordExpense(actorId, tenantId, bookingId, {
       vendorId,
       amount: 10000,
       method: 'bank_transfer',
@@ -181,12 +187,25 @@ describe('VendorExpenseApplicationService', () => {
     if (!result.ok) {
       expect(result.error.code).toBe('NOT_FOUND');
     }
+    // R1-08 — a failure audit record is emitted (no VendorExpense created, empty entityId).
+    expect(auditRecord).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorId,
+        action: AUDIT_ACTIONS.VENDOR_EXPENSE_CREATED,
+        entityId: '',
+        outcome: 'failure',
+        metadata: expect.objectContaining({
+          errorCode: 'NOT_FOUND',
+          bookingId,
+        }),
+      }),
+    );
   });
 
   it('rejects recordExpense when amount is zero or negative', async () => {
     eventRepository.findById.mockResolvedValue(baseBooking);
 
-    const result = await service.recordExpense(tenantId, bookingId, {
+    const result = await service.recordExpense(actorId, tenantId, bookingId, {
       vendorId,
       amount: 0,
       method: 'bank_transfer',
@@ -203,7 +222,7 @@ describe('VendorExpenseApplicationService', () => {
     eventRepository.findById.mockResolvedValue(baseBooking);
     vendorRepository.findById.mockResolvedValue(null);
 
-    const result = await service.recordExpense(tenantId, bookingId, {
+    const result = await service.recordExpense(actorId, tenantId, bookingId, {
       vendorId,
       amount: 10000,
       method: 'bank_transfer',
@@ -221,7 +240,7 @@ describe('VendorExpenseApplicationService', () => {
     vendorRepository.findById.mockResolvedValue(baseVendor);
     procurementLineRepository.findById.mockResolvedValue(null);
 
-    const result = await service.recordExpense(tenantId, bookingId, {
+    const result = await service.recordExpense(actorId, tenantId, bookingId, {
       vendorId,
       procurementLineId,
       amount: 10000,
@@ -243,7 +262,7 @@ describe('VendorExpenseApplicationService', () => {
       bookingId: 'other-booking',
     });
 
-    const result = await service.recordExpense(tenantId, bookingId, {
+    const result = await service.recordExpense(actorId, tenantId, bookingId, {
       vendorId,
       procurementLineId,
       amount: 10000,
@@ -263,7 +282,7 @@ describe('VendorExpenseApplicationService', () => {
     procurementLineRepository.findById.mockResolvedValue(baseProcurementLine);
     vendorExpenseRepository.create.mockResolvedValue(baseExpense);
 
-    const result = await service.recordExpense(tenantId, bookingId, {
+    const result = await service.recordExpense(actorId, tenantId, bookingId, {
       vendorId,
       procurementLineId,
       amount: 10000,
@@ -277,6 +296,18 @@ describe('VendorExpenseApplicationService', () => {
       expect(result.value.status).toBe('confirmed');
     }
     expect(publish).toHaveBeenCalledWith(expect.any(ExpenseRecordedEvent));
+    // R1-08 — a success audit record is emitted for the recorded vendor expense.
+    expect(auditRecord).toHaveBeenCalledTimes(1);
+    expect(auditRecord).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorId,
+        tenantId,
+        action: AUDIT_ACTIONS.VENDOR_EXPENSE_CREATED,
+        entityType: 'VendorExpense',
+        entityId: 'expense-1',
+        outcome: 'success',
+      }),
+    );
   });
 
   it('records a vendor expense without a procurement line', async () => {
@@ -287,7 +318,7 @@ describe('VendorExpenseApplicationService', () => {
       procurementLineId: null,
     });
 
-    const result = await service.recordExpense(tenantId, bookingId, {
+    const result = await service.recordExpense(actorId, tenantId, bookingId, {
       vendorId,
       amount: 10000,
       method: 'bank_transfer',

@@ -9,8 +9,16 @@ import {
   Post,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Permissions } from '../../auth';
 import { ZodValidationPipe } from '../../../common/pipes/zod-validation.pipe';
 import { IfMatchVersion } from '../../../shared/presentation/if-match.decorator';
+import {
+  ApiDataResponse,
+  ApiIfMatchHeader,
+  ApiStandardErrors,
+  ApiUuidParam,
+  ApiZodBody,
+} from '../../../shared/presentation/openapi.helpers';
 import { resultToResponse } from '../../../shared/presentation/result-to-response.helper';
 import { TenantId } from '../../../shared/presentation/tenant-context.decorator';
 import { CustomerApplicationService } from '../application/services/customer.application.service';
@@ -28,8 +36,12 @@ export class CustomerController {
   constructor(private readonly customerService: CustomerApplicationService) {}
 
   @Post()
+  @Permissions('clients:write')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create a new customer' })
+  @ApiZodBody(createCustomerSchema)
+  @ApiDataResponse(201, 'Customer created')
+  @ApiStandardErrors()
   async createCustomer(
     @TenantId() tenantId: string,
     @Body(new ZodValidationPipe(createCustomerSchema)) body: CreateCustomerBody,
@@ -45,15 +57,25 @@ export class CustomerController {
   }
 
   @Get(':id')
+  @Permissions('clients:read')
   @ApiOperation({ summary: 'Get a customer by ID' })
+  @ApiUuidParam('id')
+  @ApiDataResponse(200, 'Customer found')
+  @ApiStandardErrors()
   async getCustomerById(@TenantId() tenantId: string, @Param('id') id: string) {
     const result = await this.customerService.getCustomerById(tenantId, id);
     return resultToResponse(result);
   }
 
   @Patch(':id')
+  @Permissions('clients:write')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Update a customer' })
+  @ApiUuidParam('id')
+  @ApiIfMatchHeader(false)
+  @ApiZodBody(updateCustomerSchema)
+  @ApiDataResponse(200, 'Customer updated')
+  @ApiStandardErrors()
   async updateCustomer(
     @TenantId() tenantId: string,
     @Param('id') id: string,

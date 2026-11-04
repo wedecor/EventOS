@@ -5,9 +5,23 @@ export type InventoryMovementRecord = {
   tenantId: string;
   bookingId: string;
   inventoryItemId: string;
+  reservationId: string | null;
   quantity: number;
   notes: string | null;
   status: InventoryMovementStatus;
+  packedByUserId: string | null;
+  packingStartedAt: Date | null;
+  verificationNotes: string | null;
+  verifiedAt: Date | null;
+  readyForDispatchAt: Date | null;
+  vehicle: string | null;
+  driverName: string | null;
+  dispatchedAt: Date | null;
+  returnedQuantity: number | null;
+  missingQuantity: number | null;
+  damagedQuantity: number | null;
+  returnVerificationNotes: string | null;
+  returnVerifiedAt: Date | null;
   pickedAt: Date | null;
   packedAt: Date | null;
   loadedAt: Date | null;
@@ -24,11 +38,25 @@ export type CreateInventoryMovementData = {
   inventoryItemId: string;
   quantity: number;
   notes?: string | null;
+  reservationId?: string | null;
 };
 
 export type UpdateInventoryMovementData = {
   status?: InventoryMovementStatus;
   notes?: string | null;
+  packedByUserId?: string | null;
+  packingStartedAt?: Date | null;
+  verificationNotes?: string | null;
+  verifiedAt?: Date | null;
+  readyForDispatchAt?: Date | null;
+  vehicle?: string | null;
+  driverName?: string | null;
+  dispatchedAt?: Date | null;
+  returnedQuantity?: number | null;
+  missingQuantity?: number | null;
+  damagedQuantity?: number | null;
+  returnVerificationNotes?: string | null;
+  returnVerifiedAt?: Date | null;
   pickedAt?: Date | null;
   packedAt?: Date | null;
   loadedAt?: Date | null;
@@ -36,6 +64,12 @@ export type UpdateInventoryMovementData = {
   returnedAt?: Date | null;
   cleanedReadyAt?: Date | null;
 };
+
+/** Statuses that no longer hold stock (available again or never held). */
+export const INVENTORY_MOVEMENT_RELEASED_STATUSES: InventoryMovementStatus[] = [
+  'cancelled',
+  'cleaned_ready',
+];
 
 export abstract class InventoryMovementRepository {
   abstract create(
@@ -53,8 +87,13 @@ export abstract class InventoryMovementRepository {
     bookingId: string,
   ): Promise<InventoryMovementRecord[]>;
 
-  // EP1-INV-003, EP1-INV-005 — Dashboard: tenant-wide movement read for inventory summary
   abstract findAll(tenantId: string): Promise<InventoryMovementRecord[]>;
+
+  /** Active movements for an item that are not linked to a reservation (stock holders). */
+  abstract findUnlinkedActiveByItemId(
+    tenantId: string,
+    inventoryItemId: string,
+  ): Promise<InventoryMovementRecord[]>;
 
   abstract update(
     tenantId: string,

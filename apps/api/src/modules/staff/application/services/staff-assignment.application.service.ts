@@ -13,6 +13,7 @@ import {
   StaffAssignmentReleasedEvent,
 } from '../../../../shared/events/sprint2-domain.events';
 import { EventRepository } from '../../../booking/domain/repositories/event.repository';
+import { StaffMemberRepository } from '../../domain/repositories/staff-member.repository';
 import {
   StaffAssignmentRepository,
   type StaffAssignmentRecord,
@@ -21,6 +22,7 @@ import {
   toStaffAssignmentDto,
   type StaffAssignmentDto,
 } from '../dtos/staff-assignment.dto';
+import { SchedulingApplicationService } from './scheduling.application.service';
 
 export type CreateStaffAssignmentInput = {
   bookingId: string;
@@ -45,16 +47,17 @@ const ALLOWED_TRANSITIONS: Record<
   cancelled: [],
 };
 
-// EP1-STF-002, EP1-AUT-004 — Staff assignment recommendations; Zakir confirms via direct
-// human command (ADR-017 direct-command entry point; Suggestion-subsystem acceptance is an
-// optional future entry point into the same use cases, per the precedent set by
-// WorkspaceService.activateWorkspace()).
+// EP1-STF-002, EP1-AUT-004 / P2-04 — Assignments reference StaffMember.
+// Legacy User UUID still accepted via resolveForAssignment bridge.
+// P2-05 — Confirm runs scheduling conflict detection on StaffMember.
 @Injectable()
 export class StaffAssignmentApplicationService {
   constructor(
     private readonly staffAssignmentRepository: StaffAssignmentRepository,
+    private readonly staffMemberRepository: StaffMemberRepository,
     private readonly eventRepository: EventRepository,
     private readonly eventPublisher: DomainEventPublisher,
+    private readonly schedulingService: SchedulingApplicationService,
   ) {}
 
   async createAssignment(
@@ -77,9 +80,26 @@ export class StaffAssignmentApplicationService {
       );
     }
 
+    const staffMember = await this.staffMemberRepository.resolveForAssignment(
+      tenantId,
+      input.staffMemberId,
+    );
+    if (!staffMember) {
+      return failure('NOT_FOUND', 'Staff member not found.');
+    }
+
+    if (staffMember.status !== 'active') {
+      return failure(
+        'INVALID_STATE',
+        'Only active staff members can be assigned to events.',
+        { staffMemberId: staffMember.id, status: staffMember.status },
+      );
+    }
+
     const assignment = await this.staffAssignmentRepository.create(tenantId, {
       bookingId: input.bookingId,
-      staffMemberId: input.staffMemberId,
+      staffMemberId: staffMember.id,
+      legacyUserId: staffMember.userId,
       role: input.role,
       isOnSiteLead: input.isOnSiteLead,
       reportingAt: input.reportingAt,
@@ -90,7 +110,7 @@ export class StaffAssignmentApplicationService {
       new StaffAssignmentCreatedEvent(tenantId, assignment),
     );
 
-    return success(toStaffAssignmentDto(assignment));
+    return success(toStaffAssignmentDto(assignment, staffMember));
   }
 
   async getAssignmentById(
@@ -105,10 +125,13 @@ export class StaffAssignmentApplicationService {
       return failure('NOT_FOUND', 'Staff assignment not found.');
     }
 
-    return success(toStaffAssignmentDto(assignment));
+    const staffMember = await this.staffMemberRepository.findById(
+      tenantId,
+      assignment.staffMemberId,
+    );
+    return success(toStaffAssignmentDto(assignment, staffMember));
   }
 
-  // EP1-STF-002 — Staff assignment visibility for a booking (Event Workspace integration)
   async listAssignmentsForBooking(
     tenantId: string,
     bookingId: string,
@@ -118,10 +141,19 @@ export class StaffAssignmentApplicationService {
       bookingId,
     );
 
-    return success(assignments.map(toStaffAssignmentDto));
+    const dtos = await Promise.all(
+      assignments.map(async (assignment) => {
+        const staffMember = await this.staffMemberRepository.findById(
+          tenantId,
+          assignment.staffMemberId,
+        );
+        return toStaffAssignmentDto(assignment, staffMember);
+      }),
+    );
+
+    return success(dtos);
   }
 
-  // EP1-AUT-004, EP1-AUT-001 — Human approval required; no auto-assign
   async confirmAssignment(
     tenantId: string,
     assignmentId: string,
@@ -140,6 +172,36 @@ export class StaffAssignmentApplicationService {
       return transition;
     }
 
+    const staffMember = await this.staffMemberRepository.findById(
+      tenantId,
+      existing.staffMemberId,
+    );
+    if (staffMember && staffMember.status !== 'active') {
+      return failure(
+        'INVALID_STATE',
+        'Cannot confirm assignment for a non-active staff member.',
+        { staffMemberId: staffMember.id, status: staffMember.status },
+      );
+    }
+
+    const conflictResult =
+      await this.schedulingService.detectConflictsForStaffOnBooking(
+        tenantId,
+        existing.staffMemberId,
+        existing.bookingId,
+        assignmentId,
+      );
+    if (!conflictResult.ok) {
+      return conflictResult;
+    }
+    if (conflictResult.value.length > 0) {
+      return failure(
+        'SCHEDULING_CONFLICT',
+        'Cannot confirm assignment due to scheduling conflicts.',
+        { conflicts: conflictResult.value },
+      );
+    }
+
     try {
       const assignment = await this.staffAssignmentRepository.update(
         tenantId,
@@ -152,7 +214,7 @@ export class StaffAssignmentApplicationService {
         new StaffAssignmentConfirmedEvent(tenantId, assignment),
       );
 
-      return success(toStaffAssignmentDto(assignment));
+      return success(toStaffAssignmentDto(assignment, staffMember));
     } catch (error: unknown) {
       return this.handleConcurrency(error, assignmentId);
     }
@@ -188,7 +250,11 @@ export class StaffAssignmentApplicationService {
         new StaffAssignmentReleasedEvent(tenantId, assignment),
       );
 
-      return success(toStaffAssignmentDto(assignment));
+      const staffMember = await this.staffMemberRepository.findById(
+        tenantId,
+        assignment.staffMemberId,
+      );
+      return success(toStaffAssignmentDto(assignment, staffMember));
     } catch (error: unknown) {
       return this.handleConcurrency(error, assignmentId);
     }
@@ -233,7 +299,11 @@ export class StaffAssignmentApplicationService {
         new StaffAssignmentCancelledEvent(tenantId, assignment),
       );
 
-      return success(toStaffAssignmentDto(assignment));
+      const staffMember = await this.staffMemberRepository.findById(
+        tenantId,
+        assignment.staffMemberId,
+      );
+      return success(toStaffAssignmentDto(assignment, staffMember));
     } catch (error: unknown) {
       return this.handleConcurrency(error, assignmentId);
     }

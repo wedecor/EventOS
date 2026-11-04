@@ -4,6 +4,11 @@ import {
   success,
   type Result,
 } from '../../../../shared/application/result';
+import {
+  AuditLogService,
+  AUDIT_ACTIONS,
+  AUDIT_ENTITY_TYPES,
+} from '../../../../shared/audit';
 import { ConcurrentModificationError } from '../../../../shared/database';
 import { DomainEventPublisher } from '../../../../shared/events/domain-event.base';
 import { PaymentRecordedEvent } from '../../../../shared/events/sprint1-domain.events';
@@ -32,9 +37,44 @@ export class PaymentApplicationService {
     private readonly paymentRepository: PaymentRepository,
     private readonly invoiceRepository: InvoiceRepository,
     private readonly eventPublisher: DomainEventPublisher,
+    private readonly auditLog: AuditLogService,
   ) {}
 
+  // R1-08 — audit wrapper. Emits exactly one audit record per authenticated payment
+  // recording attempt, capturing the real outcome. On failure no Payment exists, so
+  // `entityId` is empty and the attempted context (invoice/booking) is captured in
+  // `metadata`. The audit write is best-effort and outside the business transaction.
   async recordPayment(
+    actorId: string,
+    tenantId: string,
+    input: RecordPaymentInput,
+  ): Promise<Result<PaymentDto>> {
+    const result = await this.recordPaymentInternal(tenantId, input);
+
+    await this.auditLog.record({
+      actorId,
+      tenantId,
+      action: AUDIT_ACTIONS.PAYMENT_RECORDED,
+      entityType: AUDIT_ENTITY_TYPES.PAYMENT,
+      entityId: result.ok ? result.value.id : '',
+      outcome: result.ok ? 'success' : 'failure',
+      metadata: result.ok
+        ? {
+            amount: result.value.amount,
+            invoiceId: result.value.invoiceId,
+            bookingId: result.value.bookingId,
+          }
+        : {
+            errorCode: result.error.code,
+            invoiceId: input.invoiceId ?? null,
+            bookingId: input.bookingId ?? null,
+          },
+    });
+
+    return result;
+  }
+
+  private async recordPaymentInternal(
     tenantId: string,
     input: RecordPaymentInput,
   ): Promise<Result<PaymentDto>> {

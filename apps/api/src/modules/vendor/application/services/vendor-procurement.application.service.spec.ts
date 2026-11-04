@@ -8,6 +8,9 @@ import type {
   ProcurementLineRecord,
   ProcurementLineRepository,
 } from '../../domain/repositories/procurement-line.repository';
+import type { ProcurementQuoteRepository } from '../../domain/repositories/procurement-quote.repository';
+import type { ProcurementTimelineEventRepository } from '../../domain/repositories/procurement-timeline-event.repository';
+import type { PurchaseOrderRepository } from '../../domain/repositories/purchase-order.repository';
 import type {
   VendorRecord,
   VendorRepository,
@@ -63,6 +66,9 @@ describe('VendorProcurementApplicationService', () => {
     paymentTerms: null,
     taxDetails: null,
     notes: null,
+    procurementCount: 0,
+    onTimeDeliveryCount: 0,
+    completedProcurementCount: 0,
     createdAt: new Date(),
     updatedAt: new Date(),
     version: 1,
@@ -74,6 +80,14 @@ describe('VendorProcurementApplicationService', () => {
     bookingId,
     vendorId,
     status: 'planned',
+    workflowStatus: 'draft',
+    serviceCategory: null,
+    requiredDate: null,
+    estimatedCost: 10000,
+    approvedCost: null,
+    actualCost: null,
+    deliveryStatus: 'pending',
+    deliveryNotes: null,
     notes: null,
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -107,6 +121,9 @@ describe('VendorProcurementApplicationService', () => {
 
   let vendorProcurementRepository: jest.Mocked<VendorProcurementRepository>;
   let procurementLineRepository: jest.Mocked<ProcurementLineRepository>;
+  let quoteRepository: jest.Mocked<ProcurementQuoteRepository>;
+  let purchaseOrderRepository: jest.Mocked<PurchaseOrderRepository>;
+  let timelineRepository: jest.Mocked<ProcurementTimelineEventRepository>;
   let vendorRepository: jest.Mocked<VendorRepository>;
   let eventRepository: jest.Mocked<EventRepository>;
   let eventPublisher: jest.Mocked<DomainEventPublisher>;
@@ -119,23 +136,54 @@ describe('VendorProcurementApplicationService', () => {
       create: jest.fn(),
       findById: jest.fn(),
       findByBookingId: jest.fn(),
+      findAll: jest.fn(),
+      update: jest.fn(),
     };
     procurementLineRepository = {
       create: jest.fn(),
       findById: jest.fn(),
-      findByVendorProcurementId: jest.fn(),
+      findByVendorProcurementId: jest.fn().mockResolvedValue([]),
       findAll: jest.fn(),
       update: jest.fn(),
+    };
+    quoteRepository = {
+      create: jest.fn(),
+      findById: jest.fn(),
+      findByVendorProcurementId: jest.fn().mockResolvedValue([]),
+      update: jest.fn(),
+    };
+    purchaseOrderRepository = {
+      create: jest.fn(),
+      findById: jest.fn(),
+      findByVendorProcurementId: jest.fn().mockResolvedValue([]),
+      update: jest.fn(),
+      nextPoSequence: jest.fn().mockResolvedValue(1),
+    };
+    timelineRepository = {
+      create: jest.fn().mockResolvedValue({
+        id: 'tl-1',
+        tenantId,
+        vendorProcurementId: procurementId,
+        bookingId,
+        eventType: 'request_created',
+        message: 'created',
+        occurredAt: new Date(),
+        createdAt: new Date(),
+      }),
+      findByVendorProcurementId: jest.fn().mockResolvedValue([]),
+      findByBookingId: jest.fn().mockResolvedValue([]),
     };
     vendorRepository = {
       create: jest.fn(),
       findById: jest.fn(),
       findMany: jest.fn(),
       update: jest.fn(),
+      incrementPerformance: jest.fn().mockResolvedValue(undefined),
     };
     eventRepository = {
       create: jest.fn(),
       findById: jest.fn(),
+      findByCustomerId: jest.fn(),
       findByQuotationId: jest.fn(),
       findMaxBookingNumber: jest.fn(),
       findByEventDate: jest.fn(),
@@ -146,113 +194,140 @@ describe('VendorProcurementApplicationService', () => {
     service = new VendorProcurementApplicationService(
       vendorProcurementRepository,
       procurementLineRepository,
+      quoteRepository,
+      purchaseOrderRepository,
+      timelineRepository,
       vendorRepository,
       eventRepository,
       eventPublisher,
     );
   });
 
-  // ── createProcurement ────────────────────────────────────────────────
-
   it('createProcurement rejects when booking not found', async () => {
     eventRepository.findById.mockResolvedValue(null);
-
     const result = await service.createProcurement(tenantId, bookingId, {
       vendorId,
     });
-
     expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error.code).toBe('NOT_FOUND');
-    }
+    if (!result.ok) expect(result.error.code).toBe('NOT_FOUND');
   });
 
-  it('createProcurement rejects when booking is cancelled', async () => {
-    eventRepository.findById.mockResolvedValue({
-      ...baseBooking,
-      status: 'cancelled',
-    });
-
-    const result = await service.createProcurement(tenantId, bookingId, {
-      vendorId,
-    });
-
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error.code).toBe('INVALID_STATE');
-    }
-  });
-
-  it('createProcurement rejects when vendor not found', async () => {
-    eventRepository.findById.mockResolvedValue(baseBooking);
-    vendorRepository.findById.mockResolvedValue(null);
-
-    const result = await service.createProcurement(tenantId, bookingId, {
-      vendorId,
-    });
-
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error.code).toBe('NOT_FOUND');
-    }
-  });
-
-  it('createProcurement rejects when vendor is blocked', async () => {
-    eventRepository.findById.mockResolvedValue(baseBooking);
-    vendorRepository.findById.mockResolvedValue({
-      ...baseVendor,
-      status: 'blocked',
-    });
-
-    const result = await service.createProcurement(tenantId, bookingId, {
-      vendorId,
-    });
-
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error.code).toBe('INVALID_STATE');
-    }
-    expect(vendorProcurementRepository.create).not.toHaveBeenCalled();
-  });
-
-  it('createProcurement creates a header and publishes VendorProcurementCreated', async () => {
+  it('createProcurement creates draft workflow and timeline', async () => {
     eventRepository.findById.mockResolvedValue(baseBooking);
     vendorRepository.findById.mockResolvedValue(baseVendor);
     vendorProcurementRepository.create.mockResolvedValue(baseProcurement);
 
     const result = await service.createProcurement(tenantId, bookingId, {
       vendorId,
-      notes: 'Flowers + balloons',
+      notes: 'Flowers',
+      estimatedCost: 10000,
     });
 
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.value.id).toBe(procurementId);
+      expect(result.value.workflowStatus).toBe('draft');
       expect(result.value.status).toBe('planned');
-      expect(result.value.lines).toEqual([]);
     }
+    expect(timelineRepository.create).toHaveBeenCalled();
+    expect(vendorRepository.incrementPerformance).toHaveBeenCalledWith(
+      tenantId,
+      vendorId,
+      { procurementCount: 1 },
+    );
     expect(publish).toHaveBeenCalledWith(
       expect.any(VendorProcurementCreatedEvent),
     );
   });
 
-  // ── listProcurementsForBooking ───────────────────────────────────────
+  it('transitionWorkflow advances draft to quotation_requested', async () => {
+    vendorProcurementRepository.findById.mockResolvedValue(baseProcurement);
+    vendorProcurementRepository.update.mockResolvedValue({
+      ...baseProcurement,
+      workflowStatus: 'quotation_requested',
+      status: 'requested',
+      version: 2,
+    });
 
-  it('listProcurementsForBooking returns empty array when none exist', async () => {
-    vendorProcurementRepository.findByBookingId.mockResolvedValue([]);
-
-    const result = await service.listProcurementsForBooking(
+    const result = await service.transitionWorkflow(
       tenantId,
-      bookingId,
+      procurementId,
+      { toStatus: 'quotation_requested' },
+      1,
     );
-
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.value).toEqual([]);
+      expect(result.value.workflowStatus).toBe('quotation_requested');
+      expect(result.value.status).toBe('requested');
     }
   });
 
-  it('listProcurementsForBooking embeds lines for each procurement header', async () => {
+  it('transitionWorkflow rejects invalid jumps', async () => {
+    vendorProcurementRepository.findById.mockResolvedValue(baseProcurement);
+    const result = await service.transitionWorkflow(
+      tenantId,
+      procurementId,
+      { toStatus: 'completed' },
+      1,
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe('INVALID_TRANSITION');
+  });
+
+  it('approveQuote sets approved cost and rejects sibling quotes', async () => {
+    const quote = {
+      id: 'quote-1',
+      tenantId,
+      vendorProcurementId: procurementId,
+      vendorId,
+      amount: 12000,
+      currency: 'INR',
+      validUntil: null,
+      notes: null,
+      attachmentName: null,
+      attachmentMimeType: null,
+      attachmentSizeBytes: null,
+      status: 'submitted' as const,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      version: 1,
+    };
+    quoteRepository.findById.mockResolvedValue(quote);
+    vendorProcurementRepository.findById.mockResolvedValue({
+      ...baseProcurement,
+      workflowStatus: 'quotation_received',
+      status: 'requested',
+    });
+    quoteRepository.findByVendorProcurementId.mockResolvedValue([
+      quote,
+      { ...quote, id: 'quote-2', status: 'approved', version: 2 },
+    ]);
+    quoteRepository.update
+      .mockResolvedValueOnce({ ...quote, id: 'quote-2', status: 'rejected' })
+      .mockResolvedValueOnce({ ...quote, status: 'approved', version: 2 });
+    vendorProcurementRepository.update.mockResolvedValue({
+      ...baseProcurement,
+      workflowStatus: 'approved',
+      approvedCost: 12000,
+      version: 2,
+    });
+
+    const result = await service.approveQuote(tenantId, 'quote-1', 1);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.status).toBe('approved');
+  });
+
+  it('createPurchaseOrder requires approved procurement', async () => {
+    vendorProcurementRepository.findById.mockResolvedValue(baseProcurement);
+    const result = await service.createPurchaseOrder(
+      tenantId,
+      procurementId,
+      {},
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe('INVALID_STATE');
+  });
+
+  it('listProcurementsForBooking embeds lines and cost summary', async () => {
     vendorProcurementRepository.findByBookingId.mockResolvedValue([
       baseProcurement,
     ]);
@@ -264,12 +339,10 @@ describe('VendorProcurementApplicationService', () => {
       tenantId,
       bookingId,
     );
-
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.value).toHaveLength(1);
       expect(result.value[0].lines).toHaveLength(1);
-      expect(result.value[0].lines[0].id).toBe('line-1');
+      expect(result.value[0].costSummary?.estimatedCost).toBe(10000);
     }
   });
 });

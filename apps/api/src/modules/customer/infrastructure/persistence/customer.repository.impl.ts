@@ -74,6 +74,14 @@ export class CustomerRepositoryImpl
     return customer ? this.mapCustomer(customer) : null;
   }
 
+  async findAll(tenantId: string): Promise<CustomerRecord[]> {
+    const customers = await this.prisma.customer.findMany({
+      where: { tenantId },
+      orderBy: { createdAt: 'desc' },
+    });
+    return customers.map((customer) => this.mapCustomer(customer));
+  }
+
   async update(
     tenantId: string,
     id: string,

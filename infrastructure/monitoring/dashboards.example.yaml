@@ -1,0 +1,83 @@
+# R2-08 — dashboard panel catalog (repository template only).
+# Not a Grafana/Datadog dashboard export. Implement equivalent panels
+# in the operator’s monitoring product.
+
+version: 1
+service: event-os-api
+title: Event OS API — Operations Overview
+
+panels:
+  - id: api-availability
+    title: API availability
+    type: uptime_or_success_ratio
+    signal: liveness_probe
+    target: GET /health
+    description: Share of successful liveness checks over time.
+
+  - id: health-endpoint
+    title: Health endpoint
+    type: status_timeline
+    signal: liveness_probe
+    target: GET /health
+    success: HTTP 200 and body.status == ok
+
+  - id: readiness-endpoint
+    title: Readiness endpoint
+    type: status_timeline
+    signal: readiness_probe
+    target: GET /health/ready
+    success: body.status == ok
+    warning: "HTTP status alone is insufficient (degraded may still be 200)."
+
+  - id: database-availability
+    title: Database availability
+    type: status
+    signal: readiness_checks.postgres.status
+    values: [up, down]
+
+  - id: redis-availability
+    title: Redis availability
+    type: status
+    signal: readiness_checks.redis.status
+    values: [up, down]
+
+  - id: request-volume
+    title: Request volume
+    type: timeseries_rate
+    signal: access_logs
+    filter: service == event-os-api
+    unit: requests_per_minute
+
+  - id: error-rate
+    title: Error rate
+    type: timeseries_percent
+    signal: access_logs
+    definition: "5xx / total"
+    overlay_optional: sentry_error_count
+
+  - id: request-latency
+    title: Request latency
+    type: timeseries_percentile
+    signal: access_logs.field.responseTime
+    percentiles: [50, 95, 99]
+    unit: milliseconds
+
+  - id: sentry-errors
+    title: Sentry errors
+    type: timeseries_count
+    signal: sentry
+    description: Exception volume when SENTRY_DSN is configured (R2-06).
+
+  - id: docker-container-health
+    title: Docker / container health
+    type: status
+    signal: orchestrator_container_health
+    description: Healthy vs unhealthy API tasks/replicas.
+
+  - id: infra-gauges
+    title: Infra gauges (when available)
+    type: gauge_row
+    metrics:
+      - db_connection_pool_utilization
+      - disk_usage
+      - tls_days_remaining

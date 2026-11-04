@@ -10,8 +10,8 @@ This document defines how Event OS is built, deployed, and operated across envir
 
 | Environment | Purpose | URL Pattern | Data |
 |-------------|---------|-------------|------|
-| **Development** | Local developer machines | `localhost:3000` (web), `localhost:4000` (api) | Docker Compose local DB, seed data |
-| **Staging** | Pre-production testing, UAT | `staging.eventos.app` | Production-like, anonymized or test data |
+| **Development** | Local developer machines | `localhost:3000` (API default `PORT`; web when present). Docker Compose maps API container to host **4000** | Docker Compose local DB, seed data |
+| **Staging** | Pre-production testing, UAT | `staging.eventos.app` (target; see `infrastructure/staging/` prep) | Production-like, anonymized or test data |
 | **Production** | Live system for We Decor (then tenants) | `app.eventos.app` | Real business data |
 
 ### Environment Rules
@@ -58,6 +58,8 @@ This document defines how Event OS is built, deployed, and operated across envir
 
 **Why single server:** Simplicity. We Decor is one tenant with < 50 users. A single well-provisioned server handles this with significant headroom.
 
+**Admin Portal (Phase 1):** `apps/web` is a **static export** (Next.js). Deploy as static files behind CDN/object storage (or any static host). It talks only to the NestJS API (`/api/v1`). There is no Next.js SSR/server runtime in Phase 1 Admin Portal deploys.
+
 ### Phase 2: Separated Services (Growth)
 
 - API server and background worker as separate processes
@@ -83,23 +85,24 @@ All applications run in Docker containers for consistency between environments.
 **API Dockerfile:**
 
 ```dockerfile
-# Multi-stage build
-FROM node:20-alpine AS builder
+# Multi-stage build — repository Dockerfile is authoritative (Node 22, entry `dist/src/main`)
+FROM node:22-alpine AS builder
 WORKDIR /app
 COPY package.json pnpm-lock.yaml ./
 RUN corepack enable && pnpm install --frozen-lockfile
 COPY . .
 RUN pnpm build
 
-FROM node:20-alpine AS runner
+FROM node:22-alpine AS runner
 WORKDIR /app
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/prisma ./prisma
 EXPOSE 4000
-CMD ["node", "dist/main.js"]
+CMD ["node", "dist/src/main"]
 ```
 
+*Canonical file:* `apps/api/Dockerfile` (R2-01). Local `pnpm start:dev` defaults to **PORT=3000**; container/compose commonly exposes **4000**.
 **Local Development (Docker Compose):**
 
 ```yaml
@@ -144,24 +147,22 @@ PR opened/updated
 All checks pass → Ready for review
 ```
 
-### Main Branch Pipeline (Staging Deploy)
+### Main Branch Pipeline (current repo — R2-04)
 
 ```
 Merge to main
     │
-    ├── All PR checks
-    ├── E2E tests
-    ├── Build Docker images
-    ├── Push images to registry
-    ├── Run database migrations (staging)
-    ├── Deploy to staging
-    └── Smoke tests (health check, login, create lead)
+    ├── Quality gates (lint, build, unit tests, coverage)
+    ├── prisma migrate deploy against disposable CI Postgres
+    └── Docker image build (no registry push / no cloud deploy)
     │
     ▼
-Staging deployment complete → Available for UAT
+Main CI complete — staging deploy is not automated in-repo yet
 ```
 
-### Production Deploy
+> **R3-12:** Target future pipeline may add image push, staging deploy, and smoke tests. Today’s workflows are `.github/workflows/pull-request.yml` and `main-branch.yml` only. Staging/monitoring/logging/DR/storage/Sentry live cloud wiring is **repository preparation** under `infrastructure/*` (see CHANGELOG 0.5.0).
+
+### Production Deploy (target)
 
 ```
 Release tag created (v1.2.0)
@@ -178,6 +179,7 @@ Release tag created (v1.2.0)
 Production deployment complete
 ```
 
+*Not automated in the current repository.*
 ### Deployment Rules
 
 1. **Database migrations run before new code deploys** — Backward-compatible migrations only
@@ -225,20 +227,16 @@ Production deployment complete
 
 | Variable | Environment | Description |
 |----------|-------------|-------------|
-| `NODE_ENV` | All | `development`, `staging`, `production` |
+| `NODE_ENV` | All | `development`, `test`, `staging`, `production` |
+| `PORT` | All | API listen port (default **3000** locally; container often **4000**) |
+| `LOG_LEVEL` | All | Pino level (`info` default) |
 | `DATABASE_URL` | All | PostgreSQL connection string |
-| `REDIS_URL` | All | Redis connection string |
-| `JWT_SECRET` | All | JWT signing key (min 256 bits) |
-| `JWT_REFRESH_SECRET` | All | Refresh token signing key |
-| `STORAGE_ENDPOINT` | Staging, Prod | S3-compatible storage endpoint |
-| `STORAGE_ACCESS_KEY` | Staging, Prod | Storage access key |
-| `STORAGE_SECRET_KEY` | Staging, Prod | Storage secret key |
-| `STORAGE_BUCKET` | Staging, Prod | Storage bucket name |
-| `AI_PROVIDER_API_KEY` | Staging, Prod | AI provider API key |
-| `EMAIL_API_KEY` | Staging, Prod | Transactional email API key |
-| `SENTRY_DSN` | Staging, Prod | Error tracking DSN |
-| `APP_URL` | All | Application URL (for email links) |
-| `CORS_ORIGINS` | All | Allowed CORS origins (comma-separated) |
+| `REDIS_HOST` / `REDIS_PORT` / `REDIS_PASSWORD` | All | Redis connection (login throttle, cache, queue broker) |
+| `JWT_SECRET` | All | JWT access-token signing key (min 32 characters / 256 bits) |
+| `CORS_ORIGIN` | All | Allowed CORS origin(s). `*` OK in development; required and non-wildcard in staging/production |
+| `SENTRY_DSN` | Optional | Error tracking DSN — SDK wired in `apps/api/src/instrument.ts`; absent/blank = no-op |
+| `SEED_ADMIN_PASSWORD` | Dev/seed | Optional; sets seeded admin password when running `prisma:seed` |
+| `STORAGE_*` / `AI_*` / `EMAIL_*` | Staging, Prod (future) | Object storage / AI / email — prepared in docs/`infrastructure`; not required by current `env.schema.ts` |
 
 ### Variable Management
 
@@ -258,6 +256,8 @@ Production deployment complete
 | `GET /health` | App process running | Every 30s |
 | `GET /health/ready` | Database connected, Redis connected | Every 30s |
 
+> **R3-14 probe note:** `/health/ready` currently returns **HTTP 200** with JSON `status: "ok" | "degraded"`. Orchestrators must assert `status === "ok"` in the body (see `infrastructure/monitoring/README.md`). Do not rely on non-2xx alone.
+
 ### Alerts
 
 | Condition | Severity | Action |
@@ -272,14 +272,22 @@ Production deployment complete
 
 ### Logging
 
-- Structured JSON logs shipped to log aggregation service
-- Log retention: 30 days hot, 1 year cold storage
-- Request ID in every log entry for correlation
+- Structured JSON logs via **Pino** (ADR-015); request-scoped logging in Nest
+- Sensitive fields redacted (R1 hardening)
+- Log retention / shipping to an aggregator: **prep** under `infrastructure/logging/` — not a live cloud sink in-repo
+- Request ID in every log entry for correlation when configured
 - Log levels: `error` and `warn` in production; `debug` in development only
 
+### Sentry
+
+- `@sentry/node` initialized from `SENTRY_DSN` when set
+- Errors only in Phase 1 (no performance tracing required)
+- Local development typically leaves `SENTRY_DSN` unset
 ---
 
 ## Backup Strategy
+
+> **R3-12:** Targets for when cloud staging/production are provisioned. Repository prep lives under `infrastructure/` (DR docs/templates). No automated cloud backup/DR drills are run from this monorepo today.
 
 | Component | Method | Frequency | Retention |
 |-----------|--------|-----------|-----------|
@@ -290,7 +298,7 @@ Production deployment complete
 
 ### Recovery Testing
 
-- Monthly: Restore database backup to staging environment
+- Monthly: Restore database backup to staging environment (when staging exists)
 - Quarterly: Full disaster recovery drill (restore DB, deploy app, verify data integrity)
 - Document recovery time in post-drill report
 
@@ -298,11 +306,12 @@ Production deployment complete
 
 ## SSL/TLS
 
-- All environments use HTTPS (TLS 1.2+)
+> **R3-12:** Target controls for deployed environments. Local Docker Compose uses HTTP.
+
+- All deployed environments use HTTPS (TLS 1.2+)
 - Certificates managed by Cloudflare (DNS proxy) or Let's Encrypt (origin)
 - HSTS enabled with `max-age=31536000; includeSubDomains`
 - Certificate auto-renewal configured
-
 ---
 
 ## Domain and DNS

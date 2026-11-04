@@ -25,7 +25,13 @@ const costVarianceReasonSchema = z.enum([
 ]);
 
 export const transitionProcurementLineSchema = z.object({
-  toStatus: z.enum(['requested', 'confirmed', 'delivered', 'completed']),
+  toStatus: z.enum([
+    'requested',
+    'confirmed',
+    'delivered',
+    'completed',
+    'cancelled',
+  ]),
   occurredAt: z.string().datetime().optional(),
   notes: z.string().optional(),
   actualAmount: z.number().nonnegative().optional(),

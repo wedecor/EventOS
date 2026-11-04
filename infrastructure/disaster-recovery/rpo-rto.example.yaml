@@ -1,0 +1,29 @@
+# R2-10 — RPO / RTO targets (docs/07-database-philosophy + docs/16)
+
+version: 1
+service: event-os-api
+
+objectives:
+  rpo:
+    target: "< 1 hour"
+    meaning: Maximum acceptable data loss for PostgreSQL (WAL / PITR).
+    authority:
+      - docs/07-database-philosophy.md#backup-and-recovery
+      - docs/16-deployment-strategy.md#rollback
+  rto:
+    target: "< 4 hours"
+    meaning: Maximum time to restore API service after a declared disaster.
+    authority:
+      - docs/07-database-philosophy.md#backup-and-recovery
+
+component_notes:
+  postgresql:
+    rpo_binding: primary
+    requires: continuous_wal_archiving_plus_daily_full
+  redis:
+    rpo_binding: relaxed
+    note: Daily RDB; data loss of cache/throttle/queue state is acceptable (docs/16).
+  object_storage:
+    rpo_binding: provider_replication
+  configuration:
+    rpo_binding: git

@@ -10,7 +10,7 @@
 | **Approval** | Approved — Ilyas + Zakir (2026-07-08) |
 | **Version** | 0.1 |
 | **Created Date** | 2026-07-08 |
-| **Last Updated** | 2026-07-08 |
+| **Last Updated** | 2026-07-13 |
 | **Next Review Date** | Not Defined |
 | **Document Purpose** | Consolidate **Phase 1 Event OS business requirements** from the Business Bible (`01`–`18`) into a single founder-approved handoff document for product and engineering. This is the business-layer PRD—not the engineering roadmap. |
 
@@ -29,6 +29,7 @@
 | 0.1 | 2026-07-08 | UAT Q6 (Zakir) | Zakir confirmed Z1–Z5 and W1–W5; WhatsApp continues; Event OS as source of truth. |
 | 0.1 | 2026-07-08 | UAT Q7 (Joint sign-off) | **Ilyas + Zakir approved** Phase 1 business baseline for development handoff. |
 | 0.1 | 2026-07-08 | Engineering handoff | Added Engineering Handoff Validation — EP1→module map, reuse points, scope risks vs `06`/`11`. |
+| 0.1 | 2026-07-13 | R4-01 realization note | Added **Admin Portal realization (R4-01)** — factual UI delivery status vs Bible intent; **no EP1/policy changes**. |
 
 ---
 
@@ -1184,27 +1185,31 @@ Phase 1 UAT passes when Event OS **reduces dependency on Zakir** by providing a 
 
 ### Requirements needing module mapping (gaps in `06-module-design.md`)
 
-These EP1 requirements have a **proposed** destination but **`06-module-design.md` does not yet describe the feature area** at business-required depth. Engineering must extend module specs — without changing business scope:
+> **R3-12 (2026-07-13):** This subsection was written as an **engineering-alignment note at handoff**. Domain/API/code now cover workspace, execution stages, inventory movement, procurement, timeline, permissions, expenses/profitability, and founder dashboards in Phase 1. Treat remaining rows as **module-spec depth** follow-ups for `06-module-design.md`, not as “missing from Event OS.”
+
+These EP1 requirements had a **proposed** destination while **`06-module-design.md` lacked business-required depth**. Engineering extended implementation without changing business scope:
 
 | EP1 ID(s) | Gap in `06-module-design.md` | Proposed module | Notes |
 |-----------|------------------------------|-----------------|-------|
-| EP1-OPS-001, EP1-AUT-002 | No **event operations workspace** concept | Booking | Today: booking lifecycle only; business needs ops hub at Approved |
-| EP1-OPS-004 | No **execution stage** model (prep/load/venue) | Booking + Task | Beyond pipeline status |
-| EP1-INV-003, EP1-INV-005 | **Movement state machine** vs allocation-only | Inventory | Borrow ledger pattern only (`18` audit) |
-| EP1-VEN-002, EP1-VEN-003 | **Procurement workflow** vs vendor assignment | Vendor | Business needs per-event PO timeline |
-| EP1-CUS-002 | **Per-event communication timeline** | CRM | `logInteraction()` exists; event-scoped timeline not defined |
-| EP1-AUT-005, EP1-STF-003 | **Approval gates** + movement permissions | Auth + platform | RBAC exists; domain-scoped permissions not defined |
-| EP1-FIN-004, EP1-FIN-005 | **Event expenses + profitability** in Finance module | Finance | Module exists; event P&L not in Phase 1 engineering roadmap |
-| EP1-KPI-001 – EP1-KPI-007 | **Founder dashboard** (5 KPIs) | BI | BI module marked Phase Intelligence in `06` |
-| EP1-MKT-003 | **Event-linked content library** | File (+ adjunct) | CMS module is Growth — business needs lighter library only |
+| EP1-OPS-001, EP1-AUT-002 | No **event operations workspace** concept | Booking | Implemented: activate-workspace / workspace read |
+| EP1-OPS-004 | No **execution stage** model (prep/load/venue) | Booking + Task | Implemented: execution stage advances |
+| EP1-INV-003, EP1-INV-005 | **Movement state machine** vs allocation-only | Inventory | Implemented: movements + item master |
+| EP1-VEN-002, EP1-VEN-003 | **Procurement workflow** vs vendor assignment | Vendor | Implemented: procurements / line transitions |
+| EP1-CUS-002 | **Per-event communication timeline** | CRM | Implemented: `/clients/:id/interactions` |
+| EP1-AUT-005, EP1-STF-003 | **Approval gates** + movement permissions | Auth + platform | Implemented: `rbac.ts` + suggestion accept |
+| EP1-FIN-004, EP1-FIN-005 | **Event expenses + profitability** in Finance module | Finance | Implemented: expenses + profitability routes |
+| EP1-KPI-001 – EP1-KPI-007 | **Founder dashboard** (5 KPIs) | BI | Implemented: `/dashboards` (Phase 1 subset) |
+| EP1-MKT-003 | **Event-linked content library** | File (+ adjunct) | Still lighter-library / Attachment deferred |
 
 ---
 
 ### Potential scope risks
 
-#### Risk 1 — Engineering roadmap under-scopes business Phase 1 (HIGH)
+#### Risk 1 — Engineering roadmap under-scopes business Phase 1 (HISTORICAL — mitigated)
 
-`/docs/11-roadmap.md` **Phase 1 Foundation** delivers CRM, Lead, Quotation, Booking, Calendar, Task only. **Approved business Phase 1** also requires:
+> **R3-12:** At handoff, `/docs/11-roadmap.md` Phase 1 Foundation lagged business Phase 1. Staff, Vendor, Inventory, Finance, and CRM adjuncts are now implemented in `apps/api`. Retain the table below as historical schedule-risk context; do not treat it as current delivery status.
+
+`/docs/11-roadmap.md` **Phase 1 Foundation** (as of handoff) delivered CRM, Lead, Quotation, Booking, Calendar, Task only. **Approved business Phase 1** also required:
 
 | Business area | EP1 examples | Engineering roadmap today | Risk |
 |---------------|--------------|---------------------------|------|
@@ -1414,6 +1419,24 @@ Phase 1 requirements are fully traceable and scope-controlled.
 | Phase 1 goal | Reduce Zakir operational dependency; unified event lifecycle + visibility |
 | Build posture | 4 Reuse · 14 Extend · 2 Integrate · 30 New build · 2 Replace later |
 | Traceability | 59 committed IDs; integrity check **PASS** |
+| Backend | Phase 1 RC1 (`1.0.0-rc1`); OpenAPI frozen at `apps/api/openapi/openapi.v1.json` |
+| Admin Portal | F1-01–F1-13 implemented against frozen OpenAPI; F1-14 Reports / F1-15 Settings pending |
+
+### Admin Portal realization (R4-01) — factual status only
+
+This subsection does **not** change Phase 1 business requirements, EP1 IDs, or scope freeze. It records how the Admin Portal (`apps/web`) realizes Bible intent against the **frozen OpenAPI**:
+
+| Pattern / limitation | Meaning for UAT / engineering |
+|----------------------|-------------------------------|
+| **Hub-when-no-list** | No `GET /clients`, `GET /quotations`, `GET /bookings`, or global finance lists — UI opens by id (or booking-scoped panels) |
+| **Thin Event Workspace** | Workspace HTTP DTO is status + execution owner; ops data lives on booking-scoped module APIs |
+| **Quotations** | Header + lifecycle in UI; line-item mutate APIs exist but GET does not embed lines; PDF not shipped |
+| **Inventory** | Item master + booking movements; transition field is `toStatus`; no item GET-by-id; photos/packing deferred |
+| **Finance** | Booking-scoped payments/invoices/expenses/profitability; flat money wire fields; proofs upload not shipped |
+| **Customers UI label** | UI says “Customers”; HTTP resource remains `clients` with `clients:*` permissions |
+| **Still placeholders** | Reports (F1-14), Settings (F1-15) |
+
+Authoritative wire contract: frozen OpenAPI. Engineering narrative: `docs/09-api-design.md` v1.5+.
 
 ---
 

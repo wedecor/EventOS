@@ -2,6 +2,10 @@ import { DomainEvent } from './domain-event.base';
 import type { LeadRecord } from '../../modules/lead/domain/repositories/lead.repository';
 import type { FollowUpRecord } from '../../modules/lead/domain/repositories/follow-up.repository';
 import type { CustomerRecord } from '../../modules/customer/domain/repositories/customer.repository';
+import type { TimelineEntryRecord } from '../../modules/customer/domain/repositories/timeline-entry.repository';
+import type { ContactRecord } from '../../modules/customer/domain/repositories/contact.repository';
+import type { IssueNoteRecord } from '../../modules/customer/domain/repositories/issue-note.repository';
+import type { ReviewRequestRecord } from '../../modules/customer/domain/repositories/review-request.repository';
 import type { QuotationRecord } from '../../modules/quotation/domain/repositories/quotation.repository';
 import type { EventRecord } from '../../modules/booking/domain/repositories/event.repository';
 import type { PaymentRecord } from '../../modules/payment/domain/repositories/payment.repository';
@@ -58,6 +62,54 @@ export class CustomerCreatedEvent extends DomainEvent {
   constructor(
     readonly tenantId: string,
     readonly customer: CustomerRecord,
+  ) {
+    super();
+  }
+}
+
+// EP1-CUS-002 / R3-05 — Append-only communication timeline entry.
+export class TimelineEntryAddedEvent extends DomainEvent {
+  readonly eventName = 'TimelineEntryAdded';
+
+  constructor(
+    readonly tenantId: string,
+    readonly entry: TimelineEntryRecord,
+  ) {
+    super();
+  }
+}
+
+// EP1-CUS-001 / R3-06 — Owned Contact added under Customer.
+export class ContactAddedEvent extends DomainEvent {
+  readonly eventName = 'ContactAdded';
+
+  constructor(
+    readonly tenantId: string,
+    readonly contact: ContactRecord,
+  ) {
+    super();
+  }
+}
+
+// EP1-CUS-004 / R3-07 — Customer issue note created for an event.
+export class IssueNoteCreatedEvent extends DomainEvent {
+  readonly eventName = 'IssueNoteCreated';
+
+  constructor(
+    readonly tenantId: string,
+    readonly issueNote: IssueNoteRecord,
+  ) {
+    super();
+  }
+}
+
+// EP1-CUS-003 / R3-07 — Review request created for an event.
+export class ReviewRequestCreatedEvent extends DomainEvent {
+  readonly eventName = 'ReviewRequestCreated';
+
+  constructor(
+    readonly tenantId: string,
+    readonly reviewRequest: ReviewRequestRecord,
   ) {
     super();
   }

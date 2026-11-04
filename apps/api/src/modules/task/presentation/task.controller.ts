@@ -10,10 +10,23 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiQuery,
+  ApiTags,
+} from '@nestjs/swagger';
+import { Permissions } from '../../auth';
 import { ZodValidationPipe } from '../../../common/pipes/zod-validation.pipe';
 import { failure } from '../../../shared/application/result';
 import { IfMatchVersion } from '../../../shared/presentation/if-match.decorator';
+import {
+  ApiDataResponse,
+  ApiIfMatchHeader,
+  ApiStandardErrors,
+  ApiUuidParam,
+  ApiZodBody,
+} from '../../../shared/presentation/openapi.helpers';
 import { resultToResponse } from '../../../shared/presentation/result-to-response.helper';
 import { TenantId } from '../../../shared/presentation/tenant-context.decorator';
 import { ChecklistItemApplicationService } from '../application/services/checklist-item.application.service';
@@ -42,7 +55,15 @@ export class TaskController {
 
   // EP1-OPS-003 — List tasks (and owned checklist items) for a booking
   @Get()
+  @Permissions('tasks:read')
   @ApiOperation({ summary: 'List tasks for a booking' })
+  @ApiQuery({
+    name: 'bookingId',
+    required: true,
+    schema: { type: 'string', format: 'uuid' },
+  })
+  @ApiDataResponse(200, 'Tasks listed')
+  @ApiStandardErrors()
   async listTasks(
     @TenantId() tenantId: string,
     @Query('bookingId') bookingId: string | undefined,
@@ -61,15 +82,23 @@ export class TaskController {
   }
 
   @Get(':id')
+  @Permissions('tasks:read')
   @ApiOperation({ summary: 'Retrieve a task by ID' })
+  @ApiUuidParam('id')
+  @ApiDataResponse(200, 'Task retrieved')
+  @ApiStandardErrors()
   async retrieveTask(@TenantId() tenantId: string, @Param('id') id: string) {
     const result = await this.taskService.getTaskById(tenantId, id);
     return resultToResponse(result);
   }
 
   @Post()
+  @Permissions('tasks:write')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create a task' })
+  @ApiZodBody(createTaskSchema)
+  @ApiDataResponse(201, 'Task created')
+  @ApiStandardErrors()
   async createTask(
     @TenantId() tenantId: string,
     @Body(new ZodValidationPipe(createTaskSchema)) body: CreateTaskBody,
@@ -78,6 +107,8 @@ export class TaskController {
       bookingId: body.bookingId,
       title: body.title,
       description: body.description,
+      category: body.category,
+      priority: body.priority,
       assignedTo: body.assignedTo,
       dueAt: body.dueAt ? new Date(body.dueAt) : undefined,
     });
@@ -86,7 +117,13 @@ export class TaskController {
   }
 
   @Patch(':id')
+  @Permissions('tasks:write')
   @ApiOperation({ summary: 'Update a task' })
+  @ApiUuidParam('id')
+  @ApiIfMatchHeader(true)
+  @ApiZodBody(updateTaskSchema)
+  @ApiDataResponse(200, 'Task updated')
+  @ApiStandardErrors()
   async updateTask(
     @TenantId() tenantId: string,
     @Param('id') id: string,
@@ -108,6 +145,8 @@ export class TaskController {
       {
         title: body.title,
         description: body.description,
+        category: body.category,
+        priority: body.priority,
         assignedTo: body.assignedTo,
         dueAt: body.dueAt ? new Date(body.dueAt) : undefined,
       },
@@ -119,7 +158,13 @@ export class TaskController {
 
   // EP1-OPS-003, EP1-OPS-004 — Update task status (lifecycle transition)
   @Patch(':id/status')
+  @Permissions('tasks:status:update')
   @ApiOperation({ summary: 'Update task status' })
+  @ApiUuidParam('id')
+  @ApiIfMatchHeader(true)
+  @ApiZodBody(updateTaskStatusSchema)
+  @ApiDataResponse(200, 'Task status updated')
+  @ApiStandardErrors()
   async updateTaskStatus(
     @TenantId() tenantId: string,
     @Param('id') id: string,
@@ -139,7 +184,7 @@ export class TaskController {
     const result = await this.taskService.updateTaskStatus(
       tenantId,
       id,
-      { status: body.status },
+      { status: body.status, completionNotes: body.completionNotes },
       version,
     );
 
@@ -147,8 +192,13 @@ export class TaskController {
   }
 
   @Post(':id/checklist-items')
+  @Permissions('tasks:write')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Add a checklist item to a task' })
+  @ApiUuidParam('id')
+  @ApiZodBody(addChecklistItemSchema)
+  @ApiDataResponse(201, 'Checklist item added')
+  @ApiStandardErrors()
   async addChecklistItem(
     @TenantId() tenantId: string,
     @Param('id') taskId: string,
@@ -165,7 +215,14 @@ export class TaskController {
   }
 
   @Patch(':id/checklist-items/:itemId')
+  @Permissions('tasks:write')
   @ApiOperation({ summary: 'Update a checklist item' })
+  @ApiUuidParam('id')
+  @ApiUuidParam('itemId')
+  @ApiIfMatchHeader(true)
+  @ApiZodBody(updateChecklistItemSchema)
+  @ApiDataResponse(200, 'Checklist item updated')
+  @ApiStandardErrors()
   async updateChecklistItem(
     @TenantId() tenantId: string,
     @Param('id') taskId: string,
@@ -199,8 +256,13 @@ export class TaskController {
   }
 
   @Delete(':id/checklist-items/:itemId')
+  @Permissions('tasks:write')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Remove a checklist item from a task' })
+  @ApiUuidParam('id')
+  @ApiUuidParam('itemId')
+  @ApiDataResponse(204, 'Checklist item removed')
+  @ApiStandardErrors()
   async removeChecklistItem(
     @TenantId() tenantId: string,
     @Param('id') taskId: string,

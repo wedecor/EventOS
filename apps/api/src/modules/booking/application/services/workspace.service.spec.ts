@@ -46,6 +46,7 @@ describe('WorkspaceService', () => {
     eventRepository = {
       create: jest.fn(),
       findById: jest.fn(),
+      findByCustomerId: jest.fn(),
       findByQuotationId: jest.fn(),
       findMaxBookingNumber: jest.fn(),
       findByEventDate: jest.fn(),
@@ -194,6 +195,32 @@ describe('WorkspaceService', () => {
     if (result.ok) {
       expect(result.value.eventId).toBe(bookingId);
       expect(result.value.workspaceStatus).toBe('inactive');
+    }
+  });
+
+  // EP1-BR-003 — executionOwnerId retrieval (correctly loaded/exposed through the DTO)
+  it('returns null executionOwnerId when no execution owner is assigned', async () => {
+    eventRepository.findById.mockResolvedValue(baseEvent);
+
+    const result = await service.getWorkspace(tenantId, bookingId);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.executionOwnerId).toBeNull();
+    }
+  });
+
+  it('returns the assigned executionOwnerId once one is set', async () => {
+    eventRepository.findById.mockResolvedValue({
+      ...baseEvent,
+      executionOwnerId: 'user-1',
+    });
+
+    const result = await service.getWorkspace(tenantId, bookingId);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.executionOwnerId).toBe('user-1');
     }
   });
 });

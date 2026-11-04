@@ -55,9 +55,23 @@ describe('InventoryMovementApplicationService', () => {
     tenantId,
     bookingId,
     inventoryItemId,
+    reservationId: null,
     quantity: 2,
     notes: null,
     status: 'planned',
+    packedByUserId: null,
+    packingStartedAt: null,
+    verificationNotes: null,
+    verifiedAt: null,
+    readyForDispatchAt: null,
+    vehicle: null,
+    driverName: null,
+    dispatchedAt: null,
+    returnedQuantity: null,
+    missingQuantity: null,
+    damagedQuantity: null,
+    returnVerificationNotes: null,
+    returnVerifiedAt: null,
     pickedAt: null,
     packedAt: null,
     loadedAt: null,
@@ -81,6 +95,15 @@ describe('InventoryMovementApplicationService', () => {
 
   let movementRepository: jest.Mocked<InventoryMovementRepository>;
   let damageNoteRepository: jest.Mocked<InventoryMovementDamageNoteRepository>;
+  let reservationRepository: {
+    findById: jest.Mock;
+  };
+  let inventoryItemRepository: {
+    findById: jest.Mock;
+  };
+  let availabilityService: {
+    getAvailability: jest.Mock;
+  };
   let eventRepository: jest.Mocked<EventRepository>;
   let eventPublisher: jest.Mocked<DomainEventPublisher>;
   let service: InventoryMovementApplicationService;
@@ -93,15 +116,34 @@ describe('InventoryMovementApplicationService', () => {
       findById: jest.fn(),
       findByBookingId: jest.fn(),
       findAll: jest.fn(),
+      findUnlinkedActiveByItemId: jest.fn(),
       update: jest.fn(),
     };
     damageNoteRepository = {
       create: jest.fn(),
       findByMovementId: jest.fn(),
     };
+    reservationRepository = { findById: jest.fn() };
+    inventoryItemRepository = {
+      findById: jest.fn().mockResolvedValue({
+        id: inventoryItemId,
+        status: 'active',
+        quantityAtJpNagar: 10,
+      }),
+    };
+    availabilityService = {
+      getAvailability: jest.fn().mockResolvedValue({
+        inventoryItemId,
+        quantityAtJpNagar: 10,
+        reservedQuantity: 0,
+        unlinkedMovementQuantity: 0,
+        availableQuantity: 10,
+      }),
+    };
     eventRepository = {
       create: jest.fn(),
       findById: jest.fn(),
+      findByCustomerId: jest.fn(),
       findByQuotationId: jest.fn(),
       findMaxBookingNumber: jest.fn(),
       findByEventDate: jest.fn(),
@@ -112,6 +154,9 @@ describe('InventoryMovementApplicationService', () => {
     service = new InventoryMovementApplicationService(
       movementRepository,
       damageNoteRepository,
+      reservationRepository as never,
+      inventoryItemRepository as never,
+      availabilityService as never,
       eventRepository,
       eventPublisher,
     );
@@ -204,7 +249,56 @@ describe('InventoryMovementApplicationService', () => {
       inventoryItemId,
       quantity: 3,
       notes: 'Fragile — handle with care',
+      reservationId: undefined,
     });
+  });
+
+  it('createMovement rejects when inventory is insufficient', async () => {
+    eventRepository.findById.mockResolvedValue(baseBooking);
+    availabilityService.getAvailability.mockResolvedValue({
+      inventoryItemId,
+      quantityAtJpNagar: 2,
+      reservedQuantity: 2,
+      unlinkedMovementQuantity: 0,
+      availableQuantity: 0,
+    });
+
+    const result = await service.createMovement(tenantId, {
+      bookingId,
+      inventoryItemId,
+      quantity: 1,
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('INSUFFICIENT_INVENTORY');
+    }
+  });
+
+  it('transitionMovement supports packing_started path', async () => {
+    movementRepository.findById.mockResolvedValue({
+      ...baseMovement,
+      status: 'picked',
+      pickedAt: new Date(),
+    });
+    movementRepository.update.mockResolvedValue({
+      ...baseMovement,
+      status: 'packing_started',
+      packingStartedAt: new Date(),
+      version: 2,
+    });
+
+    const result = await service.transitionMovement(
+      tenantId,
+      movementId,
+      { toStatus: 'packing_started' },
+      1,
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.status).toBe('packing_started');
+    }
   });
 
   // ── getMovementById ──────────────────────────────────────────────────
@@ -370,7 +464,12 @@ describe('InventoryMovementApplicationService', () => {
     expect(movementRepository.update).toHaveBeenCalledWith(
       tenantId,
       movementId,
-      { status: 'packed', notes: undefined, packedAt: occurredAt },
+      {
+        status: 'packed',
+        notes: undefined,
+        packedAt: occurredAt,
+        packedByUserId: undefined,
+      },
       1,
     );
   });

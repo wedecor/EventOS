@@ -63,6 +63,11 @@ export abstract class LeadRepository {
 
   abstract findById(tenantId: string, id: string): Promise<LeadRecord | null>;
 
+  abstract findByCustomerId(
+    tenantId: string,
+    customerId: string,
+  ): Promise<LeadRecord[]>;
+
   abstract findByPhone(tenantId: string, phone: string): Promise<LeadRecord[]>;
 
   abstract findAll(tenantId: string): Promise<LeadRecord[]>;

@@ -5,6 +5,7 @@ export type StaffAssignmentRecord = {
   tenantId: string;
   bookingId: string;
   staffMemberId: string;
+  legacyUserId: string | null;
   role: string | null;
   isOnSiteLead: boolean;
   reportingAt: Date | null;
@@ -22,6 +23,7 @@ export type StaffAssignmentRecord = {
 export type CreateStaffAssignmentData = {
   bookingId: string;
   staffMemberId: string;
+  legacyUserId?: string | null;
   role?: string | null;
   isOnSiteLead?: boolean;
   reportingAt?: Date | null;
@@ -58,6 +60,11 @@ export abstract class StaffAssignmentRepository {
 
   // EP1-STF-002 — Dashboard: tenant-wide assignment read for staff summary
   abstract findAll(tenantId: string): Promise<StaffAssignmentRecord[]>;
+
+  abstract findConfirmedByStaffMemberId(
+    tenantId: string,
+    staffMemberId: string,
+  ): Promise<StaffAssignmentRecord[]>;
 
   abstract update(
     tenantId: string,

@@ -15,6 +15,7 @@ import {
   toQuotationLineItemDto,
   type QuotationLineItemDto,
 } from '../dtos/quotation-line-item.dto';
+import { calculateQuotationTotals } from './quotation-totals.calculator';
 
 export type AddLineItemInput = Omit<CreateLineItemData, 'quotationId'>;
 export type UpdateLineItemInput = UpdateLineItemData;
@@ -54,12 +55,42 @@ export class QuotationLineItemApplicationService {
       );
     }
 
-    const lineItem = await this.lineItemRepository.create(tenantId, {
-      ...input,
+    const existingLineItems = await this.lineItemRepository.findByQuotationId(
+      tenantId,
       quotationId,
+    );
+
+    const totals = calculateQuotationTotals({
+      lineItems: [
+        ...existingLineItems,
+        {
+          quantity: input.quantity ?? 1,
+          unitPriceAmount: input.unitPriceAmount,
+        },
+      ],
+      discountAmount: quotation.discountAmount,
+      taxAmount: quotation.taxAmount,
     });
 
-    return success(toQuotationLineItemDto(lineItem));
+    try {
+      const lineItem = await this.lineItemRepository.createWithQuotationTotals(
+        tenantId,
+        { ...input, quotationId },
+        totals,
+        quotation.version,
+      );
+
+      return success(toQuotationLineItemDto(lineItem));
+    } catch (error: unknown) {
+      if (error instanceof ConcurrentModificationError) {
+        return failure(
+          'CONCURRENT_MODIFICATION',
+          'Quotation was modified by another request. Reload and retry.',
+          { quotationId },
+        );
+      }
+      throw error;
+    }
   }
 
   async updateLineItem(
@@ -104,12 +135,34 @@ export class QuotationLineItemApplicationService {
       );
     }
 
+    const allLineItems = await this.lineItemRepository.findByQuotationId(
+      tenantId,
+      quotationId,
+    );
+
+    // Apply the pending change to its line item before recalculating totals,
+    // so the persisted totals always reflect the post-update state.
+    const totals = calculateQuotationTotals({
+      lineItems: allLineItems.map((item) =>
+        item.id === itemId
+          ? {
+              quantity: input.quantity ?? item.quantity,
+              unitPriceAmount: input.unitPriceAmount ?? item.unitPriceAmount,
+            }
+          : item,
+      ),
+      discountAmount: quotation.discountAmount,
+      taxAmount: quotation.taxAmount,
+    });
+
     try {
-      const updated = await this.lineItemRepository.update(
+      const updated = await this.lineItemRepository.updateWithQuotationTotals(
         tenantId,
         itemId,
         input,
         version,
+        totals,
+        quotation.version,
       );
 
       return success(toQuotationLineItemDto(updated));
@@ -117,7 +170,7 @@ export class QuotationLineItemApplicationService {
       if (error instanceof ConcurrentModificationError) {
         return failure(
           'CONCURRENT_MODIFICATION',
-          'Line item was modified by another request. Reload and retry.',
+          'Line item or quotation was modified by another request. Reload and retry.',
           { itemId },
         );
       }
@@ -151,9 +204,38 @@ export class QuotationLineItemApplicationService {
       return failure('NOT_FOUND', 'Line item not found.');
     }
 
-    await this.lineItemRepository.remove(tenantId, itemId);
+    const remainingLineItems = (
+      await this.lineItemRepository.findByQuotationId(tenantId, quotationId)
+    ).filter((item) => item.id !== itemId);
 
-    return success({ itemId, deleted: true });
+    // Handles the zero-line-item case: an empty array yields
+    // subtotalAmount = 0 and totalAmount = 0 - discountAmount + taxAmount.
+    const totals = calculateQuotationTotals({
+      lineItems: remainingLineItems,
+      discountAmount: quotation.discountAmount,
+      taxAmount: quotation.taxAmount,
+    });
+
+    try {
+      await this.lineItemRepository.removeWithQuotationTotals(
+        tenantId,
+        itemId,
+        quotationId,
+        totals,
+        quotation.version,
+      );
+
+      return success({ itemId, deleted: true });
+    } catch (error: unknown) {
+      if (error instanceof ConcurrentModificationError) {
+        return failure(
+          'CONCURRENT_MODIFICATION',
+          'Quotation was modified by another request. Reload and retry.',
+          { quotationId },
+        );
+      }
+      throw error;
+    }
   }
 
   async listLineItems(

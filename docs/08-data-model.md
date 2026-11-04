@@ -7,9 +7,9 @@
 | **Document Owner** | Founding Engineering |
 | **Primary Reviewer** | Ilyas + Zakir (We Decor Events) |
 | **Status** | Draft — founder + engineering review |
-| **Version** | 1.1 |
+| **Version** | 1.2 |
 | **Created Date** | 2026-07-08 |
-| **Last Updated** | 2026-07-08 |
+| **Last Updated** | 2026-07-13 |
 | **Next Review Date** | Not Defined |
 | **Document Purpose** | Translate the approved **domain model** (`07-domain-model.md`) into a **logical persistence model** for Phase 1. Defines entities, relationships, ownership, and persistence boundaries that will guide database implementation. This is **not** the SQL schema. |
 
@@ -21,6 +21,7 @@
 |---------|------|--------|-------------------|
 | 1.0 | 2026-07-08 | Founding Engineering | Initial Phase 1 data model derived from `07-domain-model.md`, Doc `19`, ADR-016, ADR-017 |
 | 1.1 | 2026-07-08 | Founding Engineering | Updated migration/ORM tooling references to Prisma Migrate + Prisma ORM (technology stack alignment only; no persistence behaviour changes). |
+| 1.2 | 2026-07-13 | Founding Engineering | R4-01: status enums + Money wire note aligned to frozen OpenAPI / Admin Portal (no schema redesign). |
 
 ---
 
@@ -240,8 +241,8 @@ Key statuses (non-exhaustive):
 - InventoryMovement: `planned`, `picked`, `packed`, `loaded`, `at_venue`, `returned`, `cleaned_ready`
 - Task: `pending`, `in_progress`, `completed`, `cancelled`
 - StaffAssignment: `proposed`, `confirmed`, `released`, `cancelled`
-- Payment: `recorded`, `void`
-- VendorExpense: `recorded`, `void`
+- Payment: `confirmed`, `void`
+- VendorExpense: `confirmed`, `void`
 - Invoice: `draft`, `sent`, `partially_paid`, `paid`, `void`
 - Suggestion: `pending`, `accepted`, `dismissed`, `expired`
 
@@ -267,8 +268,8 @@ Cascade rules (logical):
 
 Customer and vendor notes are high-volume append-only records:
 
-- **TimelineEntry** (per event) — separate table, FK to Event and Customer
-- **IssueNote** (customer issues) — separate table, FK to Event and Customer
+- **TimelineEntry** (per event) — Prisma model `TimelineEntry`, physical table **`client_interactions`**, FK to Event and Customer
+- **IssueNote** (customer issues) — table `issue_notes`, FK to Event and Customer
 - **VendorIssueNote** (vendor general notes) — table under Vendor
 - **ProcurementLineIssueNote** — table under ProcurementLine
 
@@ -279,6 +280,22 @@ Design:
 
 ---
 
+## Platform Persistence (Auth, Audit, Settings)
+
+Phase 1 ships platform tables that support security and administration (not domain aggregates in `07-domain-model.md`):
+
+| Prisma model | Table | Purpose |
+|--------------|-------|---------|
+| `TenantSettings` | `tenant_settings` | KPI / business settings (1:1 with Tenant); optimistic `version` |
+| `Session` | `sessions` | Refresh-token session store (ADR-008); hashed refresh tokens |
+| `PasswordHistory` | `password_history` | Last N password hashes for reuse prevention |
+| `AuditLog` | `audit_logs` | Append-only sensitive-operation audit (no `version` / no updates) |
+
+**Not persisted in Postgres:** failed login counters — stored in **Redis** by `LoginThrottleService`.
+
+**Audit coverage (Phase 1):** representative sensitive actions only (e.g. `quotation.approved`, `payment.recorded`, `vendor_expense.created`). No public audit HTTP API; admin UI deferred.
+---
+
 ## Money & Currency Handling
 
 Logical representation follows `07-domain-model.md`:
@@ -286,6 +303,8 @@ Logical representation follows `07-domain-model.md`:
 - Monetary fields use a consistent **Money** representation: amount + currency.
 - Currency is fixed to We Decor’s currency in Phase 1 (single-tenant, single-currency) but stored explicitly for future SaaS.
 - All calculations (totals, balances, profitability) happen server-side in the application; persistence holds raw amounts.
+
+**Wire JSON (Phase 1 OpenAPI / Admin Portal):** payment and vendor-expense DTOs expose flat `amount` + `currency`. Invoice lines use flat `unitPriceAmount`. Nested `{ amount, currency }` appears on derived reads such as profitability and some dashboard KPIs. See `docs/09-api-design.md` (R4-01).
 
 Key money fields:
 
@@ -570,7 +589,7 @@ erDiagram
 
 ---
 
-*Last updated: 2026-07-08*  
+*Last updated: 2026-07-13 (R4-01)*  
 *Owner: Founding Engineering*  
-*Version: 1.0 — Draft for review*
+*Version: 1.2 — Draft for review*
 

@@ -42,6 +42,22 @@ export class FollowUpRepositoryImpl
     return followUp ? this.mapFollowUp(followUp) : null;
   }
 
+  async findByLeadIds(
+    tenantId: string,
+    leadIds: string[],
+  ): Promise<FollowUpRecord[]> {
+    if (leadIds.length === 0) {
+      return [];
+    }
+
+    const followUps = await this.prisma.followUp.findMany({
+      where: { tenantId, leadId: { in: leadIds } },
+      orderBy: { dueAt: 'asc' },
+    });
+
+    return followUps.map((followUp) => this.mapFollowUp(followUp));
+  }
+
   async update(
     tenantId: string,
     id: string,

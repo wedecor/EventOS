@@ -1,7 +1,10 @@
 import { DomainEvent } from './domain-event.base';
+import type { SuggestionRecord } from '../../modules/admin/domain/repositories/suggestion.repository';
 import type { EventRecord } from '../../modules/booking/domain/repositories/event.repository';
 import type { TaskRecord } from '../../modules/task/domain/repositories/task.repository';
 import type { StaffAssignmentRecord } from '../../modules/staff/domain/repositories/staff-assignment.repository';
+import type { StaffMemberRecord } from '../../modules/staff/domain/repositories/staff-member.repository';
+import type { TenantSettingsRecord } from '../../modules/tenant/domain/repositories/tenant-settings.repository';
 
 // EP1-OPS-001, EP1-AUT-002 — Workspace activated for an approved event
 export class WorkspaceActivatedEvent extends DomainEvent {
@@ -23,6 +26,18 @@ export class ExecutionProgressAdvancedEvent extends DomainEvent {
     readonly tenantId: string,
     readonly event: EventRecord,
     readonly milestoneKey: string,
+  ) {
+    super();
+  }
+}
+
+// EP1-BR-003 — Execution owner assigned/reassigned on a booking
+export class ExecutionOwnerAssignedEvent extends DomainEvent {
+  readonly eventName = 'ExecutionOwnerAssigned';
+
+  constructor(
+    readonly tenantId: string,
+    readonly event: EventRecord,
   ) {
     super();
   }
@@ -131,6 +146,79 @@ export class StaffAssignmentCancelledEvent extends DomainEvent {
   constructor(
     readonly tenantId: string,
     readonly staffAssignment: StaffAssignmentRecord,
+  ) {
+    super();
+  }
+}
+
+// EP1-STF-001 — Staff master profile created
+export class StaffMemberCreatedEvent extends DomainEvent {
+  readonly eventName = 'StaffMemberCreated';
+
+  constructor(
+    readonly tenantId: string,
+    readonly staffMember: StaffMemberRecord,
+  ) {
+    super();
+  }
+}
+
+// EP1-STF-001 — Staff master fields updated (no status change)
+export class StaffMemberUpdatedEvent extends DomainEvent {
+  readonly eventName = 'StaffMemberUpdated';
+
+  constructor(
+    readonly tenantId: string,
+    readonly staffMember: StaffMemberRecord,
+  ) {
+    super();
+  }
+}
+
+// EP1-STF-001 — Staff master status changed (active / inactive / on_leave)
+export class StaffMemberStatusChangedEvent extends DomainEvent {
+  readonly eventName = 'StaffMemberStatusChanged';
+
+  constructor(
+    readonly tenantId: string,
+    readonly staffMember: StaffMemberRecord,
+    readonly fromStatus: StaffMemberRecord['status'],
+  ) {
+    super();
+  }
+}
+
+// EP1-AUT-001 / ADR-017 — Suggestion accepted (human confirmation)
+export class SuggestionAcceptedEvent extends DomainEvent {
+  readonly eventName = 'SuggestionAccepted';
+
+  constructor(
+    readonly tenantId: string,
+    readonly suggestion: SuggestionRecord,
+  ) {
+    super();
+  }
+}
+
+// EP1-AUT-001 / ADR-017 — Suggestion dismissed
+export class SuggestionDismissedEvent extends DomainEvent {
+  readonly eventName = 'SuggestionDismissed';
+
+  constructor(
+    readonly tenantId: string,
+    readonly suggestion: SuggestionRecord,
+  ) {
+    super();
+  }
+}
+
+// R3-04 / EP1-KPI-007 — Tenant settings updated
+export class TenantSettingsUpdatedEvent extends DomainEvent {
+  readonly eventName = 'TenantSettingsUpdated';
+
+  constructor(
+    readonly tenantId: string,
+    readonly settings: TenantSettingsRecord,
   ) {
     super();
   }

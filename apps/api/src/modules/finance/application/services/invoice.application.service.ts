@@ -120,24 +120,23 @@ export class InvoiceApplicationService {
     const maxInvoiceNumber =
       await this.invoiceRepository.findMaxInvoiceNumber(tenantId);
 
-    const invoice = await this.invoiceRepository.create(tenantId, {
-      bookingId: input.bookingId,
-      customerId: input.customerId,
-      invoiceNumber: maxInvoiceNumber + 1,
-      subtotalAmount,
-      taxAmount: 0,
-      totalAmount: subtotalAmount,
-      notes: input.notes,
-    });
-
-    const lineItems = await Promise.all(
-      input.lineItems.map((lineItem, index) =>
-        this.lineItemRepository.create(tenantId, invoice.id, {
+    const { invoice, lineItems } =
+      await this.invoiceRepository.createWithLineItems(
+        tenantId,
+        {
+          bookingId: input.bookingId,
+          customerId: input.customerId,
+          invoiceNumber: maxInvoiceNumber + 1,
+          subtotalAmount,
+          taxAmount: 0,
+          totalAmount: subtotalAmount,
+          notes: input.notes,
+        },
+        input.lineItems.map((lineItem, index) => ({
           ...lineItem,
           sortOrder: index,
-        }),
-      ),
-    );
+        })),
+      );
 
     this.eventPublisher.publish(new InvoiceCreatedEvent(tenantId, invoice));
 

@@ -1,7 +1,7 @@
 {
   "name": "@event-os/api",
-  "version": "0.1.0",
-  "description": "Event OS backend API — NestJS scaffold",
+  "version": "1.0.0-rc1",
+  "description": "Event OS Phase 1 backend API — NestJS + Prisma (v1.0.0-rc1)",
   "author": "We Decor",
   "private": true,
   "license": "UNLICENSED",
@@ -28,20 +28,25 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
     "prisma:seed": "prisma db seed",
-    "prisma:reset": "prisma migrate reset"
+    "prisma:reset": "prisma migrate reset",
+    "openapi:export": "pnpm build && node -r dotenv/config dist/src/openapi-export.js"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.4",
     "@nestjs/core": "^11.0.1",
     "@nestjs/event-emitter": "^3.1.0",
+    "@nestjs/jwt": "^11.0.2",
     "@nestjs/passport": "^11.0.5",
     "@nestjs/platform-express": "^11.0.1",
     "@nestjs/swagger": "^11.4.5",
     "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
+    "@sentry/nestjs": "^10.65.0",
+    "bcrypt": "^6.0.0",
     "bullmq": "^5.79.3",
     "compression": "^1.8.1",
+    "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
     "dotenv": "^17.2.3",
     "helmet": "^8.2.0",
@@ -51,6 +56,7 @@
     "passport-jwt": "^4.0.1",
     "pg": "^8.16.3",
     "pino": "^10.3.1",
+    "pino-http": "^11.0.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "zod": "^4.4.3"
@@ -61,13 +67,17 @@
     "@nestjs/cli": "^11.0.0",
     "@nestjs/schematics": "^11.0.0",
     "@nestjs/testing": "^11.0.1",
+    "@swc/core": "^1.11.29",
+    "@swc/jest": "^0.2.39",
+    "@types/bcrypt": "^6.0.0",
     "@types/compression": "^1.8.1",
+    "@types/cookie-parser": "^1.4.10",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.0",
     "@types/jest": "^30.0.0",
     "@types/node": "^22.12.0",
-    "@types/pg": "^8.15.5",
     "@types/passport-jwt": "^4.0.1",
+    "@types/pg": "^8.15.5",
     "@types/supertest": "^7.0.0",
     "eslint": "^9.18.0",
     "eslint-config-prettier": "^10.0.1",
@@ -79,8 +89,6 @@
     "prisma": "^7.8.0",
     "source-map-support": "^0.5.21",
     "supertest": "^7.0.0",
-    "@swc/core": "^1.11.29",
-    "@swc/jest": "^0.2.39",
     "ts-loader": "^9.5.2",
     "tsconfig-paths": "^4.2.0",
     "tsx": "^4.20.6",
@@ -96,12 +104,25 @@
     "rootDir": "src",
     "testRegex": ".*\\.spec\\.ts$",
     "transform": {
-      "^.+\\.(t|j)s$": ["@swc/jest"]
+      "^.+\\.(t|j)s$": [
+        "@swc/jest"
+      ]
     },
     "collectCoverageFrom": [
       "**/*.(t|j)s"
     ],
     "coverageDirectory": "../coverage",
-    "testEnvironment": "node"
+    "testEnvironment": "node",
+    "coverageThreshold": {
+      "global": {
+        "lines": 75
+      },
+      "./src/modules/**/domain/**/*.ts": {
+        "lines": 90
+      },
+      "./src/modules/**/application/services/**/*.ts": {
+        "lines": 80
+      }
+    }
   }
 }

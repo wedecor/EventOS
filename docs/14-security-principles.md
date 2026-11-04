@@ -59,17 +59,17 @@ Security controls are enabled by default, not opt-in. A new feature is not compl
 | Refresh token storage | HTTP-only, Secure, SameSite=Strict cookie |
 | Refresh token rotation | New refresh token issued on each refresh; old token invalidated |
 | Concurrent sessions | Allowed (multiple devices); each refresh token tracked independently |
-| Force logout | Invalidate all refresh tokens for a user |
-| Idle timeout | Configurable per tenant (default: 8 hours) |
+| Force logout (all sessions) | Repository support exists (`revokeAllForUser`); **no Phase 1 HTTP endpoint** — deferred |
+| Idle timeout | Deferred (not implemented in Phase 1 auth module) |
 
 ### Brute Force Protection
 
-| Control | Value |
-|---------|-------|
-| Login attempt limit | 5 failed attempts per email per 15 minutes |
-| Lockout duration | 15 minutes (progressive: 15m → 30m → 1h) |
-| CAPTCHA | After 3 failed attempts |
-| Notification | Email user on successful login from new device/IP |
+| Control | Value | Phase 1 status |
+|---------|-------|----------------|
+| Login attempt limit | 5 failed attempts per email per 15 minutes | **Implemented** (`LoginThrottleService` + Redis) |
+| Lockout duration | 15 minutes (progressive: 15m → 30m → 1h) | **Implemented** |
+| CAPTCHA | After 3 failed attempts | **Not shipped** (deferred) |
+| Notification | Email user on successful login from new device/IP | **Not shipped** (deferred) |
 
 ### Multi-Factor Authentication (Phase 2)
 
@@ -84,13 +84,19 @@ Security controls are enabled by default, not opt-in. A new feature is not compl
 ### Permission Model
 
 ```
-User → Role(s) → Permission(s) → Resource:Action
+User → Role → Permission(s) → Resource:Action
 ```
 
-- Permissions are granular: `leads:read`, `leads:write`, `leads:assign`, `leads:delete`
-- Authorization checked in **application layer**, not only at API controller
-- Every application service method validates permissions from TenantContext
+Phase 1 specifics (aligned with docs/09 and `apps/api` auth module — R3-08 / R3-09):
+
+- **One role per user** (the diagram historically said “Role(s)”; Phase 1 does not assign multiple roles to one user)
+- Permissions are granular keys: e.g. `leads:read`, `leads:write`, `leads:assign`, `quotations:approve`, `settings:write` (convention `<resource>:<action>`)
+- **Canonical catalog + role matrix:** [`docs/09-api-design.md`](./09-api-design.md) §Phase 1 Role × Permission Matrix — must match `PERMISSIONS` / `ROLE_PERMISSIONS` in `apps/api/src/modules/auth/domain/rbac.ts` exactly (58 keys; `marketing` = empty)
+- Do **not** invent keys (e.g. historical `leads:delete`) that are absent from that catalog
+- Authorization checked in **application layer**, not only at API controller (`PermissionService`); HTTP routes enforce via `PermissionsGuard`
+- Every protected application use case validates permissions from the authenticated user context
 - Permission checks are unit tested
+- `owner` and `admin` both receive the full Phase 1 permission set, including tenant settings (`settings:*`) per docs/09 §Administration
 
 ### Tenant Isolation
 
@@ -98,17 +104,19 @@ User → Role(s) → Permission(s) → Resource:Action
 |-------|---------|
 | **Application** | TenantContext injected on every request; all queries scoped by `tenant_id` |
 | **Repository** | Base repository enforces `tenant_id` filter on all operations |
-| **Database (Phase 2)** | PostgreSQL Row-Level Security policies |
+| **Database (Phase 6)** | PostgreSQL Row-Level Security policies (deferred — ADR-016) |
 | **API** | `tenant_id` never accepted from request body; always from auth context |
-| **Testing** | Cross-tenant access integration tests mandatory per module |
+| **Testing** | Phase 1: We Decor tenant scoping tests; **cross-tenant isolation tests deferred** to Phase 6 (ADR-016) |
 
 ### Data Access Rules
 
-- Users see only data within their tenant
-- Role-based filtering: `sales` role sees own leads by default; `sales_manager` sees team leads
-- Financial data restricted to `finance`, `owner`, `admin` roles
+- Users see only data within their tenant (Phase 1: single We Decor tenant — ADR-016)
+- Role-based filtering: `sales` role sees own leads by default; `sales_manager` sees team leads (application filtering **in addition to** permission keys)
+- Financial data restricted to roles that hold finance permissions (`finance`, plus `owner` / `admin` via full grant) per docs/09
 - Audit logs restricted to `admin`, `owner` roles
 - AI context assembly respects user permissions (AI cannot access data the user cannot see)
+- `marketing` has **no** Phase 1 API permissions until CMS/content endpoints are specified
+- **Admin Portal (R4-01):** UI gates use the same backend permission keys only (no invented frontend permissions). Nav and route guards mirror `rbac.ts` / docs/09.
 
 ---
 
@@ -192,14 +200,17 @@ frame-ancestors 'none';
 
 ### Rate Limiting
 
-| Endpoint Category | Limit |
-|-------------------|-------|
-| Authentication (login, reset) | 10 requests/minute per IP |
-| API (authenticated) | 100 requests/minute per user |
-| API (authenticated, write) | 30 requests/minute per user |
-| File upload | 10 requests/minute per user |
-| AI endpoints | 20 requests/minute per user |
-| Public endpoints (CMS, client portal) | 60 requests/minute per IP |
+Phase 1 **implemented** login throttling (see Brute Force Protection above). Broader per-route API rate limits below are **target controls** for staging/production hardening — not all are wired as Nest middleware yet.
+
+| Endpoint Category | Limit | Phase 1 status |
+|-------------------|-------|----------------|
+| Authentication (login failures) | 5 failures / 15 min per email + progressive lockout | **Implemented** |
+| Authentication (generic IP throttle) | 10 requests/minute per IP | Target (not separately wired beyond login throttle) |
+| API (authenticated) | 100 requests/minute per user | Target |
+| API (authenticated, write) | 30 requests/minute per user | Target |
+| File upload | 10 requests/minute per user | Target |
+| AI endpoints | 20 requests/minute per user | Deferred (AI not Phase 1) |
+| Public endpoints (CMS, client portal) | 60 requests/minute per IP | Deferred |
 
 ### API Security Headers
 
@@ -261,7 +272,17 @@ Permissions-Policy: camera=(), microphone=(), geolocation=()
 
 ### What Is Logged
 
-| Action | Data Logged |
+Target catalog of sensitive actions (security principles). **Phase 1 implementation** persists a **representative subset** via `AuditLogService` to table `audit_logs` (best-effort; never rolls back the business operation):
+
+| Phase 1 instrumented action | Entity |
+|-----------------------------|--------|
+| `quotation.approved` | Quotation |
+| `payment.recorded` | Payment |
+| `vendor_expense.created` | VendorExpense |
+
+Broader catalog (login, permission denied, settings, role changes, etc.) remains the security target; expand instrumentation without inventing new product features.
+
+| Action (target catalog) | Data Logged |
 |--------|-------------|
 | Login/logout | User ID, IP, user agent, success/failure |
 | Permission denied | User ID, resource, action attempted |
@@ -280,8 +301,7 @@ Permissions-Policy: camera=(), microphone=(), geolocation=()
 - **Immutable** — Audit records are append-only; never updated or deleted
 - **Tamper-evident** — Stored in dedicated table with restricted write access
 - **Retention** — 7 years for financial audit logs; 2 years for operational audit logs
-- **Queryable** — Admin interface for audit log search (Phase 2)
-
+- **Queryable** — Admin interface for audit log search (**Phase 2** — no audit HTTP API in Phase 1)
 ---
 
 ## File Upload Security

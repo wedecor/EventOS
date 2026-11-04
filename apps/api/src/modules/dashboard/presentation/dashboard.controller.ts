@@ -1,6 +1,12 @@
 import { Controller, Get, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Permissions } from '../../auth';
 import { ZodValidationPipe } from '../../../common/pipes/zod-validation.pipe';
+import {
+  ApiDataResponse,
+  ApiStandardErrors,
+  ApiZodQuery,
+} from '../../../shared/presentation/openapi.helpers';
 import { resultToResponse } from '../../../shared/presentation/result-to-response.helper';
 import { TenantId } from '../../../shared/presentation/tenant-context.decorator';
 import { FinanceDashboardQueryService } from '../application/services/finance-dashboard.query.service';
@@ -26,6 +32,7 @@ import {
 // events, Operational overview) — see implementation report for the doc-extension decision.
 @ApiTags('Dashboard')
 @ApiBearerAuth()
+@Permissions('dashboards:read')
 @Controller('dashboards')
 export class DashboardController {
   constructor(
@@ -39,6 +46,12 @@ export class DashboardController {
   // EP1-KPI-001–EP1-KPI-005, EP1-MKT-001, EP1-MKT-002 — Founder KPI dashboard
   @Get('founder')
   @ApiOperation({ summary: 'Get the founder KPI dashboard' })
+  @ApiZodQuery('from', founderDashboardQuerySchema.shape.from, {
+    required: false,
+  })
+  @ApiZodQuery('to', founderDashboardQuerySchema.shape.to, { required: false })
+  @ApiDataResponse(200, 'Founder KPI dashboard retrieved')
+  @ApiStandardErrors()
   async getFounderDashboard(
     @TenantId() tenantId: string,
     @Query(new ZodValidationPipe(founderDashboardQuerySchema))
@@ -54,6 +67,9 @@ export class DashboardController {
   // EP1-SAL-001, EP1-SAL-002, EP1-KPI-002 — Sales summary
   @Get('sales-summary')
   @ApiOperation({ summary: 'Get the sales summary' })
+  @ApiZodQuery('days', salesSummaryQuerySchema.shape.days, { required: false })
+  @ApiDataResponse(200, 'Sales summary retrieved')
+  @ApiStandardErrors()
   async getSalesSummary(
     @TenantId() tenantId: string,
     @Query(new ZodValidationPipe(salesSummaryQuerySchema))
@@ -69,6 +85,8 @@ export class DashboardController {
   // EP1-SAL-003 — Lead pipeline summary
   @Get('lead-pipeline')
   @ApiOperation({ summary: 'Get the lead pipeline summary' })
+  @ApiDataResponse(200, 'Lead pipeline summary retrieved')
+  @ApiStandardErrors()
   async getLeadPipelineSummary(@TenantId() tenantId: string) {
     const result =
       await this.salesDashboardService.getLeadPipelineSummary(tenantId);
@@ -78,6 +96,8 @@ export class DashboardController {
   // EP1-OPS-001, EP1-OPS-005 — Booking summary
   @Get('booking-summary')
   @ApiOperation({ summary: 'Get the booking summary' })
+  @ApiDataResponse(200, 'Booking summary retrieved')
+  @ApiStandardErrors()
   async getBookingSummary(@TenantId() tenantId: string) {
     const result =
       await this.operationsDashboardService.getBookingSummary(tenantId);
@@ -87,6 +107,8 @@ export class DashboardController {
   // EP1-OPS-004 — Event execution summary
   @Get('event-execution-summary')
   @ApiOperation({ summary: 'Get the event execution summary' })
+  @ApiDataResponse(200, 'Event execution summary retrieved')
+  @ApiStandardErrors()
   async getEventExecutionSummary(@TenantId() tenantId: string) {
     const result =
       await this.operationsDashboardService.getEventExecutionSummary(tenantId);
@@ -96,6 +118,11 @@ export class DashboardController {
   // EP1-OPS-005, EP1-AUT-006 — Upcoming events
   @Get('upcoming-events')
   @ApiOperation({ summary: 'Get upcoming events' })
+  @ApiZodQuery('days', upcomingEventsQuerySchema.shape.days, {
+    required: false,
+  })
+  @ApiDataResponse(200, 'Upcoming events retrieved')
+  @ApiStandardErrors()
   async getUpcomingEvents(
     @TenantId() tenantId: string,
     @Query(new ZodValidationPipe(upcomingEventsQuerySchema))
@@ -111,6 +138,8 @@ export class DashboardController {
   // EP1-STF-002 — Staff summary
   @Get('staff-summary')
   @ApiOperation({ summary: 'Get the staff summary' })
+  @ApiDataResponse(200, 'Staff summary retrieved')
+  @ApiStandardErrors()
   async getStaffSummary(@TenantId() tenantId: string) {
     const result =
       await this.resourceDashboardService.getStaffSummary(tenantId);
@@ -120,6 +149,8 @@ export class DashboardController {
   // EP1-INV-003, EP1-INV-005 — Inventory summary
   @Get('inventory-summary')
   @ApiOperation({ summary: 'Get the inventory summary' })
+  @ApiDataResponse(200, 'Inventory summary retrieved')
+  @ApiStandardErrors()
   async getInventorySummary(@TenantId() tenantId: string) {
     const result =
       await this.resourceDashboardService.getInventorySummary(tenantId);
@@ -129,6 +160,8 @@ export class DashboardController {
   // EP1-VEN-001, EP1-VEN-003, EP1-VEN-005 — Vendor summary
   @Get('vendor-summary')
   @ApiOperation({ summary: 'Get the vendor summary' })
+  @ApiDataResponse(200, 'Vendor summary retrieved')
+  @ApiStandardErrors()
   async getVendorSummary(@TenantId() tenantId: string) {
     const result =
       await this.resourceDashboardService.getVendorSummary(tenantId);
@@ -138,6 +171,8 @@ export class DashboardController {
   // EP1-FIN-002, EP1-FIN-003, EP1-FIN-004, EP1-FIN-005 — Finance summary
   @Get('finance-summary')
   @ApiOperation({ summary: 'Get the finance summary' })
+  @ApiDataResponse(200, 'Finance summary retrieved')
+  @ApiStandardErrors()
   async getFinanceSummary(@TenantId() tenantId: string) {
     const result =
       await this.financeDashboardService.getFinanceSummary(tenantId);
@@ -147,6 +182,11 @@ export class DashboardController {
   // EP1-FIN-005, EP1-KPI-004 — Monthly revenue summary
   @Get('monthly-revenue')
   @ApiOperation({ summary: 'Get the monthly revenue summary' })
+  @ApiZodQuery('months', monthlyRevenueQuerySchema.shape.months, {
+    required: false,
+  })
+  @ApiDataResponse(200, 'Monthly revenue summary retrieved')
+  @ApiStandardErrors()
   async getMonthlyRevenueSummary(
     @TenantId() tenantId: string,
     @Query(new ZodValidationPipe(monthlyRevenueQuerySchema))
@@ -162,6 +202,8 @@ export class DashboardController {
   // EP1-FIN-003 — Pending payments (I3)
   @Get('pending-payments')
   @ApiOperation({ summary: 'Get pending payments' })
+  @ApiDataResponse(200, 'Pending payments retrieved')
+  @ApiStandardErrors()
   async getPendingPayments(@TenantId() tenantId: string) {
     const result =
       await this.financeDashboardService.getPendingPayments(tenantId);
@@ -171,6 +213,8 @@ export class DashboardController {
   // EP1-AUT-006, EP1-OPS-001, EP1-OPS-004, EP1-FIN-003, EP1-VEN-005 — Operational overview (I1, I3)
   @Get('operational-overview')
   @ApiOperation({ summary: 'Get the operational overview' })
+  @ApiDataResponse(200, 'Operational overview retrieved')
+  @ApiStandardErrors()
   async getOperationalOverview(@TenantId() tenantId: string) {
     const result =
       await this.operationsDashboardService.getOperationalOverview(tenantId);

@@ -61,11 +61,12 @@ type LineStatus = ProcurementLineRecord['status'];
 // advance to `completed` for categories needing both checkpoints (e.g. lighting/sound
 // delivery + setup).
 const ALLOWED_TRANSITIONS: Record<LineStatus, LineStatus[]> = {
-  planned: ['requested'],
-  requested: ['confirmed'],
-  confirmed: ['delivered', 'completed'],
-  delivered: ['completed'],
+  planned: ['requested', 'cancelled'],
+  requested: ['confirmed', 'cancelled'],
+  confirmed: ['delivered', 'completed', 'cancelled'],
+  delivered: ['completed', 'cancelled'],
   completed: [],
+  cancelled: [],
 };
 
 function timestampUpdateFor(
