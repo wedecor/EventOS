@@ -8,8 +8,10 @@ import {
   Param,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { z } from 'zod';
 import { CurrentUser, Permissions, type AuthenticatedUser } from '../../auth';
 import { ZodValidationPipe } from '../../../common/pipes/zod-validation.pipe';
 import { failure } from '../../../shared/application/result';
@@ -21,6 +23,11 @@ import {
   ApiUuidParam,
   ApiZodBody,
 } from '../../../shared/presentation/openapi.helpers';
+import {
+  buildPageMeta,
+  paginationQuerySchema,
+  toPagedResponse,
+} from '../../../shared/presentation/pagination';
 import { resultToResponse } from '../../../shared/presentation/result-to-response.helper';
 import { TenantId } from '../../../shared/presentation/tenant-context.decorator';
 import { BookingApplicationService } from '../application/services/booking.application.service';
@@ -84,6 +91,55 @@ export class BookingController {
     private readonly communicationService: CommunicationApplicationService,
     private readonly reminderService: ReminderApplicationService,
   ) {}
+
+  @Get()
+  @Permissions('bookings:read')
+  @ApiOperation({ summary: 'List bookings (paginated)' })
+  @ApiDataResponse(200, 'Bookings listed')
+  @ApiStandardErrors()
+  async listBookings(
+    @TenantId() tenantId: string,
+    @Query(
+      new ZodValidationPipe(
+        paginationQuerySchema.extend({
+          status: z
+            .enum([
+              'approved',
+              'in_preparation',
+              'in_execution',
+              'completed',
+              'cancelled',
+            ])
+            .optional(),
+          sort: z.enum(['createdAt', 'eventStartDate']).optional(),
+        }),
+      ),
+    )
+    query: z.infer<typeof paginationQuerySchema> & {
+      status?: string;
+      sort?: 'createdAt' | 'eventStartDate';
+    },
+  ) {
+    const result = await this.bookingService.listBookingsPage(tenantId, {
+      page: query.page,
+      pageSize: query.pageSize,
+      q: query.q,
+      status: query.status,
+      sort: query.sort,
+      order: query.order,
+    });
+    if (!result.ok) {
+      return resultToResponse(result);
+    }
+    return toPagedResponse({
+      items: result.value.items,
+      meta: buildPageMeta(
+        result.value.page,
+        result.value.pageSize,
+        result.value.total,
+      ),
+    });
+  }
 
   @Get(':id')
   @Permissions('bookings:read')
@@ -494,6 +550,13 @@ export class BookingController {
 
     if (body.status === 'in_preparation') {
       const result = await this.bookingService.activateBooking(tenantId, id, {
+        version,
+      });
+      return resultToResponse(result);
+    }
+
+    if (body.status === 'in_execution') {
+      const result = await this.bookingService.startExecution(tenantId, id, {
         version,
       });
       return resultToResponse(result);

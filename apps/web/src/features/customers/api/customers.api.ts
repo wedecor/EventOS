@@ -1,8 +1,10 @@
 import { apiClient } from '@/shared/api/client';
 import {
   parseCustomer,
+  parseCustomerPage,
   type CreateCustomerRequest,
   type Customer,
+  type CustomerPage,
   type UpdateCustomerRequest,
 } from '../schemas/customer.schemas';
 import {
@@ -26,10 +28,22 @@ function ifMatchHeader(version: number): Record<string, string> {
 
 /**
  * Customer (clients) endpoints from OpenAPI.
- * List (`GET /clients`) is not shipped — do not call it.
  * P2-11 adds read-only Customer 360 aggregation under /clients/:id/*.
  */
 export const customersApi = {
+  async list(params?: {
+    page?: number;
+    pageSize?: number;
+    q?: string;
+    sort?: 'createdAt' | 'name';
+    order?: 'asc' | 'desc';
+  }): Promise<CustomerPage> {
+    const { data } = await apiClient.get<unknown>('/api/v1/clients', {
+      params,
+    });
+    return parseCustomerPage(data);
+  },
+
   async create(body: CreateCustomerRequest): Promise<Customer> {
     const { data } = await apiClient.post<unknown>('/api/v1/clients', body);
     return parseCustomer(data);

@@ -1,10 +1,12 @@
 import { apiClient } from '@/shared/api/client';
 import {
   parseBooking,
+  parseBookingPage,
   parseWorkspace,
   type AdvanceExecutionStageRequest,
   type AssignExecutionOwnerRequest,
   type Booking,
+  type BookingPage,
   type CancelBookingRequest,
   type UpdateBookingStatusRequest,
   type WorkspaceView,
@@ -15,19 +17,32 @@ function ifMatchHeader(version: number): Record<string, string> {
 }
 
 /**
- * Booking (event hub) endpoints from frozen OpenAPI — narrow F1-08.
- * No list or create. Workspace UI deferred to F1-09.
- * Nested payments/expenses/etc. deferred to later modules.
+ * Booking (event hub) endpoints — list + detail + lifecycle actions.
  */
 export const bookingsApi = {
+  async list(params?: {
+    page?: number;
+    pageSize?: number;
+    q?: string;
+    status?: string;
+    customerId?: string;
+    sort?: 'createdAt' | 'bookingNumber' | 'eventStartDate';
+    order?: 'asc' | 'desc';
+  }): Promise<BookingPage> {
+    const { data } = await apiClient.get<unknown>('/api/v1/bookings', {
+      params,
+    });
+    return parseBookingPage(data);
+  },
+
   async getById(id: string): Promise<Booking> {
     const { data } = await apiClient.get<unknown>(`/api/v1/bookings/${id}`);
     return parseBooking(data);
   },
 
   /**
-   * Only `in_preparation` is supported by the controller today
-   * (approved → in_preparation via activateBooking).
+   * Supported status transitions via PATCH:
+   * approved → in_preparation, in_preparation → in_execution.
    */
   async updateStatus(
     id: string,

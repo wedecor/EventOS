@@ -28,13 +28,27 @@ function ifMatchHeader(version: number): Record<string, string> {
 }
 
 /**
- * Finance hub APIs — booking-scoped reads + record/void/send (F1-13 Option 2).
+ * Finance hub APIs — booking/lead/quotation payment reads + record/void/send.
  * No global lists, GET-by-id, PDF, or attachment upload.
  */
 export const financeApi = {
   async listPayments(bookingId: string): Promise<Payment[]> {
     const { data } = await apiClient.get<unknown>(
       `/api/v1/bookings/${bookingId}/payments`,
+    );
+    return parsePaymentList(data);
+  },
+
+  async listLeadPayments(leadId: string): Promise<Payment[]> {
+    const { data } = await apiClient.get<unknown>(
+      `/api/v1/leads/${leadId}/payments`,
+    );
+    return parsePaymentList(data);
+  },
+
+  async listQuotationPayments(quotationId: string): Promise<Payment[]> {
+    const { data } = await apiClient.get<unknown>(
+      `/api/v1/quotations/${quotationId}/payments`,
     );
     return parsePaymentList(data);
   },

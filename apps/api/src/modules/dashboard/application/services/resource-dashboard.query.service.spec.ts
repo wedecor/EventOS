@@ -186,6 +186,7 @@ describe('ResourceDashboardQueryService', () => {
       findByQuotationId: jest.fn(),
       findMaxBookingNumber: jest.fn(),
       findByEventDate: jest.fn().mockResolvedValue([]),
+      findPage: jest.fn(),
       update: jest.fn(),
     };
 

@@ -32,10 +32,11 @@ describe('QuotationApplicationService', () => {
     revisionNumber: 1,
     status: 'draft',
     eventType: 'wedding',
-    eventStartDate: new Date('2026-08-01'),
-    eventEndDate: new Date('2026-08-02'),
+    eventStartDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+    eventEndDate: new Date(Date.now() + 31 * 24 * 60 * 60 * 1000),
     venue: 'Bangalore',
-    validUntil: new Date('2026-08-31'),
+    // Relative future date — approve tests must not depend on wall-clock vs fixed 2026 fixtures.
+    validUntil: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000),
     terms: 'Standard terms',
     notes: null,
     subtotalAmount: 100000,
@@ -72,6 +73,8 @@ describe('QuotationApplicationService', () => {
       findLatestRevision: jest.fn(),
       findMaxQuotationNumber: jest.fn(),
       findByIds: jest.fn(),
+      findAll: jest.fn(),
+      findPage: jest.fn(),
       update: jest.fn(),
     };
     lineItemRepository = {
@@ -86,7 +89,9 @@ describe('QuotationApplicationService', () => {
     bookingService = {
       createEventFromApprovedQuotation,
       activateBooking: jest.fn(),
+      startExecution: jest.fn(),
       retrieveBooking: jest.fn(),
+      listBookingsPage: jest.fn(),
       cancelBooking: jest.fn(),
       completeBooking: jest.fn(),
     } as unknown as jest.Mocked<BookingApplicationService>;

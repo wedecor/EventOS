@@ -48,6 +48,8 @@ import {
   type Quotation,
   type RejectQuotationFormValues,
 } from '../schemas/quotation.schemas';
+import { PaymentsPanel } from '@/features/finance/components/payments-panel';
+import { QuotationLineItemsPanel } from './quotation-line-items-panel';
 
 function DetailField({ label, value }: { label: string; value: string }) {
   return (
@@ -78,7 +80,7 @@ export function QuotationDetailPage() {
               ? `Quotation Q-${query.data.quotationNumber}`
               : 'Quotation'
           }
-          description="Header and server totals from GET /api/v1/quotations/:id. Line items and PDF are not available in this API."
+          description="Header, line items, and server totals from the quotations API. PDF generation is not shipped yet."
           breadcrumbs={<Breadcrumbs items={crumbs} />}
           actions={
             id && query.data?.status === 'draft' ? (
@@ -199,6 +201,10 @@ export function QuotationDetailPage() {
             </PageSection>
 
             <PageSection>
+              <QuotationLineItemsPanel quotation={query.data} />
+            </PageSection>
+
+            <PageSection>
               <ContentCard title="Pricing (server totals)">
                 <dl className="grid gap-3 sm:grid-cols-2">
                   <DetailField
@@ -231,11 +237,14 @@ export function QuotationDetailPage() {
                   />
                 </dl>
                 <p className="mt-3 text-xs text-muted-foreground">
-                  Line-item rows cannot be listed: there is no GET line-items
-                  endpoint and GET quotation does not embed lines. Totals above
-                  are returned by the API.
+                  Totals are recalculated on the server when line items, discount,
+                  or tax change.
                 </p>
               </ContentCard>
+            </PageSection>
+
+            <PageSection>
+              <PaymentsPanel quotationId={query.data.id} />
             </PageSection>
 
             <PageSection>

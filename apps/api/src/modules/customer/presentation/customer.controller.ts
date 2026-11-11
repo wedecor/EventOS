@@ -7,8 +7,10 @@ import {
   Param,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { z } from 'zod';
 import { Permissions } from '../../auth';
 import { ZodValidationPipe } from '../../../common/pipes/zod-validation.pipe';
 import { IfMatchVersion } from '../../../shared/presentation/if-match.decorator';
@@ -19,6 +21,11 @@ import {
   ApiUuidParam,
   ApiZodBody,
 } from '../../../shared/presentation/openapi.helpers';
+import {
+  buildPageMeta,
+  paginationQuerySchema,
+  toPagedResponse,
+} from '../../../shared/presentation/pagination';
 import { resultToResponse } from '../../../shared/presentation/result-to-response.helper';
 import { TenantId } from '../../../shared/presentation/tenant-context.decorator';
 import { CustomerApplicationService } from '../application/services/customer.application.service';
@@ -28,6 +35,10 @@ import {
   type CreateCustomerBody,
   type UpdateCustomerBody,
 } from './schemas/customer.schemas';
+
+const listCustomersQuerySchema = paginationQuerySchema.extend({
+  sort: z.enum(['createdAt', 'name']).optional(),
+});
 
 @ApiTags('Customers')
 @ApiBearerAuth()
@@ -54,6 +65,36 @@ export class CustomerController {
     });
 
     return resultToResponse(result);
+  }
+
+  @Get()
+  @Permissions('clients:read')
+  @ApiOperation({ summary: 'List customers (paginated)' })
+  @ApiDataResponse(200, 'Customers listed')
+  @ApiStandardErrors()
+  async listCustomers(
+    @TenantId() tenantId: string,
+    @Query(new ZodValidationPipe(listCustomersQuerySchema))
+    query: z.infer<typeof listCustomersQuerySchema>,
+  ) {
+    const result = await this.customerService.listCustomersPage(tenantId, {
+      page: query.page,
+      pageSize: query.pageSize,
+      q: query.q,
+      sort: query.sort,
+      order: query.order,
+    });
+    if (!result.ok) {
+      return resultToResponse(result);
+    }
+    return toPagedResponse({
+      items: result.value.items,
+      meta: buildPageMeta(
+        result.value.page,
+        result.value.pageSize,
+        result.value.total,
+      ),
+    });
   }
 
   @Get(':id')

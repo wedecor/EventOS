@@ -61,6 +61,35 @@ export class QuotationApplicationService {
     private readonly auditLog: AuditLogService,
   ) {}
 
+  async listQuotationsPage(
+    tenantId: string,
+    options: {
+      page: number;
+      pageSize: number;
+      q?: string;
+      status?: string;
+      customerId?: string;
+      leadId?: string;
+      sort?: 'createdAt' | 'quotationNumber';
+      order?: 'asc' | 'desc';
+    },
+  ): Promise<
+    Result<{
+      items: QuotationDto[];
+      total: number;
+      page: number;
+      pageSize: number;
+    }>
+  > {
+    const page = await this.quotationRepository.findPage(tenantId, options);
+    return success({
+      items: page.items.map(toQuotationDto),
+      total: page.total,
+      page: options.page,
+      pageSize: options.pageSize,
+    });
+  }
+
   async createQuotation(
     tenantId: string,
     input: CreateQuotationInput,

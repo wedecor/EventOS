@@ -27,6 +27,8 @@ import {
 } from '@/shared/components/page';
 import {
   useBookingPaymentsQuery,
+  useLeadPaymentsQuery,
+  useQuotationPaymentsQuery,
   useRecordPaymentMutation,
   useVoidPaymentMutation,
 } from '../hooks/use-finance-queries';
@@ -43,23 +45,41 @@ import {
 const selectClassName =
   'flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm';
 
-type PaymentsPanelProps = {
-  bookingId: string;
-};
+export type PaymentsPanelProps =
+  | { bookingId: string; leadId?: never; quotationId?: never }
+  | { leadId: string; bookingId?: never; quotationId?: never }
+  | { quotationId: string; bookingId?: never; leadId?: never };
 
-export function PaymentsPanel({ bookingId }: PaymentsPanelProps) {
-  const query = useBookingPaymentsQuery(bookingId);
-  const recordMutation = useRecordPaymentMutation(bookingId);
-  const voidMutation = useVoidPaymentMutation(bookingId);
+export function PaymentsPanel(props: PaymentsPanelProps) {
+  const bookingId = 'bookingId' in props ? props.bookingId : undefined;
+  const leadId = 'leadId' in props ? props.leadId : undefined;
+  const quotationId = 'quotationId' in props ? props.quotationId : undefined;
+
+  const bookingQuery = useBookingPaymentsQuery(bookingId);
+  const leadQuery = useLeadPaymentsQuery(leadId);
+  const quotationQuery = useQuotationPaymentsQuery(quotationId);
+  const query = bookingId
+    ? bookingQuery
+    : leadId
+      ? leadQuery
+      : quotationQuery;
+
+  const scope = { bookingId, leadId, quotationId };
+  const recordMutation = useRecordPaymentMutation(scope);
+  const voidMutation = useVoidPaymentMutation(scope);
   const [formOpen, setFormOpen] = useState(false);
   const [voidTarget, setVoidTarget] = useState<Payment | null>(null);
+
+  const confirmedAdvance = (query.data ?? []).some(
+    (payment) => payment.status === 'confirmed' && payment.amount > 0,
+  );
 
   const form = useForm<RecordPaymentFormValues>({
     resolver: zodResolver(recordPaymentFormSchema),
     defaultValues: {
-      bookingId,
-      leadId: '',
-      quotationId: '',
+      bookingId: bookingId ?? '',
+      leadId: leadId ?? '',
+      quotationId: quotationId ?? '',
       invoiceId: '',
       amount: '',
       currency: 'INR',
@@ -111,22 +131,24 @@ export function PaymentsPanel({ bookingId }: PaymentsPanelProps) {
     },
   ];
 
+  const resetDefaults = (): RecordPaymentFormValues => ({
+    bookingId: bookingId ?? '',
+    leadId: leadId ?? '',
+    quotationId: quotationId ?? '',
+    invoiceId: '',
+    amount: '',
+    currency: 'INR',
+    method: 'upi',
+    receivedAt: defaultDateTimeLocalValue(),
+    missingProofReason: '',
+    notes: '',
+  });
+
   const onRecord = async (values: RecordPaymentFormValues) => {
     try {
       await recordMutation.mutateAsync(toRecordPaymentRequest(values));
       toast.success('Payment recorded');
-      form.reset({
-        bookingId,
-        leadId: '',
-        quotationId: '',
-        invoiceId: '',
-        amount: '',
-        currency: 'INR',
-        method: 'upi',
-        receivedAt: defaultDateTimeLocalValue(),
-        missingProofReason: '',
-        notes: '',
-      });
+      form.reset(resetDefaults());
       setFormOpen(false);
     } catch (error) {
       toast.error(
@@ -152,13 +174,27 @@ export function PaymentsPanel({ bookingId }: PaymentsPanelProps) {
   };
 
   const payments = query.data ?? [];
+  const anchorLabel = bookingId
+    ? 'booking'
+    : leadId
+      ? 'lead'
+      : 'quotation';
 
   return (
     <>
       <ContentCard
         title="Payments"
-        description="GET /bookings/:id/payments · POST /payments · POST /payments/:id/void. Proof upload is not shipped — use missingProofReason when needed."
+        description={`Record payments against this ${anchorLabel}. Confirmed amounts satisfy the advance gate for booking conversion when linked to a lead or quotation.`}
       >
+        {!bookingId ? (
+          <p className="mb-3 text-xs text-muted-foreground">
+            Advance status:{' '}
+            <span className="font-medium text-foreground">
+              {confirmedAdvance ? 'Confirmed advance on file' : 'No confirmed advance yet'}
+            </span>
+          </p>
+        ) : null}
+
         {query.isLoading ? <LoadingState variant="skeleton" rows={3} /> : null}
         {query.isError ? (
           <ErrorState
@@ -174,7 +210,7 @@ export function PaymentsPanel({ bookingId }: PaymentsPanelProps) {
         {query.isSuccess && payments.length === 0 && !formOpen ? (
           <EmptyState
             title="No payments"
-            description="Record an advance or balance payment for this booking."
+            description={`Record an advance or balance payment for this ${anchorLabel}.`}
           />
         ) : null}
         {query.isSuccess && payments.length > 0 ? (
@@ -273,22 +309,6 @@ export function PaymentsPanel({ bookingId }: PaymentsPanelProps) {
                     />
                     <FormField
                       control={form.control}
-                      name="invoiceId"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Invoice ID (optional)</FormLabel>
-                          <FormControl>
-                            <Input
-                              disabled={recordMutation.isPending}
-                              {...field}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
                       name="missingProofReason"
                       render={({ field }) => (
                         <FormItem>
@@ -323,6 +343,20 @@ export function PaymentsPanel({ bookingId }: PaymentsPanelProps) {
                   <FormField
                     control={form.control}
                     name="bookingId"
+                    render={({ field }) => (
+                      <input type="hidden" {...field} />
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="leadId"
+                    render={({ field }) => (
+                      <input type="hidden" {...field} />
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="quotationId"
                     render={({ field }) => (
                       <input type="hidden" {...field} />
                     )}

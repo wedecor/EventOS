@@ -344,10 +344,13 @@ function BookingActionsPanel({ booking }: { booking: Booking }) {
   const canCancel =
     booking.status !== 'cancelled' && booking.status !== 'completed';
   const canStartPrep = booking.status === 'approved';
+  const canStartExecution = booking.status === 'in_preparation';
   const canComplete = booking.status === 'in_execution';
   const canAssignOwner = canCancel;
   const canAdvanceStage =
     booking.status === 'in_preparation' || booking.status === 'in_execution';
+
+  const [startExecutionOpen, setStartExecutionOpen] = useState(false);
 
   const onStartPrep = async () => {
     try {
@@ -362,6 +365,23 @@ function BookingActionsPanel({ booking }: { booking: Booking }) {
         error instanceof ApiError
           ? error.message
           : 'Unable to update booking status.',
+      );
+    }
+  };
+
+  const onStartExecution = async () => {
+    try {
+      await statusMutation.mutateAsync({
+        body: { status: 'in_execution' },
+        version: booking.version,
+      });
+      toast.success('Booking moved to in execution');
+      setStartExecutionOpen(false);
+    } catch (error) {
+      toast.error(
+        error instanceof ApiError
+          ? error.message
+          : 'Unable to start execution.',
       );
     }
   };
@@ -445,6 +465,18 @@ function BookingActionsPanel({ booking }: { booking: Booking }) {
           </Can>
         ) : null}
 
+        {canStartExecution ? (
+          <Can permission="bookings:status:update">
+            <Button
+              type="button"
+              disabled={busy}
+              onClick={() => setStartExecutionOpen(true)}
+            >
+              Start execution
+            </Button>
+          </Can>
+        ) : null}
+
         {canComplete ? (
           <Can permission="bookings:complete">
             <Button
@@ -472,9 +504,8 @@ function BookingActionsPanel({ booking }: { booking: Booking }) {
       </div>
 
       <p className="text-xs text-muted-foreground">
-        PATCH /status only supports approved → in_preparation. Complete requires
-        in_execution. There is no Phase 1 UI/API transition into in_execution via
-        this status endpoint — the server rejects other status values.
+        Status path: approved → in_preparation → in_execution → completed.
+        Complete still requires financial review (no draft invoices).
       </p>
 
       {canAssignOwner ? (
@@ -608,6 +639,14 @@ function BookingActionsPanel({ booking }: { booking: Booking }) {
         description="Sets status to in_preparation (PATCH …/status). Only available from approved."
         confirmLabel="Start preparation"
         onConfirm={() => void onStartPrep()}
+      />
+      <ConfirmDialog
+        open={startExecutionOpen}
+        onOpenChange={setStartExecutionOpen}
+        title="Start execution?"
+        description="Sets status to in_execution (PATCH …/status). Required before Complete."
+        confirmLabel="Start execution"
+        onConfirm={() => void onStartExecution()}
       />
       <ConfirmDialog
         open={completeOpen}

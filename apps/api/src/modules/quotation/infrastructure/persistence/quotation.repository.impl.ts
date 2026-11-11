@@ -93,6 +93,55 @@ export class QuotationRepositoryImpl
     return quotations.map((quotation) => this.mapQuotation(quotation));
   }
 
+  async findPage(
+    tenantId: string,
+    options: {
+      page: number;
+      pageSize: number;
+      q?: string;
+      status?: string;
+      customerId?: string;
+      leadId?: string;
+      sort?: 'createdAt' | 'quotationNumber';
+      order?: 'asc' | 'desc';
+    },
+  ): Promise<{ items: QuotationRecord[]; total: number }> {
+    const order = options.order ?? 'desc';
+    const where = {
+      tenantId,
+      ...(options.status ? { status: options.status as never } : {}),
+      ...(options.customerId ? { customerId: options.customerId } : {}),
+      ...(options.leadId ? { leadId: options.leadId } : {}),
+      ...(options.q
+        ? {
+            OR: [
+              { venue: { contains: options.q, mode: 'insensitive' as const } },
+              { eventType: { contains: options.q, mode: 'insensitive' as const } },
+              { notes: { contains: options.q, mode: 'insensitive' as const } },
+            ],
+          }
+        : {}),
+    };
+
+    const [total, quotations] = await this.prisma.$transaction([
+      this.prisma.quotation.count({ where }),
+      this.prisma.quotation.findMany({
+        where,
+        orderBy:
+          options.sort === 'quotationNumber'
+            ? { quotationNumber: order }
+            : { createdAt: order },
+        skip: (options.page - 1) * options.pageSize,
+        take: options.pageSize,
+      }),
+    ]);
+
+    return {
+      items: quotations.map((quotation) => this.mapQuotation(quotation)),
+      total,
+    };
+  }
+
   async update(
     tenantId: string,
     id: string,

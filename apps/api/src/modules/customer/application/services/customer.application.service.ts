@@ -77,6 +77,32 @@ export class CustomerApplicationService {
     return success(toCustomerDto(customer));
   }
 
+  async listCustomersPage(
+    tenantId: string,
+    options: {
+      page: number;
+      pageSize: number;
+      q?: string;
+      sort?: 'createdAt' | 'name';
+      order?: 'asc' | 'desc';
+    },
+  ): Promise<
+    Result<{
+      items: CustomerDto[];
+      total: number;
+      page: number;
+      pageSize: number;
+    }>
+  > {
+    const page = await this.customerRepository.findPage(tenantId, options);
+    return success({
+      items: page.items.map(toCustomerDto),
+      total: page.total,
+      page: options.page,
+      pageSize: options.pageSize,
+    });
+  }
+
   async updateCustomer(
     tenantId: string,
     customerId: string,

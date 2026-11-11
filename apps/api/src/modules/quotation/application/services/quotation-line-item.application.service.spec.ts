@@ -66,6 +66,8 @@ describe('QuotationLineItemApplicationService', () => {
       findLatestRevision: jest.fn(),
       findMaxQuotationNumber: jest.fn(),
       findByIds: jest.fn(),
+      findAll: jest.fn(),
+      findPage: jest.fn(),
       update: jest.fn(),
     };
     lineItemRepository = {
@@ -590,6 +592,7 @@ describe('QuotationLineItemApplicationService', () => {
   // ── listLineItems ────────────────────────────────────────────────────
 
   it('listLineItems returns mapped DTOs', async () => {
+    quotationRepository.findById.mockResolvedValue(draftQuotation);
     const secondItem: QuotationLineItemRecord = {
       ...baseLineItem,
       id: 'item-2',
@@ -610,5 +613,17 @@ describe('QuotationLineItemApplicationService', () => {
       expect(result.value[0].id).toBe(itemId);
       expect(result.value[1].id).toBe('item-2');
     }
+  });
+
+  it('listLineItems rejects when quotation not found', async () => {
+    quotationRepository.findById.mockResolvedValue(null);
+
+    const result = await service.listLineItems(tenantId, quotationId);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('NOT_FOUND');
+    }
+    expect(lineItemRepository.findByQuotationId).not.toHaveBeenCalled();
   });
 });

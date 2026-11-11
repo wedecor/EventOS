@@ -28,11 +28,14 @@ import {
   PageSection,
 } from '@/shared/components/page';
 import { buildBreadcrumbs } from '@/shared/lib/breadcrumbs';
+import { PaymentsPanel } from '@/features/finance/components/payments-panel';
 import {
   useAssignLeadMutation,
   useChangeLeadStageMutation,
   useLeadQuery,
+  useLeadFollowUpsQuery,
   useScheduleFollowUpMutation,
+  useUpdateFollowUpMutation,
 } from '../hooks/use-lead-queries';
 import { formatBudget, formatLeadDate, formatLeadLabel } from '../lib/format';
 import {
@@ -214,68 +217,134 @@ function AssignPanel({ leadId, version }: { leadId: string; version: number }) {
 }
 
 function FollowUpPanel({ leadId }: { leadId: string }) {
-  const mutation = useScheduleFollowUpMutation(leadId);
+  const listQuery = useLeadFollowUpsQuery(leadId);
+  const scheduleMutation = useScheduleFollowUpMutation(leadId);
+  const updateMutation = useUpdateFollowUpMutation(leadId);
   const form = useForm<ScheduleFollowUpFormValues>({
     resolver: zodResolver(scheduleFollowUpFormSchema),
     defaultValues: { dueAt: '', notes: '' },
   });
 
   return (
-    <Form {...form}>
-      <form
-        className="space-y-3"
-        onSubmit={form.handleSubmit(async (values) => {
-          try {
-            const due = new Date(values.dueAt);
-            await mutation.mutateAsync({
-              dueAt: due.toISOString(),
-              ...(values.notes?.trim() ? { notes: values.notes.trim() } : {}),
-            });
-            toast.success('Follow-up scheduled');
-            form.reset({ dueAt: '', notes: '' });
-          } catch (error) {
-            toast.error(
-              error instanceof ApiError
-                ? error.message
-                : 'Unable to schedule follow-up.',
-            );
+    <div className="space-y-4">
+      {listQuery.isLoading ? <LoadingState variant="skeleton" rows={2} /> : null}
+      {listQuery.isError ? (
+        <ErrorState
+          title="Unable to load follow-ups"
+          description={
+            listQuery.error instanceof ApiError
+              ? listQuery.error.message
+              : 'Request failed.'
           }
-        })}
-      >
-        <FormField
-          control={form.control}
-          name="dueAt"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Due at</FormLabel>
-              <FormControl>
-                <Input type="datetime-local" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
         />
-        <FormField
-          control={form.control}
-          name="notes"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Notes</FormLabel>
-              <FormControl>
-                <Input {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <p className="text-xs text-muted-foreground">
-          Follow-ups can be created here. Listing follow-ups is not exposed by the Phase 1 API.
-        </p>
-        <Button type="submit" disabled={form.formState.isSubmitting}>
-          Schedule follow-up
-        </Button>
-      </form>
-    </Form>
+      ) : null}
+      {listQuery.isSuccess && listQuery.data.length === 0 ? (
+        <p className="text-xs text-muted-foreground">No follow-ups yet.</p>
+      ) : null}
+      {listQuery.isSuccess && listQuery.data.length > 0 ? (
+        <ul className="space-y-2">
+          {listQuery.data.map((item) => (
+            <li
+              key={item.id}
+              className="rounded-md border border-border p-2 text-sm"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <p className="font-medium">{formatLeadLabel(item.status)}</p>
+                  <p className="text-xs text-muted-foreground">
+                    Due {formatLeadDate(item.dueAt)}
+                  </p>
+                  {item.notes ? (
+                    <p className="mt-1 text-xs">{item.notes}</p>
+                  ) : null}
+                </div>
+                {item.status === 'pending' ? (
+                  <Can permission="leads:followups:write">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={updateMutation.isPending}
+                      onClick={() =>
+                        void updateMutation
+                          .mutateAsync({
+                            followUpId: item.id,
+                            body: { status: 'done' },
+                            version: item.version,
+                          })
+                          .then(() => toast.success('Follow-up marked done'))
+                          .catch((error: unknown) =>
+                            toast.error(
+                              error instanceof ApiError
+                                ? error.message
+                                : 'Unable to update follow-up.',
+                            ),
+                          )
+                      }
+                    >
+                      Done
+                    </Button>
+                  </Can>
+                ) : null}
+              </div>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+
+      <Form {...form}>
+        <form
+          className="space-y-3"
+          onSubmit={form.handleSubmit(async (values) => {
+            try {
+              const due = new Date(values.dueAt);
+              await scheduleMutation.mutateAsync({
+                dueAt: due.toISOString(),
+                ...(values.notes?.trim() ? { notes: values.notes.trim() } : {}),
+              });
+              toast.success('Follow-up scheduled');
+              form.reset({ dueAt: '', notes: '' });
+            } catch (error) {
+              toast.error(
+                error instanceof ApiError
+                  ? error.message
+                  : 'Unable to schedule follow-up.',
+              );
+            }
+          })}
+        >
+          <FormField
+            control={form.control}
+            name="dueAt"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Due at</FormLabel>
+                <FormControl>
+                  <Input type="datetime-local" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="notes"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Notes</FormLabel>
+                <FormControl>
+                  <Input {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <Button type="submit" disabled={form.formState.isSubmitting}>
+            Schedule follow-up
+          </Button>
+        </form>
+      </Form>
+    </div>
   );
 }
 
@@ -403,12 +472,14 @@ export function LeadDetailPage() {
                     <AssignPanel leadId={query.data.id} version={query.data.version} />
                   </ContentCard>
                 </Can>
-                <Can permission="leads:followups:write">
-                  <ContentCard title="Schedule follow-up">
-                    <FollowUpPanel leadId={query.data.id} />
-                  </ContentCard>
-                </Can>
+                <ContentCard title="Follow-ups">
+                  <FollowUpPanel leadId={query.data.id} />
+                </ContentCard>
               </div>
+            </PageSection>
+
+            <PageSection>
+              <PaymentsPanel leadId={query.data.id} />
             </PageSection>
           </>
         ) : null}

@@ -3,12 +3,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const get = vi.fn();
 const post = vi.fn();
 const patch = vi.fn();
+const del = vi.fn();
 
 vi.mock('@/shared/api/client', () => ({
   apiClient: {
     get: (...args: unknown[]) => get(...args),
     post: (...args: unknown[]) => post(...args),
     patch: (...args: unknown[]) => patch(...args),
+    delete: (...args: unknown[]) => del(...args),
   },
 }));
 
@@ -43,6 +45,7 @@ describe('quotationsApi', () => {
     get.mockReset();
     post.mockReset();
     patch.mockReset();
+    del.mockReset();
   });
 
   it('creates a quotation', async () => {
@@ -122,5 +125,59 @@ describe('quotationsApi', () => {
       {},
       { headers: { 'If-Match': '"3"' } },
     );
+  });
+
+  it('lists, adds, updates, and removes line items', async () => {
+    const { quotationsApi } = await import('./quotations.api');
+    const lineItem = {
+      id: 'li1',
+      tenantId: 't1',
+      quotationId: 'q1',
+      description: 'Stage',
+      quantity: 1,
+      unitPriceAmount: 5000,
+      currency: 'INR',
+      sortOrder: 0,
+      createdAt: '2026-07-01T00:00:00.000Z',
+      updatedAt: '2026-07-01T00:00:00.000Z',
+      version: 1,
+    };
+
+    get.mockResolvedValue({ data: { data: [lineItem] } });
+    await quotationsApi.listLineItems('q1');
+    expect(get).toHaveBeenCalledWith('/api/v1/quotations/q1/line-items');
+
+    post.mockResolvedValue({ data: { data: lineItem } });
+    await quotationsApi.addLineItem('q1', {
+      description: 'Stage',
+      quantity: 1,
+      unitPrice: { amount: 5000, currency: 'INR' },
+    });
+    expect(post).toHaveBeenCalledWith('/api/v1/quotations/q1/line-items', {
+      description: 'Stage',
+      quantity: 1,
+      unitPrice: { amount: 5000, currency: 'INR' },
+    });
+
+    patch.mockResolvedValue({ data: { data: { ...lineItem, version: 2 } } });
+    await quotationsApi.updateLineItem(
+      'q1',
+      'li1',
+      { description: 'Stage XL', quantity: 2, unitPrice: { amount: 6000, currency: 'INR' } },
+      1,
+    );
+    expect(patch).toHaveBeenCalledWith(
+      '/api/v1/quotations/q1/line-items/li1',
+      {
+        description: 'Stage XL',
+        quantity: 2,
+        unitPrice: { amount: 6000, currency: 'INR' },
+      },
+      { headers: { 'If-Match': '"1"' } },
+    );
+
+    del.mockResolvedValue({ data: undefined });
+    await quotationsApi.removeLineItem('q1', 'li1');
+    expect(del).toHaveBeenCalledWith('/api/v1/quotations/q1/line-items/li1');
   });
 });

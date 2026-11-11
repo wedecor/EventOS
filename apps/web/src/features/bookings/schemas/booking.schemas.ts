@@ -71,11 +71,22 @@ export const bookingEnvelopeSchema = z.object({
   data: bookingSchema,
 });
 
+export const bookingPageEnvelopeSchema = z.object({
+  data: z.array(bookingSchema),
+  meta: z.object({
+    page: z.number().int(),
+    pageSize: z.number().int(),
+    total: z.number().int(),
+    totalPages: z.number().int(),
+  }),
+});
+
 export const workspaceEnvelopeSchema = z.object({
   data: workspaceSchema,
 });
 
 export type Booking = z.infer<typeof bookingSchema>;
+export type BookingPage = z.infer<typeof bookingPageEnvelopeSchema>;
 export type WorkspaceView = z.infer<typeof workspaceSchema>;
 
 export const cancelBookingFormSchema = z.object({
@@ -106,6 +117,10 @@ export type AdvanceStageFormValues = z.infer<typeof advanceStageFormSchema>;
 
 export function parseBooking(body: unknown): Booking {
   return bookingEnvelopeSchema.parse(body).data;
+}
+
+export function parseBookingPage(body: unknown): BookingPage {
+  return bookingPageEnvelopeSchema.parse(body);
 }
 
 export function parseWorkspace(body: unknown): WorkspaceView {

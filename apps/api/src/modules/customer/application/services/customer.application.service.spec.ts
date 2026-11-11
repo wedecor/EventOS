@@ -38,6 +38,8 @@ describe('CustomerApplicationService', () => {
       findById: jest.fn(),
       findByPhone: jest.fn(),
       findByDisplayName: jest.fn(),
+      findAll: jest.fn(),
+      findPage: jest.fn(),
       update: jest.fn(),
     };
     eventPublisher = { publish };

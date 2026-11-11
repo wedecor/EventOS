@@ -258,6 +258,22 @@ export class LeadApplicationService {
     }
   }
 
+  async listFollowUpsForLead(
+    tenantId: string,
+    leadId: string,
+  ): Promise<Result<FollowUpDto[]>> {
+    const lead = await this.leadRepository.findById(tenantId, leadId);
+    if (!lead) {
+      return failure('NOT_FOUND', 'Lead not found.');
+    }
+
+    const followUps = await this.followUpRepository.findByLeadIds(tenantId, [
+      leadId,
+    ]);
+
+    return success(followUps.map(toFollowUpDto));
+  }
+
   async scheduleFollowUp(
     tenantId: string,
     leadId: string,

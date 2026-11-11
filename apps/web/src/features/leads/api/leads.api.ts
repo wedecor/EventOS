@@ -1,6 +1,7 @@
 import { apiClient } from '@/shared/api/client';
 import {
   parseFollowUp,
+  parseFollowUpList,
   parseLead,
   parseLeadList,
   type AssignLeadRequest,
@@ -9,6 +10,7 @@ import {
   type CreateLeadRequest,
   type FollowUp,
   type Lead,
+  type UpdateFollowUpRequest,
 } from '../schemas/lead.schemas';
 
 function ifMatchHeader(version: number): Record<string, string> {
@@ -61,6 +63,26 @@ export const leadsApi = {
     const { data } = await apiClient.post<unknown>(
       `/api/v1/leads/${id}/follow-ups`,
       body,
+    );
+    return parseFollowUp(data);
+  },
+
+  async listFollowUps(leadId: string): Promise<FollowUp[]> {
+    const { data } = await apiClient.get<unknown>(
+      `/api/v1/leads/${leadId}/follow-ups`,
+    );
+    return parseFollowUpList(data);
+  },
+
+  async updateFollowUp(
+    followUpId: string,
+    body: UpdateFollowUpRequest,
+    version: number,
+  ): Promise<FollowUp> {
+    const { data } = await apiClient.patch<unknown>(
+      `/api/v1/follow-ups/${followUpId}`,
+      body,
+      { headers: ifMatchHeader(version) },
     );
     return parseFollowUp(data);
   },

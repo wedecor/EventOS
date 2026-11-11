@@ -136,6 +136,30 @@ export class PaymentApplicationService {
     return success(payments.map(toPaymentDto));
   }
 
+  async listPaymentsForLead(
+    tenantId: string,
+    leadId: string,
+  ): Promise<Result<PaymentDto[]>> {
+    const payments = await this.paymentRepository.findByLeadId(
+      tenantId,
+      leadId,
+    );
+
+    return success(payments.map(toPaymentDto));
+  }
+
+  async listPaymentsForQuotation(
+    tenantId: string,
+    quotationId: string,
+  ): Promise<Result<PaymentDto[]>> {
+    const payments = await this.paymentRepository.findByQuotationId(
+      tenantId,
+      quotationId,
+    );
+
+    return success(payments.map(toPaymentDto));
+  }
+
   // EP1-FIN-003 — Payment lifecycle extension (void)
   async voidPayment(
     tenantId: string,

@@ -242,6 +242,14 @@ export class QuotationLineItemApplicationService {
     tenantId: string,
     quotationId: string,
   ): Promise<Result<QuotationLineItemDto[]>> {
+    const quotation = await this.quotationRepository.findById(
+      tenantId,
+      quotationId,
+    );
+    if (!quotation) {
+      return failure('NOT_FOUND', 'Quotation not found.');
+    }
+
     const lineItems = await this.lineItemRepository.findByQuotationId(
       tenantId,
       quotationId,

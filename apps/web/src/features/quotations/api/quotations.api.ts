@@ -2,10 +2,17 @@ import { apiClient } from '@/shared/api/client';
 import {
   parseApproveQuotation,
   parseQuotation,
+  parseQuotationLineItem,
+  parseQuotationLineItems,
+  parseQuotationPage,
+  type AddLineItemRequest,
   type ApproveQuotationResult,
   type CreateQuotationRequest,
   type Quotation,
+  type QuotationLineItem,
+  type QuotationPage,
   type RejectQuotationRequest,
+  type UpdateLineItemRequest,
   type UpdateQuotationRequest,
 } from '../schemas/quotation.schemas';
 
@@ -14,10 +21,25 @@ function ifMatchHeader(version: number): Record<string, string> {
 }
 
 /**
- * Quotation endpoints from frozen OpenAPI (narrow F1-07).
- * No list, PDF, or line-item read APIs — do not call them.
+ * Quotation endpoints from OpenAPI (M0/M1 includes line-item read + writes).
  */
 export const quotationsApi = {
+  async list(params?: {
+    page?: number;
+    pageSize?: number;
+    q?: string;
+    status?: string;
+    customerId?: string;
+    leadId?: string;
+    sort?: 'createdAt' | 'quotationNumber';
+    order?: 'asc' | 'desc';
+  }): Promise<QuotationPage> {
+    const { data } = await apiClient.get<unknown>('/api/v1/quotations', {
+      params,
+    });
+    return parseQuotationPage(data);
+  },
+
   async create(body: CreateQuotationRequest): Promise<Quotation> {
     const { data } = await apiClient.post<unknown>('/api/v1/quotations', body);
     return parseQuotation(data);
@@ -39,6 +61,44 @@ export const quotationsApi = {
       { headers: ifMatchHeader(version) },
     );
     return parseQuotation(data);
+  },
+
+  async listLineItems(quotationId: string): Promise<QuotationLineItem[]> {
+    const { data } = await apiClient.get<unknown>(
+      `/api/v1/quotations/${quotationId}/line-items`,
+    );
+    return parseQuotationLineItems(data);
+  },
+
+  async addLineItem(
+    quotationId: string,
+    body: AddLineItemRequest,
+  ): Promise<QuotationLineItem> {
+    const { data } = await apiClient.post<unknown>(
+      `/api/v1/quotations/${quotationId}/line-items`,
+      body,
+    );
+    return parseQuotationLineItem(data);
+  },
+
+  async updateLineItem(
+    quotationId: string,
+    itemId: string,
+    body: UpdateLineItemRequest,
+    version: number,
+  ): Promise<QuotationLineItem> {
+    const { data } = await apiClient.patch<unknown>(
+      `/api/v1/quotations/${quotationId}/line-items/${itemId}`,
+      body,
+      { headers: ifMatchHeader(version) },
+    );
+    return parseQuotationLineItem(data);
+  },
+
+  async removeLineItem(quotationId: string, itemId: string): Promise<void> {
+    await apiClient.delete(
+      `/api/v1/quotations/${quotationId}/line-items/${itemId}`,
+    );
   },
 
   async send(id: string, version: number): Promise<Quotation> {

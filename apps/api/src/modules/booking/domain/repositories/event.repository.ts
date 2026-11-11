@@ -93,6 +93,18 @@ export abstract class EventRepository {
     filter: FindByEventDateFilter,
   ): Promise<EventRecord[]>;
 
+  abstract findPage(
+    tenantId: string,
+    options: {
+      page: number;
+      pageSize: number;
+      q?: string;
+      status?: string;
+      sort?: 'createdAt' | 'eventStartDate';
+      order?: 'asc' | 'desc';
+    },
+  ): Promise<{ items: EventRecord[]; total: number }>;
+
   abstract update(
     tenantId: string,
     id: string,

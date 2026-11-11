@@ -5,12 +5,14 @@ import type {
   ChangeLeadStageRequest,
   CreateFollowUpRequest,
   CreateLeadRequest,
+  UpdateFollowUpRequest,
 } from '../schemas/lead.schemas';
 
 export const leadKeys = {
   all: ['leads'] as const,
   list: () => [...leadKeys.all, 'list'] as const,
   detail: (id: string) => [...leadKeys.all, 'detail', id] as const,
+  followUps: (id: string) => [...leadKeys.all, 'follow-ups', id] as const,
 };
 
 export function useLeadsQuery() {
@@ -75,9 +77,44 @@ export function useAssignLeadMutation(leadId: string) {
   });
 }
 
+export function useLeadFollowUpsQuery(leadId: string | null | undefined) {
+  return useQuery({
+    queryKey: leadKeys.followUps(leadId ?? ''),
+    queryFn: () => leadsApi.listFollowUps(leadId!),
+    enabled: Boolean(leadId),
+    staleTime: 15_000,
+  });
+}
+
 export function useScheduleFollowUpMutation(leadId: string) {
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (body: CreateFollowUpRequest) =>
       leadsApi.scheduleFollowUp(leadId, body),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: leadKeys.followUps(leadId),
+      });
+    },
+  });
+}
+
+export function useUpdateFollowUpMutation(leadId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      followUpId,
+      body,
+      version,
+    }: {
+      followUpId: string;
+      body: UpdateFollowUpRequest;
+      version: number;
+    }) => leadsApi.updateFollowUp(followUpId, body, version),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: leadKeys.followUps(leadId),
+      });
+    },
   });
 }

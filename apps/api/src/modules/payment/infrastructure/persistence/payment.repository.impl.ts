@@ -66,6 +66,30 @@ export class PaymentRepositoryImpl
     return payments.map((payment) => this.mapPayment(payment));
   }
 
+  async findByLeadId(
+    tenantId: string,
+    leadId: string,
+  ): Promise<PaymentRecord[]> {
+    const payments = await this.prisma.payment.findMany({
+      where: { tenantId, leadId },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return payments.map((payment) => this.mapPayment(payment));
+  }
+
+  async findByQuotationId(
+    tenantId: string,
+    quotationId: string,
+  ): Promise<PaymentRecord[]> {
+    const payments = await this.prisma.payment.findMany({
+      where: { tenantId, quotationId },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return payments.map((payment) => this.mapPayment(payment));
+  }
+
   async findAll(tenantId: string): Promise<PaymentRecord[]> {
     const payments = await this.prisma.payment.findMany({
       where: { tenantId },

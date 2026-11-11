@@ -143,6 +143,8 @@ describe('FinanceDashboardQueryService', () => {
       create: jest.fn(),
       findById: jest.fn(),
       findByBookingId: jest.fn(),
+      findByLeadId: jest.fn(),
+      findByQuotationId: jest.fn(),
       findAll: jest.fn().mockResolvedValue([]),
       hasConfirmedAdvanceForLead: jest.fn(),
       hasConfirmedAdvanceForQuotation: jest.fn(),
@@ -152,6 +154,8 @@ describe('FinanceDashboardQueryService', () => {
       create: jest.fn(),
       findById: jest.fn(),
       findByBookingId: jest.fn(),
+      findByLeadId: jest.fn(),
+      findByQuotationId: jest.fn(),
       findAll: jest.fn().mockResolvedValue([]),
       update: jest.fn(),
     };
@@ -159,6 +163,8 @@ describe('FinanceDashboardQueryService', () => {
       create: jest.fn(),
       findById: jest.fn(),
       findByBookingId: jest.fn(),
+      findByLeadId: jest.fn(),
+      findByQuotationId: jest.fn(),
       findByCustomerId: jest.fn(),
       findMaxInvoiceNumber: jest.fn(),
       findAll: jest.fn().mockResolvedValue([]),
@@ -172,6 +178,7 @@ describe('FinanceDashboardQueryService', () => {
       findByQuotationId: jest.fn(),
       findMaxBookingNumber: jest.fn(),
       findByEventDate: jest.fn().mockResolvedValue([]),
+      findPage: jest.fn(),
       update: jest.fn(),
     };
     quotationRepository = {

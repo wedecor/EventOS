@@ -52,6 +52,16 @@ export abstract class PaymentRepository {
     bookingId: string,
   ): Promise<PaymentRecord[]>;
 
+  abstract findByLeadId(
+    tenantId: string,
+    leadId: string,
+  ): Promise<PaymentRecord[]>;
+
+  abstract findByQuotationId(
+    tenantId: string,
+    quotationId: string,
+  ): Promise<PaymentRecord[]>;
+
   // EP1-KPI-004, EP1-FIN-005 — Dashboard: tenant-wide payment read for revenue/margin aggregation
   abstract findAll(tenantId: string): Promise<PaymentRecord[]>;
 

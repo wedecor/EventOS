@@ -8,8 +8,10 @@ import {
   Param,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { z } from 'zod';
 import { CurrentUser, Permissions, type AuthenticatedUser } from '../../auth';
 import { ZodValidationPipe } from '../../../common/pipes/zod-validation.pipe';
 import { IfMatchVersion } from '../../../shared/presentation/if-match.decorator';
@@ -20,8 +22,14 @@ import {
   ApiUuidParam,
   ApiZodBody,
 } from '../../../shared/presentation/openapi.helpers';
+import {
+  buildPageMeta,
+  paginationQuerySchema,
+  toPagedResponse,
+} from '../../../shared/presentation/pagination';
 import { resultToResponse } from '../../../shared/presentation/result-to-response.helper';
 import { TenantId } from '../../../shared/presentation/tenant-context.decorator';
+import { PaymentApplicationService } from '../../payment/application/services/payment.application.service';
 import { QuotationApplicationService } from '../application/services/quotation.application.service';
 import { QuotationLineItemApplicationService } from '../application/services/quotation-line-item.application.service';
 import {
@@ -37,6 +45,15 @@ import {
   type UpdateQuotationBody,
 } from './schemas/quotation.schemas';
 
+const listQuotationsQuerySchema = paginationQuerySchema.extend({
+  status: z
+    .enum(['draft', 'sent', 'approved', 'rejected', 'expired', 'superseded'])
+    .optional(),
+  customerId: z.string().uuid().optional(),
+  leadId: z.string().uuid().optional(),
+  sort: z.enum(['createdAt', 'quotationNumber']).optional(),
+});
+
 @ApiTags('Quotations')
 @ApiBearerAuth()
 @Controller('quotations')
@@ -44,6 +61,7 @@ export class QuotationController {
   constructor(
     private readonly quotationService: QuotationApplicationService,
     private readonly lineItemService: QuotationLineItemApplicationService,
+    private readonly paymentService: PaymentApplicationService,
   ) {}
 
   @Post()
@@ -68,6 +86,39 @@ export class QuotationController {
     return resultToResponse(result);
   }
 
+  @Get()
+  @Permissions('quotations:read')
+  @ApiOperation({ summary: 'List quotations (paginated)' })
+  @ApiDataResponse(200, 'Quotations listed')
+  @ApiStandardErrors()
+  async listQuotations(
+    @TenantId() tenantId: string,
+    @Query(new ZodValidationPipe(listQuotationsQuerySchema))
+    query: z.infer<typeof listQuotationsQuerySchema>,
+  ) {
+    const result = await this.quotationService.listQuotationsPage(tenantId, {
+      page: query.page,
+      pageSize: query.pageSize,
+      q: query.q,
+      status: query.status,
+      customerId: query.customerId,
+      leadId: query.leadId,
+      sort: query.sort,
+      order: query.order,
+    });
+    if (!result.ok) {
+      return resultToResponse(result);
+    }
+    return toPagedResponse({
+      items: result.value.items,
+      meta: buildPageMeta(
+        result.value.page,
+        result.value.pageSize,
+        result.value.total,
+      ),
+    });
+  }
+
   @Get(':id')
   @Permissions('quotations:read')
   @ApiOperation({ summary: 'Retrieve a quotation by ID' })
@@ -79,6 +130,23 @@ export class QuotationController {
     @Param('id') id: string,
   ) {
     const result = await this.quotationService.getQuotationById(tenantId, id);
+    return resultToResponse(result);
+  }
+
+  @Get(':id/payments')
+  @Permissions('payments:read')
+  @ApiOperation({ summary: 'List payments recorded against a quotation' })
+  @ApiUuidParam('id')
+  @ApiDataResponse(200, 'Quotation payments listed')
+  @ApiStandardErrors()
+  async listQuotationPayments(
+    @TenantId() tenantId: string,
+    @Param('id') id: string,
+  ) {
+    const result = await this.paymentService.listPaymentsForQuotation(
+      tenantId,
+      id,
+    );
     return resultToResponse(result);
   }
 
@@ -109,6 +177,23 @@ export class QuotationController {
       version ?? 0,
     );
 
+    return resultToResponse(result);
+  }
+
+  @Get(':id/line-items')
+  @Permissions('quotations:read')
+  @ApiOperation({ summary: 'List line items for a quotation' })
+  @ApiUuidParam('id')
+  @ApiDataResponse(200, 'Line items retrieved')
+  @ApiStandardErrors()
+  async listLineItems(
+    @TenantId() tenantId: string,
+    @Param('id') quotationId: string,
+  ) {
+    const result = await this.lineItemService.listLineItems(
+      tenantId,
+      quotationId,
+    );
     return resultToResponse(result);
   }
 

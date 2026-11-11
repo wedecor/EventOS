@@ -21,6 +21,7 @@ import {
 } from '../../../shared/presentation/openapi.helpers';
 import { resultToResponse } from '../../../shared/presentation/result-to-response.helper';
 import { TenantId } from '../../../shared/presentation/tenant-context.decorator';
+import { PaymentApplicationService } from '../../payment/application/services/payment.application.service';
 import { LeadApplicationService } from '../application/services/lead.application.service';
 import {
   assignLeadSchema,
@@ -37,7 +38,10 @@ import {
 @ApiBearerAuth()
 @Controller('leads')
 export class LeadController {
-  constructor(private readonly leadService: LeadApplicationService) {}
+  constructor(
+    private readonly leadService: LeadApplicationService,
+    private readonly paymentService: PaymentApplicationService,
+  ) {}
 
   @Get()
   @Permissions('leads:read')
@@ -137,6 +141,34 @@ export class LeadController {
       version: version ?? 0,
     });
 
+    return resultToResponse(result);
+  }
+
+  @Get(':id/follow-ups')
+  @Permissions('leads:read')
+  @ApiOperation({ summary: 'List follow-ups for a lead' })
+  @ApiUuidParam('id')
+  @ApiDataResponse(200, 'Follow-ups listed')
+  @ApiStandardErrors()
+  async listFollowUps(
+    @TenantId() tenantId: string,
+    @Param('id') id: string,
+  ) {
+    const result = await this.leadService.listFollowUpsForLead(tenantId, id);
+    return resultToResponse(result);
+  }
+
+  @Get(':id/payments')
+  @Permissions('payments:read')
+  @ApiOperation({ summary: 'List payments recorded against a lead' })
+  @ApiUuidParam('id')
+  @ApiDataResponse(200, 'Lead payments listed')
+  @ApiStandardErrors()
+  async listLeadPayments(
+    @TenantId() tenantId: string,
+    @Param('id') id: string,
+  ) {
+    const result = await this.paymentService.listPaymentsForLead(tenantId, id);
     return resultToResponse(result);
   }
 

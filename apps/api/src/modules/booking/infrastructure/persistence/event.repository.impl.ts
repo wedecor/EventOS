@@ -92,6 +92,51 @@ export class EventRepositoryImpl
     return events.map((event) => this.mapEvent(event));
   }
 
+  async findPage(
+    tenantId: string,
+    options: {
+      page: number;
+      pageSize: number;
+      q?: string;
+      status?: string;
+      sort?: 'createdAt' | 'eventStartDate';
+      order?: 'asc' | 'desc';
+    },
+  ): Promise<{ items: EventRecord[]; total: number }> {
+    const order = options.order ?? 'desc';
+    const where: Prisma.EventWhereInput = {
+      tenantId,
+      ...(options.status ? { status: options.status as never } : {}),
+      ...(options.q
+        ? {
+            OR: [
+              { venueName: { contains: options.q, mode: 'insensitive' } },
+              { eventType: { contains: options.q, mode: 'insensitive' } },
+              { requirementsNotes: { contains: options.q, mode: 'insensitive' } },
+            ],
+          }
+        : {}),
+    };
+
+    const [total, events] = await this.prisma.$transaction([
+      this.prisma.event.count({ where }),
+      this.prisma.event.findMany({
+        where,
+        orderBy:
+          options.sort === 'eventStartDate'
+            ? { eventStartDate: order }
+            : { createdAt: order },
+        skip: (options.page - 1) * options.pageSize,
+        take: options.pageSize,
+      }),
+    ]);
+
+    return {
+      items: events.map((event) => this.mapEvent(event)),
+      total,
+    };
+  }
+
   async update(
     tenantId: string,
     id: string,

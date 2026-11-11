@@ -30,7 +30,18 @@ export const customerEnvelopeSchema = z.object({
   data: customerSchema,
 });
 
+export const customerPageEnvelopeSchema = z.object({
+  data: z.array(customerSchema),
+  meta: z.object({
+    page: z.number().int(),
+    pageSize: z.number().int(),
+    total: z.number().int(),
+    totalPages: z.number().int(),
+  }),
+});
+
 export type Customer = z.infer<typeof customerSchema>;
+export type CustomerPage = z.infer<typeof customerPageEnvelopeSchema>;
 
 /**
  * Form fields that the application layer actually persists.
@@ -76,6 +87,10 @@ export type CustomerFormValues = z.infer<typeof customerFormSchema>;
 
 export function parseCustomer(body: unknown): Customer {
   return customerEnvelopeSchema.parse(body).data;
+}
+
+export function parseCustomerPage(body: unknown): CustomerPage {
+  return customerPageEnvelopeSchema.parse(body);
 }
 
 export function toCreateRequest(values: CustomerFormValues): CreateCustomerRequest {

@@ -92,8 +92,18 @@ export const followUpEnvelopeSchema = z.object({
   data: followUpSchema,
 });
 
+export const followUpListEnvelopeSchema = z.object({
+  data: z.array(followUpSchema),
+});
+
 export type Lead = z.infer<typeof leadSchema>;
 export type FollowUp = z.infer<typeof followUpSchema>;
+
+export type UpdateFollowUpRequest = {
+  status?: 'pending' | 'done' | 'cancelled';
+  dueAt?: string;
+  comment?: string;
+};
 
 export const createLeadFormSchema = z.object({
   source: z.enum(LEAD_SOURCES),
@@ -140,6 +150,10 @@ export function parseLead(body: unknown): Lead {
 
 export function parseFollowUp(body: unknown): FollowUp {
   return followUpEnvelopeSchema.parse(body).data;
+}
+
+export function parseFollowUpList(body: unknown): FollowUp[] {
+  return followUpListEnvelopeSchema.parse(body).data;
 }
 
 export function toCreateLeadRequest(values: CreateLeadFormValues): CreateLeadRequest {

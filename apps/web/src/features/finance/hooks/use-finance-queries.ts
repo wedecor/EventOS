@@ -16,6 +16,10 @@ export const financeKeys = {
     [...financeKeys.all, 'booking', bookingId] as const,
   payments: (bookingId: string) =>
     [...financeKeys.booking(bookingId), 'payments'] as const,
+  leadPayments: (leadId: string) =>
+    [...financeKeys.all, 'lead', leadId, 'payments'] as const,
+  quotationPayments: (quotationId: string) =>
+    [...financeKeys.all, 'quotation', quotationId, 'payments'] as const,
   invoices: (bookingId: string) =>
     [...financeKeys.booking(bookingId), 'invoices'] as const,
   expenses: (bookingId: string) =>
@@ -31,6 +35,26 @@ export function useBookingPaymentsQuery(bookingId: string | null | undefined) {
     queryKey: financeKeys.payments(bookingId ?? ''),
     queryFn: () => financeApi.listPayments(bookingId!),
     enabled: Boolean(bookingId),
+    staleTime: 15_000,
+  });
+}
+
+export function useLeadPaymentsQuery(leadId: string | null | undefined) {
+  return useQuery({
+    queryKey: financeKeys.leadPayments(leadId ?? ''),
+    queryFn: () => financeApi.listLeadPayments(leadId!),
+    enabled: Boolean(leadId),
+    staleTime: 15_000,
+  });
+}
+
+export function useQuotationPaymentsQuery(
+  quotationId: string | null | undefined,
+) {
+  return useQuery({
+    queryKey: financeKeys.quotationPayments(quotationId ?? ''),
+    queryFn: () => financeApi.listQuotationPayments(quotationId!),
+    enabled: Boolean(quotationId),
     staleTime: 15_000,
   });
 }
@@ -64,27 +88,59 @@ export function useBookingProfitabilityQuery(
   });
 }
 
-export function useRecordPaymentMutation(bookingId: string) {
+export function useRecordPaymentMutation(scope: {
+  bookingId?: string;
+  leadId?: string;
+  quotationId?: string;
+}) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (body: RecordPaymentRequest) => financeApi.recordPayment(body),
     onSuccess: () => {
-      void queryClient.invalidateQueries({
-        queryKey: financeKeys.booking(bookingId),
-      });
+      if (scope.bookingId) {
+        void queryClient.invalidateQueries({
+          queryKey: financeKeys.booking(scope.bookingId),
+        });
+      }
+      if (scope.leadId) {
+        void queryClient.invalidateQueries({
+          queryKey: financeKeys.leadPayments(scope.leadId),
+        });
+      }
+      if (scope.quotationId) {
+        void queryClient.invalidateQueries({
+          queryKey: financeKeys.quotationPayments(scope.quotationId),
+        });
+      }
     },
   });
 }
 
-export function useVoidPaymentMutation(bookingId: string) {
+export function useVoidPaymentMutation(scope: {
+  bookingId?: string;
+  leadId?: string;
+  quotationId?: string;
+}) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ id, version }: { id: string; version: number }) =>
       financeApi.voidPayment(id, version),
     onSuccess: () => {
-      void queryClient.invalidateQueries({
-        queryKey: financeKeys.booking(bookingId),
-      });
+      if (scope.bookingId) {
+        void queryClient.invalidateQueries({
+          queryKey: financeKeys.booking(scope.bookingId),
+        });
+      }
+      if (scope.leadId) {
+        void queryClient.invalidateQueries({
+          queryKey: financeKeys.leadPayments(scope.leadId),
+        });
+      }
+      if (scope.quotationId) {
+        void queryClient.invalidateQueries({
+          queryKey: financeKeys.quotationPayments(scope.quotationId),
+        });
+      }
     },
   });
 }

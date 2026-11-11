@@ -133,6 +133,7 @@ describe('InvoiceApplicationService', () => {
       findByQuotationId: jest.fn(),
       findMaxBookingNumber: jest.fn(),
       findByEventDate: jest.fn(),
+      findPage: jest.fn(),
       update: jest.fn(),
     };
     customerRepository = {

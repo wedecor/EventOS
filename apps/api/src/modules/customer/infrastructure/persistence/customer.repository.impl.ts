@@ -82,6 +82,49 @@ export class CustomerRepositoryImpl
     return customers.map((customer) => this.mapCustomer(customer));
   }
 
+  async findPage(
+    tenantId: string,
+    options: {
+      page: number;
+      pageSize: number;
+      q?: string;
+      sort?: 'createdAt' | 'name';
+      order?: 'asc' | 'desc';
+    },
+  ): Promise<{ items: CustomerRecord[]; total: number }> {
+    const order = options.order ?? 'desc';
+    const where: Prisma.CustomerWhereInput = {
+      tenantId,
+      ...(options.q
+        ? {
+            OR: [
+              { displayName: { contains: options.q, mode: 'insensitive' } },
+              { primaryPhone: { contains: options.q, mode: 'insensitive' } },
+              { primaryEmail: { contains: options.q, mode: 'insensitive' } },
+            ],
+          }
+        : {}),
+    };
+
+    const [total, customers] = await this.prisma.$transaction([
+      this.prisma.customer.count({ where }),
+      this.prisma.customer.findMany({
+        where,
+        orderBy:
+          options.sort === 'name'
+            ? { displayName: order }
+            : { createdAt: order },
+        skip: (options.page - 1) * options.pageSize,
+        take: options.pageSize,
+      }),
+    ]);
+
+    return {
+      items: customers.map((customer) => this.mapCustomer(customer)),
+      total,
+    };
+  }
+
   async update(
     tenantId: string,
     id: string,

@@ -94,6 +94,8 @@ describe('BookingApplicationService', () => {
       findByQuotationId: jest.fn(),
       findMaxBookingNumber: jest.fn(),
       findByEventDate: jest.fn(),
+      findPage: jest.fn(),
+      findPage: jest.fn(),
       update: jest.fn(),
     };
     quotationRepository = {
@@ -103,6 +105,8 @@ describe('BookingApplicationService', () => {
       findLatestRevision: jest.fn(),
       findMaxQuotationNumber: jest.fn(),
       findByIds: jest.fn(),
+      findAll: jest.fn(),
+      findPage: jest.fn(),
       update: jest.fn(),
     };
     advancePaymentQuery = {
@@ -303,6 +307,62 @@ describe('BookingApplicationService', () => {
     );
 
     const result = await service.activateBooking(tenantId, bookingId, {
+      version: 1,
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('CONCURRENT_MODIFICATION');
+    }
+  });
+
+  // --- startExecution ---
+
+  it('starts execution from in_preparation', async () => {
+    eventRepository.findById.mockResolvedValue({
+      ...baseEvent,
+      status: 'in_preparation',
+    });
+    eventRepository.update.mockResolvedValue({
+      ...baseEvent,
+      status: 'in_execution',
+      version: 2,
+    });
+
+    const result = await service.startExecution(tenantId, bookingId, {
+      version: 1,
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.status).toBe('in_execution');
+    }
+    expect(publish).toHaveBeenCalledWith(expect.any(BookingStatusChangedEvent));
+  });
+
+  it('rejects startExecution when booking is not in_preparation', async () => {
+    eventRepository.findById.mockResolvedValue(baseEvent);
+
+    const result = await service.startExecution(tenantId, bookingId, {
+      version: 1,
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('INVALID_STATE');
+    }
+  });
+
+  it('maps concurrent modification failures on startExecution', async () => {
+    eventRepository.findById.mockResolvedValue({
+      ...baseEvent,
+      status: 'in_preparation',
+    });
+    eventRepository.update.mockRejectedValue(
+      new ConcurrentModificationError('Event', bookingId),
+    );
+
+    const result = await service.startExecution(tenantId, bookingId, {
       version: 1,
     });
 
