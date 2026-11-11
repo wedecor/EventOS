@@ -43,11 +43,15 @@ _to_delete/
 .next/
 apps/web/out/
 *.tsbuildinfo
+apps/api/.data/
 
 # M2 live E2E isolated env + generated artifacts (never commit)
 .env.e2e
 **/.env.e2e
 apps/web/e2e/fixtures.generated.json
+apps/web/e2e/m3-fixtures.generated.json
+apps/web/e2e/helpers/m3-fixtures.generated.json
+apps/web/e2e/m3-contract-*.pdf
 apps/web/playwright-report/
 apps/web/test-results/
 docs/release/m2-artifacts/*

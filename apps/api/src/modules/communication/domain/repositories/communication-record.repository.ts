@@ -12,11 +12,16 @@ export type CommunicationRecordRecord = {
   vendorId: string | null;
   staffMemberId: string | null;
   templateId: string | null;
+  quotationId: string | null;
+  invoiceId: string | null;
   channel: CommunicationChannel;
   direction: CommunicationDirection;
   status: CommunicationStatus;
   subject: string | null;
   body: string | null;
+  recipientAddress: string | null;
+  provider: string | null;
+  providerMessageId: string | null;
   failureReason: string | null;
   createdByUserId: string | null;
   occurredAt: Date;
@@ -36,11 +41,16 @@ export type CreateCommunicationRecordData = {
   vendorId?: string | null;
   staffMemberId?: string | null;
   templateId?: string | null;
+  quotationId?: string | null;
+  invoiceId?: string | null;
   channel: CommunicationChannel;
   direction: CommunicationDirection;
   status?: CommunicationStatus;
   subject?: string | null;
   body?: string | null;
+  recipientAddress?: string | null;
+  provider?: string | null;
+  providerMessageId?: string | null;
   failureReason?: string | null;
   createdByUserId?: string | null;
   occurredAt?: Date;
@@ -58,7 +68,12 @@ export type UpdateCommunicationRecordData = {
   vendorId?: string | null;
   staffMemberId?: string | null;
   templateId?: string | null;
+  quotationId?: string | null;
+  invoiceId?: string | null;
   status?: CommunicationStatus;
+  recipientAddress?: string | null;
+  provider?: string | null;
+  providerMessageId?: string | null;
   failureReason?: string | null;
   sentAt?: Date | null;
   deliveredAt?: Date | null;
@@ -92,6 +107,18 @@ export abstract class CommunicationRecordRepository {
   abstract findByCustomerId(
     tenantId: string,
     customerId: string,
+    options?: { includeDeleted?: boolean },
+  ): Promise<CommunicationRecordRecord[]>;
+
+  abstract findByQuotationId(
+    tenantId: string,
+    quotationId: string,
+    options?: { includeDeleted?: boolean },
+  ): Promise<CommunicationRecordRecord[]>;
+
+  abstract findByInvoiceId(
+    tenantId: string,
+    invoiceId: string,
     options?: { includeDeleted?: boolean },
   ): Promise<CommunicationRecordRecord[]>;
 

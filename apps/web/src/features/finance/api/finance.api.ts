@@ -1,5 +1,9 @@
 import { apiClient } from '@/shared/api/client';
 import {
+  downloadBlob,
+  filenameFromContentDisposition,
+} from '@/shared/lib/download-blob';
+import {
   parseExpense,
   parseExpenseList,
   parseFinancialDocument,
@@ -29,7 +33,7 @@ function ifMatchHeader(version: number): Record<string, string> {
 
 /**
  * Finance hub APIs — booking/lead/quotation payment reads + record/void/send.
- * No global lists, GET-by-id, PDF, or attachment upload.
+ * PDF download is available per invoice; binary ops-document upload is M3.2+.
  */
 export const financeApi = {
   async listPayments(bookingId: string): Promise<Payment[]> {
@@ -99,6 +103,40 @@ export const financeApi = {
       { headers: ifMatchHeader(version) },
     );
     return parseInvoice(data);
+  },
+
+  async downloadInvoicePdf(
+    id: string,
+    fallbackName = 'invoice.pdf',
+  ): Promise<void> {
+    const response = await apiClient.get<Blob>(`/api/v1/invoices/${id}/pdf`, {
+      responseType: 'blob',
+    });
+    const filename = filenameFromContentDisposition(
+      response.headers['content-disposition'] as string | undefined,
+      fallbackName,
+    );
+    downloadBlob(response.data, filename);
+  },
+
+  async emailInvoicePdf(
+    id: string,
+    body: { to?: string } = {},
+  ): Promise<{
+    communicationId: string;
+    status: string;
+    providerAccepted: boolean;
+    recipient: string;
+  }> {
+    const { data } = await apiClient.post<{
+      data: {
+        communicationId: string;
+        status: string;
+        providerAccepted: boolean;
+        recipient: string;
+      };
+    }>(`/api/v1/invoices/${id}/email`, body);
+    return data.data;
   },
 
   async listExpenses(bookingId: string): Promise<Expense[]> {

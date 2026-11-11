@@ -44,6 +44,28 @@ export const envSchema = z
         const trimmed = value?.trim();
         return trimmed && trimmed.length > 0 ? trimmed : undefined;
       }),
+    // M3 — storage / mail (optional; defaults keep local/test adapters).
+    STORAGE_PROVIDER: z.enum(['local', 's3', 'none']).default('local'),
+    STORAGE_LOCAL_ROOT: z.string().optional(),
+    STORAGE_ENDPOINT: z.string().optional(),
+    STORAGE_ACCESS_KEY: z.string().optional(),
+    STORAGE_SECRET_KEY: z.string().optional(),
+    STORAGE_BUCKET: z.string().optional(),
+    STORAGE_REGION: z.string().optional(),
+    STORAGE_MAX_UPLOAD_BYTES: z.coerce.number().int().positive().optional(),
+    MAIL_PROVIDER: z.enum(['test', 'smtp', 'none']).default('test'),
+    MAIL_FROM_NAME: z.string().optional(),
+    MAIL_FROM_EMAIL: z.string().email().optional().or(z.literal('')),
+    SMTP_HOST: z.string().optional(),
+    SMTP_PORT: z.coerce.number().int().positive().optional(),
+    SMTP_USER: z.string().optional(),
+    SMTP_PASS: z.string().optional(),
+    SMTP_SECURE: z
+      .enum(['true', 'false'])
+      .optional()
+      .transform((value) => (value == null ? undefined : value === 'true')),
+    MAIL_WEBHOOK_SECRET: z.string().optional(),
+    MAIL_IDEMPOTENCY_WINDOW_SEC: z.coerce.number().int().positive().optional(),
   })
   .superRefine((config, ctx) => {
     // R1-06 (docs/14 §CORS: "No wildcard origins in production"; docs/16

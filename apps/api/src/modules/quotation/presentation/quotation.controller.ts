@@ -3,14 +3,16 @@ import {
   Controller,
   Delete,
   Get,
+  Header,
   HttpCode,
   HttpStatus,
   Param,
   Patch,
   Post,
   Query,
+  StreamableFile,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiProduces, ApiTags } from '@nestjs/swagger';
 import { z } from 'zod';
 import { CurrentUser, Permissions, type AuthenticatedUser } from '../../auth';
 import { ZodValidationPipe } from '../../../common/pipes/zod-validation.pipe';
@@ -32,6 +34,9 @@ import { TenantId } from '../../../shared/presentation/tenant-context.decorator'
 import { PaymentApplicationService } from '../../payment/application/services/payment.application.service';
 import { QuotationApplicationService } from '../application/services/quotation.application.service';
 import { QuotationLineItemApplicationService } from '../application/services/quotation-line-item.application.service';
+import { QuotationPdfApplicationService } from '../application/services/quotation-pdf.application.service';
+import { CommunicationApplicationService } from '../../communication/application/services/communication.application.service';
+import { OutboundEmailApplicationService } from '../../communication/application/services/outbound-email.application.service';
 import {
   addLineItemSchema,
   createQuotationSchema,
@@ -44,6 +49,11 @@ import {
   type UpdateLineItemBody,
   type UpdateQuotationBody,
 } from './schemas/quotation.schemas';
+
+const emailQuotationSchema = z.object({
+  to: z.string().email().optional(),
+});
+type EmailQuotationBody = z.infer<typeof emailQuotationSchema>;
 
 const listQuotationsQuerySchema = paginationQuerySchema.extend({
   status: z
@@ -62,6 +72,9 @@ export class QuotationController {
     private readonly quotationService: QuotationApplicationService,
     private readonly lineItemService: QuotationLineItemApplicationService,
     private readonly paymentService: PaymentApplicationService,
+    private readonly quotationPdfService: QuotationPdfApplicationService,
+    private readonly outboundEmailService: OutboundEmailApplicationService,
+    private readonly communicationService: CommunicationApplicationService,
   ) {}
 
   @Post()
@@ -131,6 +144,30 @@ export class QuotationController {
   ) {
     const result = await this.quotationService.getQuotationById(tenantId, id);
     return resultToResponse(result);
+  }
+
+  @Get(':id/pdf')
+  @Permissions('quotations:read')
+  @ApiOperation({ summary: 'Download quotation PDF' })
+  @ApiUuidParam('id')
+  @ApiProduces('application/pdf')
+  @ApiStandardErrors()
+  @Header('Content-Type', 'application/pdf')
+  async downloadQuotationPdf(
+    @TenantId() tenantId: string,
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<StreamableFile> {
+    const result = await this.quotationPdfService.generatePdf(
+      tenantId,
+      id,
+      user.userId,
+    );
+    const pdf = resultToResponse(result).data;
+    return new StreamableFile(pdf.buffer, {
+      type: pdf.contentType,
+      disposition: `attachment; filename="${pdf.filename}"`,
+    });
   }
 
   @Get(':id/payments')
@@ -284,7 +321,7 @@ export class QuotationController {
 
   @Post(':id/send')
   @Permissions('quotations:send')
-  @ApiOperation({ summary: 'Send a quotation' })
+  @ApiOperation({ summary: 'Mark a quotation as sent (status only; no email)' })
   @ApiUuidParam('id')
   @ApiIfMatchHeader()
   @ApiDataResponse(200, 'Quotation sent')
@@ -301,6 +338,47 @@ export class QuotationController {
     );
 
     return resultToResponse(result);
+  }
+
+  @Post(':id/email')
+  @Permissions('quotations:send')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      'Email quotation PDF to customer (does not approve or change acceptance)',
+  })
+  @ApiUuidParam('id')
+  @ApiZodBody(emailQuotationSchema)
+  @ApiDataResponse(200, 'Quotation email accepted or failed')
+  @ApiStandardErrors()
+  async emailQuotation(
+    @TenantId() tenantId: string,
+    @Param('id') quotationId: string,
+    @CurrentUser() user: AuthenticatedUser,
+    @Body(new ZodValidationPipe(emailQuotationSchema)) body: EmailQuotationBody,
+  ) {
+    const result = await this.outboundEmailService.sendQuotationEmail(
+      tenantId,
+      quotationId,
+      user.userId,
+      body.to,
+    );
+    return resultToResponse(result);
+  }
+
+  @Get(':id/communications')
+  @Permissions('communications:read')
+  @ApiOperation({ summary: 'List communications for a quotation' })
+  @ApiUuidParam('id')
+  @ApiDataResponse(200, 'Quotation communications listed')
+  @ApiStandardErrors()
+  async listQuotationCommunications(
+    @TenantId() tenantId: string,
+    @Param('id') quotationId: string,
+  ) {
+    return resultToResponse(
+      await this.communicationService.listByQuotation(tenantId, quotationId),
+    );
   }
 
   @Post(':id/approve')

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import type { ColumnDef } from '@tanstack/react-table';
@@ -25,6 +25,7 @@ import {
   ErrorState,
   LoadingState,
 } from '@/shared/components/page';
+import { financeApi } from '../api/finance.api';
 import {
   useBookingInvoicesQuery,
   useCreateInvoiceMutation,
@@ -74,6 +75,12 @@ export function InvoicesPanel({
     },
   });
 
+  useEffect(() => {
+    if (customerId) {
+      createForm.setValue('customerId', customerId);
+    }
+  }, [customerId, createForm]);
+
   const sendForm = useForm<SendInvoiceFormValues>({
     resolver: zodResolver(sendInvoiceFormSchema),
     defaultValues: { channel: 'email', recipient: '' },
@@ -107,6 +114,63 @@ export function InvoicesPanel({
         const invoice = row.original;
         return (
           <div className="flex flex-wrap gap-2">
+            <Can permission="invoices:read">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  void (async () => {
+                    try {
+                      await financeApi.downloadInvoicePdf(
+                        invoice.id,
+                        `Invoice-INV-${invoice.invoiceNumber}.pdf`,
+                      );
+                      toast.success('Invoice PDF downloaded');
+                    } catch (error) {
+                      toast.error(
+                        error instanceof ApiError
+                          ? error.message
+                          : 'Unable to download invoice PDF.',
+                      );
+                    }
+                  })();
+                }}
+              >
+                PDF
+              </Button>
+            </Can>
+            <Can permission="invoices:send">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  void (async () => {
+                    try {
+                      const result = await financeApi.emailInvoicePdf(
+                        invoice.id,
+                      );
+                      if (result.providerAccepted) {
+                        toast.success(
+                          `Invoice emailed to ${result.recipient} (provider accepted)`,
+                        );
+                      } else {
+                        toast.error('Provider did not accept the email.');
+                      }
+                    } catch (error) {
+                      toast.error(
+                        error instanceof ApiError
+                          ? error.message
+                          : 'Unable to email invoice.',
+                      );
+                    }
+                  })();
+                }}
+              >
+                Email
+              </Button>
+            </Can>
             {invoice.status === 'draft' ? (
               <Can permission="invoices:send">
                 <Button
@@ -118,7 +182,7 @@ export function InvoicesPanel({
                     setSendTarget(invoice);
                   }}
                 >
-                  Send
+                  Mark sent
                 </Button>
               </Can>
             ) : null}
@@ -199,7 +263,7 @@ export function InvoicesPanel({
     <>
       <ContentCard
         title="Invoices"
-        description="GET /bookings/:id/invoices · POST /invoices · send/void with If-Match. PDF generation is not shipped."
+        description="GET /bookings/:id/invoices · POST /invoices · PDF download · send/void with If-Match."
       >
         {query.isLoading ? <LoadingState variant="skeleton" rows={3} /> : null}
         {query.isError ? (

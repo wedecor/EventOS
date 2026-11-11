@@ -96,6 +96,10 @@ import { ProcurementTimelineEventRepository } from './vendor/domain/repositories
 import { ProcurementTimelineEventRepositoryImpl } from './vendor/infrastructure/persistence/procurement-timeline-event.repository.impl';
 import { VendorRepository } from './vendor/domain/repositories/vendor.repository';
 import { VendorRepositoryImpl } from './vendor/infrastructure/persistence/vendor.repository.impl';
+import { StoredDocumentRepository } from './documents/domain/repositories/stored-document.repository';
+import { StoredDocumentRepositoryImpl } from './documents/infrastructure/persistence/stored-document.repository.impl';
+import { IntegrationSettingsRepository } from './integrations/domain/repositories/integration-settings.repository';
+import { IntegrationSettingsRepositoryImpl } from './integrations/infrastructure/persistence/integration-settings.repository.impl';
 
 @Module({
   imports: [PrismaModule],
@@ -256,6 +260,14 @@ import { VendorRepositoryImpl } from './vendor/infrastructure/persistence/vendor
       provide: NotificationPreferenceRepository,
       useClass: NotificationPreferenceRepositoryImpl,
     },
+    {
+      provide: StoredDocumentRepository,
+      useClass: StoredDocumentRepositoryImpl,
+    },
+    {
+      provide: IntegrationSettingsRepository,
+      useClass: IntegrationSettingsRepositoryImpl,
+    },
   ],
   exports: [
     SuggestionRepository,
@@ -306,6 +318,8 @@ import { VendorRepositoryImpl } from './vendor/infrastructure/persistence/vendor
     CommunicationAttachmentRepository,
     ReminderRepository,
     NotificationPreferenceRepository,
+    StoredDocumentRepository,
+    IntegrationSettingsRepository,
   ],
 })
 export class RepositoriesModule {}

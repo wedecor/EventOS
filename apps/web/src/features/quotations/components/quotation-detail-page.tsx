@@ -270,6 +270,8 @@ function QuotationActionsPanel({ quotation }: { quotation: Quotation }) {
   const [approveOpen, setApproveOpen] = useState(false);
   const [reviseOpen, setReviseOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
+  const [pdfBusy, setPdfBusy] = useState(false);
+  const [emailBusy, setEmailBusy] = useState(false);
 
   const rejectForm = useForm<RejectQuotationFormValues>({
     resolver: zodResolver(rejectQuotationFormSchema),
@@ -280,7 +282,52 @@ function QuotationActionsPanel({ quotation }: { quotation: Quotation }) {
     sendMutation.isPending ||
     approveMutation.isPending ||
     rejectMutation.isPending ||
-    reviseMutation.isPending;
+    reviseMutation.isPending ||
+    pdfBusy ||
+    emailBusy;
+
+  const onDownloadPdf = async () => {
+    setPdfBusy(true);
+    try {
+      const { quotationsApi } = await import('../api/quotations.api');
+      await quotationsApi.downloadPdf(
+        quotation.id,
+        `Quotation-Q-${quotation.quotationNumber}.pdf`,
+      );
+      toast.success('Quotation PDF downloaded');
+    } catch (error) {
+      toast.error(
+        error instanceof ApiError
+          ? error.message
+          : 'Unable to download quotation PDF.',
+      );
+    } finally {
+      setPdfBusy(false);
+    }
+  };
+
+  const onEmailPdf = async () => {
+    setEmailBusy(true);
+    try {
+      const { quotationsApi } = await import('../api/quotations.api');
+      const result = await quotationsApi.emailPdf(quotation.id);
+      if (result.providerAccepted) {
+        toast.success(
+          `Quotation emailed to ${result.recipient} (provider accepted — not delivery proof)`,
+        );
+      } else {
+        toast.error('Provider did not accept the email.');
+      }
+    } catch (error) {
+      toast.error(
+        error instanceof ApiError
+          ? error.message
+          : 'Unable to email quotation.',
+      );
+    } finally {
+      setEmailBusy(false);
+    }
+  };
 
   const onSend = async () => {
     try {
@@ -353,6 +400,26 @@ function QuotationActionsPanel({ quotation }: { quotation: Quotation }) {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-2">
+        <Can permission="quotations:read">
+          <Button
+            type="button"
+            variant="outline"
+            disabled={busy}
+            onClick={() => void onDownloadPdf()}
+          >
+            {pdfBusy ? 'Preparing PDF…' : 'Download PDF'}
+          </Button>
+        </Can>
+        <Can permission="quotations:send">
+          <Button
+            type="button"
+            variant="outline"
+            disabled={busy}
+            onClick={() => void onEmailPdf()}
+          >
+            {emailBusy ? 'Sending…' : 'Email PDF'}
+          </Button>
+        </Can>
         {quotation.status === 'draft' ? (
           <Can permission="quotations:send">
             <Button
@@ -360,7 +427,7 @@ function QuotationActionsPanel({ quotation }: { quotation: Quotation }) {
               disabled={busy}
               onClick={() => setSendOpen(true)}
             >
-              Send
+              Mark sent
             </Button>
           </Can>
         ) : null}

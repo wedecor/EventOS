@@ -18,6 +18,7 @@ import { ReviewRequestApplicationService } from './customer/application/services
 import { TimelineApplicationService } from './customer/application/services/timeline.application.service';
 import { CustomerIntelligenceApplicationService } from './customer/application/services/customer-intelligence.application.service';
 import { InvoiceApplicationService } from './finance/application/services/invoice.application.service';
+import { InvoicePdfApplicationService } from './finance/application/services/invoice-pdf.application.service';
 import { ProfitabilityApplicationService } from './finance/application/services/profitability.application.service';
 import { VendorExpenseApplicationService } from './finance/application/services/vendor-expense.application.service';
 import { FinancialDocumentApplicationService } from './finance/application/services/financial-document.application.service';
@@ -25,8 +26,10 @@ import { CalendarApplicationService } from './calendar/application/services/cale
 import { AnalyticsApplicationService } from './analytics/application/services/analytics.application.service';
 import { CommunicationApplicationService } from './communication/application/services/communication.application.service';
 import { CommunicationTemplateApplicationService } from './communication/application/services/communication-template.application.service';
+import { OutboundEmailApplicationService } from './communication/application/services/outbound-email.application.service';
 import { ReminderApplicationService } from './communication/application/services/reminder.application.service';
 import { NotificationPreferenceApplicationService } from './communication/application/services/notification-preference.application.service';
+import { IntegrationSettingsApplicationService } from './integrations/application/services/integration-settings.application.service';
 import { InventoryMovementApplicationService } from './inventory/application/services/inventory-movement.application.service';
 import { InventoryApplicationService } from './inventory/application/services/inventory.application.service';
 import { InventoryAvailabilityService } from './inventory/application/services/inventory-availability.service';
@@ -36,6 +39,8 @@ import { InventoryDamageReportApplicationService } from './inventory/application
 import { LeadApplicationService } from './lead/application/services/lead.application.service';
 import { QuotationApplicationService } from './quotation/application/services/quotation.application.service';
 import { QuotationLineItemApplicationService } from './quotation/application/services/quotation-line-item.application.service';
+import { QuotationPdfApplicationService } from './quotation/application/services/quotation-pdf.application.service';
+import { StoredDocumentApplicationService } from './documents/application/services/stored-document.application.service';
 import { PaymentApplicationService } from './payment/application/services/payment.application.service';
 import { StaffAssignmentApplicationService } from './staff/application/services/staff-assignment.application.service';
 import { StaffApplicationService } from './staff/application/services/staff.application.service';
@@ -64,6 +69,8 @@ import { RepositoriesModule } from './repositories.module';
     CustomerIntelligenceApplicationService,
     QuotationApplicationService,
     QuotationLineItemApplicationService,
+    QuotationPdfApplicationService,
+    StoredDocumentApplicationService,
     BookingApplicationService,
     WorkspaceService,
     WorkspaceProgressService,
@@ -94,11 +101,14 @@ import { RepositoriesModule } from './repositories.module';
     VendorProcurementApplicationService,
     ProcurementLineApplicationService,
     InvoiceApplicationService,
+    InvoicePdfApplicationService,
     VendorExpenseApplicationService,
     ProfitabilityApplicationService,
     FinancialDocumentApplicationService,
     CommunicationApplicationService,
     CommunicationTemplateApplicationService,
+    OutboundEmailApplicationService,
+    IntegrationSettingsApplicationService,
     ReminderApplicationService,
     NotificationPreferenceApplicationService,
     CalendarApplicationService,
@@ -114,6 +124,8 @@ import { RepositoriesModule } from './repositories.module';
     CustomerIntelligenceApplicationService,
     QuotationApplicationService,
     QuotationLineItemApplicationService,
+    QuotationPdfApplicationService,
+    StoredDocumentApplicationService,
     BookingApplicationService,
     WorkspaceService,
     WorkspaceProgressService,
@@ -142,11 +154,14 @@ import { RepositoriesModule } from './repositories.module';
     VendorProcurementApplicationService,
     ProcurementLineApplicationService,
     InvoiceApplicationService,
+    InvoicePdfApplicationService,
     VendorExpenseApplicationService,
     ProfitabilityApplicationService,
     FinancialDocumentApplicationService,
     CommunicationApplicationService,
     CommunicationTemplateApplicationService,
+    OutboundEmailApplicationService,
+    IntegrationSettingsApplicationService,
     ReminderApplicationService,
     NotificationPreferenceApplicationService,
     CalendarApplicationService,

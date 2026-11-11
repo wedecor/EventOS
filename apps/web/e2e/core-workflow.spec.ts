@@ -109,9 +109,9 @@ test.describe('M0/M1 core operational workflow', () => {
     await page.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(page.getByText('Line item updated')).toBeVisible();
 
-    // 6) Send quotation
+    // 6) Mark quotation sent (status transition; distinct from Email PDF)
+    await page.getByRole('button', { name: 'Mark sent', exact: true }).click();
     await page.getByRole('button', { name: 'Send', exact: true }).click();
-    await page.getByRole('button', { name: 'Send', exact: true }).last().click();
     await expect(page.getByText(/sent/i).first()).toBeVisible({ timeout: 20_000 });
 
     // 7) Advance payment BEFORE approve (EP1-BR-001 gate)

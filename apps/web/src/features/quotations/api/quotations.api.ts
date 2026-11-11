@@ -1,5 +1,9 @@
 import { apiClient } from '@/shared/api/client';
 import {
+  downloadBlob,
+  filenameFromContentDisposition,
+} from '@/shared/lib/download-blob';
+import {
   parseApproveQuotation,
   parseQuotation,
   parseQuotationLineItem,
@@ -139,5 +143,36 @@ export const quotationsApi = {
       { headers: ifMatchHeader(version) },
     );
     return parseQuotation(data);
+  },
+
+  async downloadPdf(id: string, fallbackName = 'quotation.pdf'): Promise<void> {
+    const response = await apiClient.get<Blob>(`/api/v1/quotations/${id}/pdf`, {
+      responseType: 'blob',
+    });
+    const filename = filenameFromContentDisposition(
+      response.headers['content-disposition'] as string | undefined,
+      fallbackName,
+    );
+    downloadBlob(response.data, filename);
+  },
+
+  async emailPdf(
+    id: string,
+    body: { to?: string } = {},
+  ): Promise<{
+    communicationId: string;
+    status: string;
+    providerAccepted: boolean;
+    recipient: string;
+  }> {
+    const { data } = await apiClient.post<{
+      data: {
+        communicationId: string;
+        status: string;
+        providerAccepted: boolean;
+        recipient: string;
+      };
+    }>(`/api/v1/quotations/${id}/email`, body);
+    return data.data;
   },
 };

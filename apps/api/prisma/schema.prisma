@@ -59,6 +59,8 @@ model Tenant {
   eventNotes         EventNote[]
   checklistTemplates ChecklistTemplate[]
   eventChecklists    EventChecklist[]
+  storedDocuments    StoredDocument[]
+  integrationSettings IntegrationSettings?
 
   @@map("tenants")
 }
@@ -114,6 +116,7 @@ model User {
   createdCommunicationRecords CommunicationRecord[] @relation("CommunicationRecordCreatedBy")
   assignedReminders Reminder[] @relation("ReminderAssignedTo")
   notificationPreferences NotificationPreference[]
+  uploadedStoredDocuments StoredDocument[] @relation("StoredDocumentUploadedBy")
 
   @@unique([tenantId, email])
   @@index([tenantId])
@@ -326,6 +329,7 @@ model Customer {
   communicationRecords CommunicationRecord[]
   reminders Reminder[]
   notificationPreferences NotificationPreference[]
+  storedDocuments StoredDocument[]
 
   @@unique([tenantId, displayName])
   @@index([tenantId, status])
@@ -520,6 +524,8 @@ model Quotation {
   superseded Quotation? @relation("QuotationRevision", fields: [supersededById], references: [id], onDelete: SetNull)
   supersedes Quotation? @relation("QuotationRevision")
   lineItems  QuotationLineItem[]
+  storedDocuments StoredDocument[]
+  communicationRecords CommunicationRecord[]
 
   @@unique([tenantId, quotationNumber, revisionNumber])
   @@index([tenantId, status])
@@ -578,6 +584,7 @@ model Event {
   reviewRequest      ReviewRequest?
   eventNotes         EventNote[]
   eventChecklists    EventChecklist[]
+  storedDocuments    StoredDocument[]
 
   @@unique([tenantId, bookingNumber])
   @@index([tenantId, status, eventStartDate])
@@ -1757,6 +1764,8 @@ model Invoice {
   lineItems InvoiceLineItem[]
   payments  Payment[]
   financialDocuments FinancialDocument[]
+  storedDocuments StoredDocument[]
+  communicationRecords CommunicationRecord[]
 
   @@unique([tenantId, invoiceNumber])
   @@index([tenantId, bookingId])
@@ -1983,7 +1992,7 @@ enum ReminderCategory {
   @@map("reminder_category")
 }
 
-/// Booking-scoped operational communication log (P2-09). No WhatsApp/email/SMS provider.
+/// Operational communication log (P2-09 + M3 email delivery).
 model CommunicationRecord {
   id               String                  @id @default(uuid()) @db.Uuid
   tenantId         String                  @map("tenant_id") @db.Uuid
@@ -1992,11 +2001,16 @@ model CommunicationRecord {
   vendorId         String?                 @map("vendor_id") @db.Uuid
   staffMemberId    String?                 @map("staff_member_id") @db.Uuid
   templateId       String?                 @map("template_id") @db.Uuid
+  quotationId      String?                 @map("quotation_id") @db.Uuid
+  invoiceId        String?                 @map("invoice_id") @db.Uuid
   channel          CommunicationChannel
   direction        CommunicationDirection
   status           CommunicationStatus     @default(draft)
   subject          String?
   body             String?
+  recipientAddress String?                 @map("recipient_address")
+  provider         String?
+  providerMessageId String?                @map("provider_message_id")
   failureReason    String?                 @map("failure_reason")
   createdByUserId  String?                 @map("created_by_user_id") @db.Uuid
   occurredAt       DateTime                @default(now()) @map("occurred_at")
@@ -2015,14 +2029,19 @@ model CommunicationRecord {
   vendor      Vendor?                  @relation(fields: [vendorId], references: [id], onDelete: SetNull)
   staffMember StaffMember?             @relation(fields: [staffMemberId], references: [id], onDelete: SetNull)
   template    CommunicationTemplate?   @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  quotation   Quotation?               @relation(fields: [quotationId], references: [id], onDelete: SetNull)
+  invoice     Invoice?                 @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
   createdBy   User?                    @relation("CommunicationRecordCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
   attachments CommunicationAttachment[]
   reminders   Reminder[]
 
   @@index([tenantId, bookingId, occurredAt])
   @@index([tenantId, customerId, occurredAt])
+  @@index([tenantId, quotationId, occurredAt])
+  @@index([tenantId, invoiceId, occurredAt])
   @@index([tenantId, status, deletedAt])
   @@index([tenantId, channel])
+  @@index([tenantId, providerMessageId])
   @@map("communication_records")
 }
 
@@ -2123,5 +2142,85 @@ model NotificationPreference {
   @@index([tenantId, customerId])
   @@index([tenantId, userId])
   @@map("notification_preferences")
+}
+
+// ---------------------------------------------------------------------------
+// M3 — Integration foundation (documents, email settings)
+// ---------------------------------------------------------------------------
+
+enum StoredDocumentCategory {
+  quotation_pdf
+  invoice_pdf
+  customer_document
+  event_image
+  contract
+  other
+
+  @@map("stored_document_category")
+}
+
+/// Ops document asset metadata. Binary content lives in object/local storage.
+model StoredDocument {
+  id               String                 @id @default(uuid()) @db.Uuid
+  tenantId         String                 @map("tenant_id") @db.Uuid
+  category         StoredDocumentCategory
+  fileName         String                 @map("file_name")
+  mimeType         String                 @map("mime_type")
+  fileSizeBytes    Int                    @map("file_size_bytes")
+  storageKey       String                 @map("storage_key")
+  storageProvider  String                 @map("storage_provider")
+  customerId       String?                @map("customer_id") @db.Uuid
+  quotationId      String?                @map("quotation_id") @db.Uuid
+  bookingId        String?                @map("booking_id") @db.Uuid
+  invoiceId        String?                @map("invoice_id") @db.Uuid
+  uploadedByUserId String?                @map("uploaded_by_user_id") @db.Uuid
+  uploadedAt       DateTime               @default(now()) @map("uploaded_at")
+  deletedAt        DateTime?              @map("deleted_at")
+  createdAt        DateTime               @default(now()) @map("created_at")
+  updatedAt        DateTime               @updatedAt @map("updated_at")
+  version          Int                    @default(1)
+
+  tenant     Tenant     @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  customer   Customer?  @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  quotation  Quotation? @relation(fields: [quotationId], references: [id], onDelete: SetNull)
+  booking    Event?     @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  invoice    Invoice?   @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  uploadedBy User?      @relation("StoredDocumentUploadedBy", fields: [uploadedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, bookingId, deletedAt])
+  @@index([tenantId, customerId, deletedAt])
+  @@index([tenantId, quotationId, deletedAt])
+  @@index([tenantId, invoiceId, deletedAt])
+  @@index([tenantId, category, deletedAt])
+  @@map("stored_documents")
+}
+
+/// Per-tenant integration configuration. Secret ciphertext is write-only — never returned by API.
+model IntegrationSettings {
+  id                      String   @id @default(uuid()) @db.Uuid
+  tenantId                String   @unique @map("tenant_id") @db.Uuid
+  emailProvider           String   @default("test") @map("email_provider")
+  fromName                String?  @map("from_name")
+  fromEmail               String?  @map("from_email")
+  smtpUser                String?  @map("smtp_user")
+  smtpPasswordEncrypted   String?  @map("smtp_password_encrypted")
+  emailSecretConfigured   Boolean  @default(false) @map("email_secret_configured")
+  storageProvider         String   @default("local") @map("storage_provider")
+  storageBucket           String?  @map("storage_bucket")
+  storageEndpoint         String?  @map("storage_endpoint")
+  storageAccessKey        String?  @map("storage_access_key")
+  storageSecretEncrypted  String?  @map("storage_secret_encrypted")
+  storageSecretConfigured Boolean  @default(false) @map("storage_secret_configured")
+  lastEmailTestAt         DateTime? @map("last_email_test_at")
+  lastEmailTestStatus     String?   @map("last_email_test_status")
+  lastStorageTestAt       DateTime? @map("last_storage_test_at")
+  lastStorageTestStatus   String?   @map("last_storage_test_status")
+  createdAt               DateTime @default(now()) @map("created_at")
+  updatedAt               DateTime @updatedAt @map("updated_at")
+  version                 Int      @default(1)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@map("integration_settings")
 }
 

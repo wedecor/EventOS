@@ -163,6 +163,28 @@ export class CommunicationApplicationService {
     return success(rows.map(toCommunicationDto));
   }
 
+  async listByQuotation(
+    tenantId: string,
+    quotationId: string,
+  ): Promise<Result<CommunicationDto[]>> {
+    const rows = await this.recordRepository.findByQuotationId(
+      tenantId,
+      quotationId,
+    );
+    return success(rows.map(toCommunicationDto));
+  }
+
+  async listByInvoice(
+    tenantId: string,
+    invoiceId: string,
+  ): Promise<Result<CommunicationDto[]>> {
+    const rows = await this.recordRepository.findByInvoiceId(
+      tenantId,
+      invoiceId,
+    );
+    return success(rows.map(toCommunicationDto));
+  }
+
   async updateMetadata(
     tenantId: string,
     id: string,

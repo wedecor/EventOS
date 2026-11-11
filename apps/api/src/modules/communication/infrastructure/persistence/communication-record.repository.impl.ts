@@ -51,6 +51,15 @@ export class CommunicationRecordRepositoryImpl
         ...(data.templateId
           ? { template: { connect: { id: data.templateId } } }
           : {}),
+        ...(data.quotationId
+          ? { quotation: { connect: { id: data.quotationId } } }
+          : {}),
+        ...(data.invoiceId
+          ? { invoice: { connect: { id: data.invoiceId } } }
+          : {}),
+        recipientAddress: data.recipientAddress ?? null,
+        provider: data.provider ?? null,
+        providerMessageId: data.providerMessageId ?? null,
         ...(data.createdByUserId
           ? { createdBy: { connect: { id: data.createdByUserId } } }
           : {}),
@@ -132,7 +141,12 @@ export class CommunicationRecordRepositoryImpl
           vendorId: data.vendorId,
           staffMemberId: data.staffMemberId,
           templateId: data.templateId,
+          quotationId: data.quotationId,
+          invoiceId: data.invoiceId,
           status: data.status,
+          recipientAddress: data.recipientAddress,
+          provider: data.provider,
+          providerMessageId: data.providerMessageId,
           failureReason: data.failureReason,
           sentAt: data.sentAt,
           deliveredAt: data.deliveredAt,
@@ -148,6 +162,38 @@ export class CommunicationRecordRepositoryImpl
     }
   }
 
+  async findByQuotationId(
+    tenantId: string,
+    quotationId: string,
+    options?: { includeDeleted?: boolean },
+  ): Promise<CommunicationRecordRecord[]> {
+    const rows = await this.prisma.communicationRecord.findMany({
+      where: {
+        tenantId,
+        quotationId,
+        ...(options?.includeDeleted ? {} : { deletedAt: null }),
+      },
+      orderBy: { occurredAt: 'desc' },
+    });
+    return rows.map((r) => this.map(r));
+  }
+
+  async findByInvoiceId(
+    tenantId: string,
+    invoiceId: string,
+    options?: { includeDeleted?: boolean },
+  ): Promise<CommunicationRecordRecord[]> {
+    const rows = await this.prisma.communicationRecord.findMany({
+      where: {
+        tenantId,
+        invoiceId,
+        ...(options?.includeDeleted ? {} : { deletedAt: null }),
+      },
+      orderBy: { occurredAt: 'desc' },
+    });
+    return rows.map((r) => this.map(r));
+  }
+
   private map(row: CommunicationRecord): CommunicationRecordRecord {
     return {
       id: row.id,
@@ -157,11 +203,16 @@ export class CommunicationRecordRepositoryImpl
       vendorId: row.vendorId,
       staffMemberId: row.staffMemberId,
       templateId: row.templateId,
+      quotationId: row.quotationId,
+      invoiceId: row.invoiceId,
       channel: row.channel,
       direction: row.direction,
       status: row.status,
       subject: row.subject,
       body: row.body,
+      recipientAddress: row.recipientAddress,
+      provider: row.provider,
+      providerMessageId: row.providerMessageId,
       failureReason: row.failureReason,
       createdByUserId: row.createdByUserId,
       occurredAt: row.occurredAt,

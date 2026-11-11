@@ -14,6 +14,7 @@ import {
 } from '@/shared/components/page';
 import { buildBreadcrumbs } from '@/shared/lib/breadcrumbs';
 import { ExpensesPanel } from './expenses-panel';
+import { OpsDocumentsPanel } from '@/features/documents/components/ops-documents-panel';
 import { DocumentsPanel } from './documents-panel';
 import { InvoicesPanel } from './invoices-panel';
 import { PaymentsPanel } from './payments-panel';
@@ -123,6 +124,12 @@ export function BookingFinancePage() {
             </Can>
 
             <Can permission="documents:read">
+              <PageSection>
+                <OpsDocumentsPanel
+                  bookingId={bookingId}
+                  customerId={bookingQuery.data?.customerId}
+                />
+              </PageSection>
               <PageSection>
                 <DocumentsPanel bookingId={bookingId} />
               </PageSection>

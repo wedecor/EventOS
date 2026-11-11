@@ -9,11 +9,16 @@ export type CommunicationDto = {
   vendorId: string | null;
   staffMemberId: string | null;
   templateId: string | null;
+  quotationId: string | null;
+  invoiceId: string | null;
   channel: CommunicationRecordRecord['channel'];
   direction: CommunicationRecordRecord['direction'];
   status: CommunicationRecordRecord['status'];
   subject: string | null;
   body: string | null;
+  recipientAddress: string | null;
+  provider: string | null;
+  providerMessageId: string | null;
   failureReason: string | null;
   createdByUserId: string | null;
   occurredAt: Date;

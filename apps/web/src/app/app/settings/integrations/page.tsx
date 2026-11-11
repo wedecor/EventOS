@@ -1,13 +1,25 @@
 'use client';
 
-import { ModulePlaceholderPage } from '@/shared/components/page/module-placeholder-page';
+import { RequirePermission } from '@/features/auth';
+import { IntegrationSettingsForm } from '@/features/settings/components/integration-settings-form';
+import {
+  PageHeader,
+  PageLayout,
+  PageSection,
+} from '@/shared/components/page';
 
 export default function SettingsIntegrationsPage() {
   return (
-    <ModulePlaceholderPage
-      title="Integrations"
-      description="Integrations placeholder under Settings."
-      permission="settings:read"
-    />
+    <RequirePermission permission="settings:read">
+      <PageLayout>
+        <PageHeader
+          title="Integrations"
+          description="Configure email and document storage. Secrets are write-only and never returned by the API."
+        />
+        <PageSection>
+          <IntegrationSettingsForm />
+        </PageSection>
+      </PageLayout>
+    </RequirePermission>
   );
 }

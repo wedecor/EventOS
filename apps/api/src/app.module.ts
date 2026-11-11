@@ -11,6 +11,8 @@ import {
   buildPinoHttpOptions,
 } from './config/logging.config';
 import { DatabaseModule, PrismaModule } from './database';
+import { StorageModule } from './shared/storage/storage.module';
+import { MailModule } from './shared/mail/mail.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { ApplicationServicesModule } from './modules/application-services.module';
 import { BookingModule } from './modules/booking/booking.module';
@@ -20,7 +22,9 @@ import { CommunicationModule } from './modules/communication/communication.modul
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { CustomerModule } from './modules/customer/customer.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
+import { DocumentsModule } from './modules/documents/documents.module';
 import { FinanceModule } from './modules/finance/finance.module';
+import { IntegrationsModule } from './modules/integrations/integrations.module';
 import { InventoryModule } from './modules/inventory/inventory.module';
 import { AuthModule, JwtAuthGuard, PermissionsGuard } from './modules/auth';
 import { LeadModule } from './modules/lead/lead.module';
@@ -57,6 +61,8 @@ export { LOG_REDACT_CONFIG };
     }),
     DatabaseModule,
     PrismaModule,
+    StorageModule,
+    MailModule,
     RepositoriesModule,
     ApplicationServicesModule,
     LeadModule,
@@ -70,6 +76,8 @@ export { LOG_REDACT_CONFIG };
     InventoryModule,
     VendorModule,
     FinanceModule,
+    DocumentsModule,
+    IntegrationsModule,
     CommunicationModule,
     CalendarModule,
     AnalyticsModule,
