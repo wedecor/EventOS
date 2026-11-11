@@ -1,0 +1,41 @@
+# Isolated M2 live E2E data plane — synthetic only.
+# Does not replace the default docker-compose.yml stack.
+# From repo root:
+#   docker compose -f infrastructure/docker/docker-compose.e2e.yml up -d
+#
+# Host ports avoid collision with Homebrew Postgres (5432) and default EventOS Redis.
+
+services:
+  postgres-e2e:
+    image: postgres:16-alpine
+    container_name: eventos-postgres-e2e
+    restart: unless-stopped
+    ports:
+      - '55432:5432'
+    environment:
+      POSTGRES_USER: eventos
+      POSTGRES_PASSWORD: eventos
+      POSTGRES_DB: eventos_e2e
+    volumes:
+      - eventos_postgres_e2e_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U eventos -d eventos_e2e']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis-e2e:
+    image: redis:7-alpine
+    container_name: eventos-redis-e2e
+    restart: unless-stopped
+    ports:
+      - '56379:6379'
+    command: redis-server --save '' --loglevel warning
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  eventos_postgres_e2e_data:

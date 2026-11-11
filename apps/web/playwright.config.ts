@@ -1,6 +1,6 @@
 import { defineConfig, devices } from '@playwright/test';
 
-const baseURL = process.env.E2E_BASE_URL ?? 'http://localhost:3001';
+const baseURL = process.env.E2E_BASE_URL ?? 'http://localhost:3101';
 
 /**
  * Local-first Admin Portal E2E.
@@ -13,12 +13,12 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   workers: 1,
-  timeout: 120_000,
+  timeout: 240_000,
   expect: { timeout: 15_000 },
   reporter: [['list'], ['html', { open: 'never', outputFolder: 'playwright-report' }]],
   use: {
     baseURL,
-    trace: 'on-first-retry',
+    trace: process.env.E2E_TRACE === '1' ? 'on' : 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
   },
