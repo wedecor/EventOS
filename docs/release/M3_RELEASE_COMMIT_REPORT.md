@@ -157,14 +157,15 @@ Saving IntegrationSettings does **not** claim a provider is connected; only conn
 
 ---
 
-## 9. Final Git status (after M3 feat commit)
+## 9. Final Git status
 
 ```
 branch: release/m0-m1-core-workflows
-HEAD:   35cc002 feat(eventos): complete M3 integration foundation
-parent: 6a0dc10
+feat:   35cc002 feat(eventos): complete M3 integration foundation
+docs:   78570f4 docs(release): add M3 release commit report  (this file)
+parent of feat: 6a0dc10
 M2:     d8ed43c is ancestor
-tree:   clean (prior to this report file)
+tree:   clean after docs report commit
 ```
 
 Push was not performed.
