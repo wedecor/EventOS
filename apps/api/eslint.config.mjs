@@ -6,13 +6,7 @@ import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
   {
-    ignores: [
-      'eslint.config.mjs',
-      // Sprint 1 UAT parallel stacks retained in git but not part of the Nest app surface.
-      'src/auth/**',
-      'src/modules/presentation/**',
-      'src/modules/suggestion/**',
-    ],
+    ignores: ['eslint.config.mjs'],
   },
   eslint.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,

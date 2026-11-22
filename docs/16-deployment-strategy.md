@@ -192,6 +192,18 @@ Production deployment complete
 
 ## Database Migration Strategy
 
+### Sprint 1 UAT migration checksum note
+
+Databases that applied the original Sprint 1 UAT versions of migrations
+`20260912133000`, `20260912143000`, `20260912150000` must be reset; fresh
+databases are unaffected.
+
+On `release/m0-m1-core-workflows` (and descendants), those three migration
+folders are retained for history but their SQL is a no-op (`SELECT 1`), because
+the equivalent schema already exists via earlier Phase 1 migrations. Any
+database that recorded the original (non–no-op) checksums for those migration
+IDs will fail Prisma’s migration history check until it is reset.
+
 ### Migration Workflow
 
 ```

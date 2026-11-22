@@ -6,9 +6,6 @@
     "node_modules",
     "prisma",
     "scripts",
-    "src/auth/**",
-    "src/modules/presentation/**",
-    "src/modules/suggestion/**",
     "test"
   ]
 }
