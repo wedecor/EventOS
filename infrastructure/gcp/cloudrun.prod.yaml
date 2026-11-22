@@ -23,7 +23,7 @@ spec:
         run.googleapis.com/vpc-access-egress: private-ranges-only
         run.googleapis.com/startup-cpu-boost: "true"
     spec:
-      serviceAccountName: eventos-api@wedecorenquries.iam.gserviceaccount.com
+      serviceAccountName: eventos-api-prod@wedecorenquries.iam.gserviceaccount.com
       containerConcurrency: 40
       timeoutSeconds: 60
       containers:
@@ -47,8 +47,7 @@ spec:
             # Tenant for the Enquiries feed (config, never the request body). Public id.
             - name: ENQUIRIES_FEED_TENANT_ID
               value: "00000000-0000-0000-0000-000000000001"
-            # Cloud Run's filesystem is ephemeral; /tmp is the only writable path.
-            # TODO(M5-01 follow-up): move uploads to an S3-compatible bucket.
+            # Replaced by durable GCS in the follow-up storage commit.
             - name: STORAGE_PROVIDER
               value: local
             - name: STORAGE_LOCAL_ROOT
@@ -75,7 +74,7 @@ spec:
             - name: ENQUIRIES_FEED_SECRET
               valueFrom:
                 secretKeyRef:
-                  name: eventos-enquiries-feed-secret
+                  name: eventos-prod-enquiries-feed-secret
                   key: latest
             # A single space (blank) disables Sentry; see README step 6.
             - name: SENTRY_DSN

@@ -74,9 +74,17 @@ await fetch(`${base}/api/v1/integrations/enquiries/sync`, {
 });
 ```
 
-The secret is `ENQUIRIES_FEED_SECRET` (≥ 32 chars, Secret Manager `eventos-enquiries-feed-secret`).
-During rotation the server also accepts `ENQUIRIES_FEED_SECRET_NEXT`; the signature is
-checked in constant time against every configured secret.
+The secret is `ENQUIRIES_FEED_SECRET` (≥ 32 chars). **Staging and production use
+separate Secret Manager secrets** — never share an HMAC key across environments:
+
+| Environment | Secret Manager name |
+| --- | --- |
+| Staging | `eventos-staging-enquiries-feed-secret` |
+| Production | `eventos-prod-enquiries-feed-secret` |
+
+During rotation the server also accepts `ENQUIRIES_FEED_SECRET_NEXT` (Secret Manager
+`eventos-<env>-enquiries-feed-secret-next`). The signature is checked in constant time
+against every configured secret for that environment only.
 
 ### Payload (schema version 1, strict — unknown keys are rejected except inside `raw`)
 

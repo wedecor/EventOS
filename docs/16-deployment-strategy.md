@@ -89,16 +89,14 @@ modular monolith is unchanged).
 | Redis | Memorystore Basic 1 GB through a Serverless VPC Access connector (staging db `/1`, prod db `/0`) |
 | Migrations | Cloud Run Job `eventos-migrate-<env>` using the Dockerfile `migrator` target, executed before each deploy |
 | Production seed | One-off Cloud Run Job `eventos-seed-prod`: tenant "We Decor Events" + owner user only |
-| Secrets | Secret Manager (`JWT_SECRET`, `DATABASE_URL`, `REDIS_URL`, `ENQUIRIES_FEED_SECRET`, `SENTRY_DSN`), per-secret accessor on `eventos-api@…` |
+| Secrets | Secret Manager per env (`JWT_SECRET`, `DATABASE_URL`, `REDIS_URL`, `ENQUIRIES_FEED_SECRET`, `SENTRY_DSN`); feed secrets are `eventos-staging-enquiries-feed-secret` / `eventos-prod-enquiries-feed-secret` |
 | Registry | Artifact Registry `asia-south1-docker.pkg.dev/wedecorenquries/eventos` |
 | DNS | Cloudflare, DNS-only: `api.wedecorevents.com` → prod and `api-staging.wedecorevents.com` → staging via Cloud Run domain mappings |
-| Identity | Runtime SA `eventos-api@wedecorenquries.iam.gserviceaccount.com` (Cloud SQL Client, Firebase Auth Viewer); CI via Workload Identity Federation |
+| Identity | Runtime SAs `eventos-api-staging@…` and `eventos-api-prod@…` (Cloud SQL Client, Firebase Auth Viewer, secret accessor only on that env’s secrets); CI via Workload Identity Federation |
 
 Trusted proxy: the API trusts exactly **one** proxy hop (Cloud Run's front end) for
 client-IP resolution (per-IP throttling). Do not enable the Cloudflare proxy without raising
-the hop count. Known gap: document uploads use ephemeral local storage on Cloud Run until
-S3-compatible storage is configured. The temporary Firebase/Enquiries bridge
-(ADR-019) is documented in
+the hop count. The temporary Firebase/Enquiries bridge (ADR-019) is documented in
 [integrations/enquiries-bridge-contract.md](./integrations/enquiries-bridge-contract.md).
 
 ---

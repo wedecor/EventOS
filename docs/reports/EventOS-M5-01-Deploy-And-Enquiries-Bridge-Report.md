@@ -49,7 +49,7 @@ The migration was produced by `prisma migrate diff` and applied only to a scratc
 
 ## 3. Deviations and design notes
 
-1. **Per-environment resource names** (`eventos-api-staging|prod`, `eventos-migrate-<env>`) instead of a single `eventos-api`, because both environments share a project and region.
+1. **Per-environment resource names** (`eventos-api-staging|prod`, `eventos-migrate-<env>`, runtime SAs `eventos-api-staging@` / `eventos-api-prod@`, feed secrets `eventos-<env>-enquiries-feed-secret`) instead of a single shared service/SA/secret, because both environments share a project and region and must not share HMAC keys.
 2. **Cancellation runs outside the sync transaction** (through `BookingApplicationService.cancelBooking`, so audit/events/rules are shared) with a second transaction updating the link. It is idempotent on retry.
 3. **`rawBody: true` is global** in `NestFactory.create` (Nest has no route-scoped switch); only the feed guard reads it.
 4. **Feed status/counters live in Redis** (best-effort, reset on flush).
@@ -75,10 +75,10 @@ The migration was produced by `prisma migrate diff` and applied only to a scratc
 | Authorisation | Linking needs `users:write` (owner/admin); feed status/backfill need `integrations:enquiries:manage`; money is exposed only via `integrations:financials:read` and is not part of the booking DTO. |
 | Data minimisation / logs | Signature header, `idToken`, tokens censored; phone fields masked to last four digits. |
 | Rate limiting & proxy | Redis-backed throttler; trust-proxy = 1 hop. **Risk:** enabling Cloudflare's proxy without raising the hop count would collapse per-IP limits onto Cloudflare addresses. |
-| Secrets | No secrets in the YAML, scripts or CI; Secret Manager references with per-secret `secretAccessor`; GitHub → GCP via Workload Identity Federation (no JSON keys), provider restricted to the repository by an attribute condition. |
+| Secrets | No secrets in the YAML, scripts or CI; Secret Manager references with **per-environment** `secretAccessor` (staging SA cannot read prod secrets and vice versa); separate feed secrets per env; GitHub → GCP via Workload Identity Federation (no JSON keys), provider restricted to the repository by an attribute condition. |
 | Deploy blast radius | Deployer SA has `run.admin` + `artifactregistry.writer` at project level (broad within Cloud Run); production job is gated by GitHub Environment reviewers. Consider restricting the WIF condition to `refs/heads/main` and `refs/tags/v*`. |
 | Public invoker | `allUsers` on `roles/run.invoker` — intended (the API authenticates callers); blocked by a domain-restricted-sharing org policy, in which case use a load balancer. |
-| Residual risks | Uploads on ephemeral disk; single Redis (Basic tier, no failover) – degrades throttling/ledger only; one shared feed secret across environments (provisioned once; create a separate staging secret if the sender can support it); Cloud SQL is a single zonal instance (RTO bounded by clone-from-PITR). |
+| Residual risks | Uploads on ephemeral disk (until GCS follow-up); single Redis (Basic tier, no failover) – degrades throttling/ledger only; Cloud SQL is a single zonal instance (RTO bounded by clone-from-PITR). |
 
 ## 5. Operator runbook
 
@@ -86,12 +86,12 @@ Order matters. Detailed commands: `infrastructure/gcp/README.md`.
 
 ### A. One-time (human with project owner rights)
 
-1. Run README steps 0–7: APIs, Artifact Registry, runtime SA, Cloud SQL (+ grants), Memorystore + VPC connector, Secret Manager (+ per-secret accessor), WIF + deployer SA.
+1. Run README steps 0–7: APIs, Artifact Registry, **two** runtime SAs, Cloud SQL (+ grants), Memorystore + VPC connector, Secret Manager (+ per-env secret accessor including separate feed secrets), WIF + deployer SA (act-as both runtime SAs).
 2. Create GitHub Environments `staging` and `production` (required reviewers on production); set variables `GCP_WORKLOAD_IDENTITY_PROVIDER`, `GCP_DEPLOYER_SERVICE_ACCOUNT`, `CORS_ORIGIN` on each. Replace the `REPLACE_OWNER/REPLACE_REPO` placeholder with the real repository.
 3. First deploy: push to `main` (staging) and verify `https://<service-url>/health/ready`; for production tag `v1.0.0` (or run `deploy.sh prod` manually) and approve.
 4. Run the production seed job (README step 9) with the owner's email.
 5. Create the domain mappings and Cloudflare DNS-only CNAMEs (step 10); wait for the certificate.
-6. Hand the feed secret and the base URL to the Enquiries operator (the sender must implement the contract in `docs/integrations/enquiries-bridge-contract.md`).
+6. Hand **each environment’s** feed secret and base URL to the Enquiries operator (staging and prod HMAC keys are different; contract: `docs/integrations/enquiries-bridge-contract.md`).
 
 ### B. Link the existing Firebase users
 

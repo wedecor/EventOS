@@ -21,13 +21,15 @@ Cloud Run Job `eventos-seed-prod`      ── one-off: tenant + owner user, no d
 | Cloud SQL | `eventos-pg` (PG16, private IP), databases `eventos_staging`, `eventos_prod` |
 | Redis | Memorystore `eventos-redis` (Basic, 1 GB); staging uses db `/1`, prod `/0` |
 | VPC connector | `eventos-connector` |
-| Runtime service account | `eventos-api@wedecorenquries.iam.gserviceaccount.com` |
+| Runtime service accounts | `eventos-api-staging@…` and `eventos-api-prod@…` (split least privilege — each env accesses only its own secrets/bucket) |
 | Deployer service account (CI) | `eventos-deployer@wedecorenquries.iam.gserviceaccount.com` |
 | Hostnames | `api.wedecorevents.com` → prod, `api-staging.wedecorevents.com` → staging |
+| Feed secrets | `eventos-staging-enquiries-feed-secret` / `eventos-prod-enquiries-feed-secret` (never shared across envs) |
 
-> Deviation from the prompt: the service and migration job are named per environment
-> (`eventos-api-staging` / `eventos-api-prod`, `eventos-migrate-<env>`) because both
-> environments live in one project and region.
+> Deviation from the prompt: the service, migration job, and runtime service account
+> are named per environment (`eventos-api-staging` / `eventos-api-prod`,
+> `eventos-migrate-<env>`, `eventos-api-<env>@…`) because both environments live in
+> one project and region.
 
 Files: `deploy.sh`, `rollback.sh`, `cloudrun.staging.yaml`, `cloudrun.prod.yaml`; CI is
 `.github/workflows/deploy.yml`.
@@ -40,10 +42,11 @@ Files: `deploy.sh`, `rollback.sh`, `cloudrun.staging.yaml`, `cloudrun.prod.yaml`
 export PROJECT_ID=wedecorenquries
 export REGION=asia-south1
 export PROJECT_NUMBER="$(gcloud projects describe $PROJECT_ID --format='value(projectNumber)')"
-export RUNTIME_SA="eventos-api@${PROJECT_ID}.iam.gserviceaccount.com"
+export RUNTIME_SA_STAGING="eventos-api-staging@${PROJECT_ID}.iam.gserviceaccount.com"
+export RUNTIME_SA_PROD="eventos-api-prod@${PROJECT_ID}.iam.gserviceaccount.com"
 export DEPLOYER_SA="eventos-deployer@${PROJECT_ID}.iam.gserviceaccount.com"
 export SQL_CONNECTION="${PROJECT_ID}:${REGION}:eventos-pg"
-export GITHUB_REPO="REPLACE_OWNER/REPLACE_REPO"   # e.g. we-decor/EventOS
+export GITHUB_REPO="REPLACE_OWNER/REPLACE_REPO"   # e.g. wedecor/EventOS
 gcloud config set project "$PROJECT_ID"
 ```
 
@@ -54,7 +57,8 @@ gcloud services enable \
   run.googleapis.com artifactregistry.googleapis.com sqladmin.googleapis.com \
   redis.googleapis.com vpcaccess.googleapis.com compute.googleapis.com \
   servicenetworking.googleapis.com secretmanager.googleapis.com \
-  iamcredentials.googleapis.com sts.googleapis.com identitytoolkit.googleapis.com
+  iamcredentials.googleapis.com sts.googleapis.com identitytoolkit.googleapis.com \
+  storage.googleapis.com
 ```
 
 ### 2. Artifact Registry
@@ -65,16 +69,24 @@ gcloud artifacts repositories create eventos \
   --description="Event OS images"
 ```
 
-### 3. Runtime service account
+### 3. Runtime service accounts (one per environment)
+
+Staging and production **do not** share a runtime SA. Each account can read only its own
+Secret Manager secrets and (later) its own GCS bucket.
 
 ```bash
-gcloud iam service-accounts create eventos-api --display-name="Event OS API runtime"
+gcloud iam service-accounts create eventos-api-staging \
+  --display-name="Event OS API runtime (staging)"
+gcloud iam service-accounts create eventos-api-prod \
+  --display-name="Event OS API runtime (prod)"
 
-# Cloud SQL connection (unix socket) + Firebase ID-token verification (ADC, no JSON key).
-gcloud projects add-iam-policy-binding "$PROJECT_ID" \
-  --member="serviceAccount:${RUNTIME_SA}" --role="roles/cloudsql.client"
-gcloud projects add-iam-policy-binding "$PROJECT_ID" \
-  --member="serviceAccount:${RUNTIME_SA}" --role="roles/firebaseauth.viewer"
+# Cloud SQL unix socket + Firebase ID-token verification (ADC, no JSON key).
+for SA in "$RUNTIME_SA_STAGING" "$RUNTIME_SA_PROD"; do
+  gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+    --member="serviceAccount:${SA}" --role="roles/cloudsql.client"
+  gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+    --member="serviceAccount:${SA}" --role="roles/firebaseauth.viewer"
+done
 # Secret Accessor is granted per secret in step 6 — never project-wide.
 ```
 
@@ -134,7 +146,8 @@ the ledger and rebuilds counters).
 
 ### 6. Secret Manager
 
-Secrets are created once; deploys only reference `:latest`.
+Secrets are created once; deploys only reference `:latest`. **Feed secrets are
+per environment** — staging and prod never share an HMAC key.
 
 ```bash
 mk_secret() { # name, value (read from stdin)
@@ -151,21 +164,25 @@ for ENV in staging prod; do
   # Blank (a single space) = Sentry disabled. Replace later with:
   #   printf '%s' 'https://…@…ingest.sentry.io/…' | gcloud secrets versions add eventos-<env>-sentry-dsn --data-file=-
   printf ' ' | mk_secret "eventos-${ENV}-sentry-dsn"
+  # Enquiries feed HMAC (hand each value to the Enquiries sender for that env only).
+  openssl rand -hex 32 | tr -d '\n' | mk_secret "eventos-${ENV}-enquiries-feed-secret"
 done
 
-# Shared with the Enquiries app (see docs/integrations/enquiries-bridge-contract.md).
-openssl rand -hex 32 | tr -d '\n' | mk_secret eventos-enquiries-feed-secret
-# Read it once to hand to the Enquiries operator, then clear your terminal:
-#   gcloud secrets versions access latest --secret=eventos-enquiries-feed-secret
+# Least privilege: each runtime SA reads ONLY its own secrets.
+grant_secret() {
+  local secret="$1" sa="$2"
+  gcloud secrets add-iam-policy-binding "$secret" \
+    --member="serviceAccount:${sa}" --role="roles/secretmanager.secretAccessor"
+}
 
-# Least privilege: the runtime account reads only these secrets.
-for S in \
-  eventos-staging-jwt-secret eventos-staging-database-url eventos-staging-redis-url eventos-staging-sentry-dsn \
-  eventos-prod-jwt-secret    eventos-prod-database-url    eventos-prod-redis-url    eventos-prod-sentry-dsn \
-  eventos-enquiries-feed-secret; do
-  gcloud secrets add-iam-policy-binding "$S" \
-    --member="serviceAccount:${RUNTIME_SA}" --role="roles/secretmanager.secretAccessor"
+for S in jwt-secret database-url redis-url sentry-dsn enquiries-feed-secret; do
+  grant_secret "eventos-staging-${S}" "$RUNTIME_SA_STAGING"
+  grant_secret "eventos-prod-${S}" "$RUNTIME_SA_PROD"
 done
+
+# Read once to hand to the Enquiries operator, then clear the terminal:
+#   gcloud secrets versions access latest --secret=eventos-staging-enquiries-feed-secret
+#   gcloud secrets versions access latest --secret=eventos-prod-enquiries-feed-secret
 ```
 
 ### 7. GitHub Actions → Workload Identity Federation (no JSON keys)
@@ -177,9 +194,11 @@ for ROLE in roles/run.admin roles/artifactregistry.writer; do
   gcloud projects add-iam-policy-binding "$PROJECT_ID" \
     --member="serviceAccount:${DEPLOYER_SA}" --role="$ROLE"
 done
-# Cloud Run deploys "act as" the runtime account.
-gcloud iam service-accounts add-iam-policy-binding "$RUNTIME_SA" \
-  --member="serviceAccount:${DEPLOYER_SA}" --role="roles/iam.serviceAccountUser"
+# Cloud Run deploys "act as" each environment's runtime account.
+for SA in "$RUNTIME_SA_STAGING" "$RUNTIME_SA_PROD"; do
+  gcloud iam service-accounts add-iam-policy-binding "$SA" \
+    --member="serviceAccount:${DEPLOYER_SA}" --role="roles/iam.serviceAccountUser"
+done
 
 gcloud iam workload-identity-pools create github \
   --location=global --display-name="GitHub Actions"
@@ -231,7 +250,7 @@ export TAG=REPLACE_IMAGE_TAG_USED_BY_THE_LAST_DEPLOY   # printed by deploy.sh
 gcloud run jobs deploy eventos-seed-prod \
   --region="$REGION" \
   --image="${REGION}-docker.pkg.dev/${PROJECT_ID}/eventos/eventos-migrator:${TAG}" \
-  --service-account="$RUNTIME_SA" \
+  --service-account="$RUNTIME_SA_PROD" \
   --set-cloudsql-instances="$SQL_CONNECTION" \
   --vpc-connector=eventos-connector --vpc-egress=private-ranges-only \
   --set-secrets="DATABASE_URL=eventos-prod-database-url:latest" \
@@ -282,18 +301,24 @@ This only moves traffic. Migrations are additive and **not** reverted; to undo a
 problem use Cloud SQL point-in-time recovery
 (`infrastructure/disaster-recovery/disaster-recovery-runbook.md`, "Cloud SQL (GCP)").
 
-## Rotating the feed secret
+## Rotating the feed secret (per environment)
+
+Rotate staging and prod independently. Example for **prod** (swap `prod` → `staging`
+and `$RUNTIME_SA_PROD` → `$RUNTIME_SA_STAGING` for staging):
 
 ```bash
-openssl rand -hex 32 | tr -d '\n' | gcloud secrets create eventos-enquiries-feed-secret-next --data-file=-
-gcloud secrets add-iam-policy-binding eventos-enquiries-feed-secret-next \
+ENV=prod
+RUNTIME_SA="$RUNTIME_SA_PROD"
+openssl rand -hex 32 | tr -d '\n' | gcloud secrets create "eventos-${ENV}-enquiries-feed-secret-next" --data-file=-
+gcloud secrets add-iam-policy-binding "eventos-${ENV}-enquiries-feed-secret-next" \
   --member="serviceAccount:${RUNTIME_SA}" --role=roles/secretmanager.secretAccessor
 # Accept both (current + next) on the live service:
-gcloud run services update eventos-api-prod --region="$REGION" \
-  --update-secrets=ENQUIRIES_FEED_SECRET_NEXT=eventos-enquiries-feed-secret-next:latest
-# Give the new value to the Enquiries operator; once they sign with it, promote:
-gcloud secrets versions add eventos-enquiries-feed-secret --data-file=<(gcloud secrets versions access latest --secret=eventos-enquiries-feed-secret-next)
-gcloud run services update eventos-api-prod --region="$REGION" --remove-secrets=ENQUIRIES_FEED_SECRET_NEXT
+gcloud run services update "eventos-api-${ENV}" --region="$REGION" \
+  --update-secrets="ENQUIRIES_FEED_SECRET_NEXT=eventos-${ENV}-enquiries-feed-secret-next:latest"
+# Give the new value to the Enquiries operator for that environment; once they sign with it, promote:
+gcloud secrets versions add "eventos-${ENV}-enquiries-feed-secret" \
+  --data-file=<(gcloud secrets versions access latest --secret="eventos-${ENV}-enquiries-feed-secret-next")
+gcloud run services update "eventos-api-${ENV}" --region="$REGION" --remove-secrets=ENQUIRIES_FEED_SECRET_NEXT
 ```
 
 (The next `deploy.sh` re-applies the YAML, which has no `_NEXT` entry, so finish the
@@ -302,8 +327,7 @@ redeploying; it invalidates active sessions.
 
 ## Known limitations
 
-- **Uploads are not durable.** `STORAGE_PROVIDER=local` writes to `/tmp` on Cloud Run
-  (ephemeral, per instance). Move to S3-compatible storage (`STORAGE_PROVIDER=s3`)
-  before relying on document uploads in production.
+- **Uploads are not durable yet** on the base M5-01 YAML (`STORAGE_PROVIDER=local` →
+  `/tmp`). Durable GCS is added in the storage follow-up on this branch.
 - Email and AI providers are `none` in these definitions; enable them via the YAML when
   provisioned.
