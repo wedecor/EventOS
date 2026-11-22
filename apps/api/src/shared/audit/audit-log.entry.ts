@@ -31,7 +31,19 @@ export const AUDIT_ACTIONS = {
   INTEGRATION_SETTINGS_UPDATED: 'integration.settings_updated',
   LEAD_UPDATED: 'lead.updated',
   LEAD_AI_INTELLIGENCE: 'lead.ai_intelligence',
+  // M5-01 — Firebase login bridge + identity linking + Enquiries booking feed.
+  AUTH_FIREBASE_EXCHANGE: 'auth.firebase_exchange',
+  EXTERNAL_IDENTITY_LINKED: 'external_identity.linked',
+  EXTERNAL_IDENTITY_UNLINKED: 'external_identity.unlinked',
+  ENQUIRIES_SYNC_PROCESSED: 'enquiries.sync_processed',
 } as const;
+
+/**
+ * Actor id used for audit records that have no authenticated user (e.g. failed
+ * unauthenticated token exchanges, machine-to-machine feed deliveries). `actor_id`
+ * has no FK (see schema), so the nil UUID is a safe, recognisable sentinel.
+ */
+export const SYSTEM_ACTOR_ID = '00000000-0000-0000-0000-000000000000';
 
 export const AUDIT_ENTITY_TYPES = {
   QUOTATION: 'Quotation',
@@ -41,4 +53,6 @@ export const AUDIT_ENTITY_TYPES = {
   VENDOR_EXPENSE: 'VendorExpense',
   INTEGRATION_SETTINGS: 'IntegrationSettings',
   LEAD: 'Lead',
+  EXTERNAL_IDENTITY: 'ExternalIdentity',
+  EVENT: 'Event',
 } as const;

@@ -12,6 +12,9 @@ export type UserRecord = {
   // Nullable: a user provisioned without a password cannot authenticate yet.
   // Never exposed through DTOs — used only for credential verification.
   passwordHash: string | null;
+  // M5-01 — non-null when the user is disabled; such a user cannot obtain or
+  // refresh a session.
+  disabledAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
   version: number;

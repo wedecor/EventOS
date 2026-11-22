@@ -54,6 +54,7 @@ export class UserRepositoryImpl
       name: user.name,
       role: user.role,
       passwordHash: user.passwordHash,
+      disabledAt: user.disabledAt,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
       version: user.version,

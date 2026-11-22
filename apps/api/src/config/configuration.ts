@@ -96,6 +96,14 @@ export default (): EnvConfig & { redisUrl: string } => {
     AI_RATE_LIMIT_WINDOW_SECONDS: process.env.AI_RATE_LIMIT_WINDOW_SECONDS
       ? Number(process.env.AI_RATE_LIMIT_WINDOW_SECONDS)
       : 3600,
+    FIREBASE_PROJECT_ID: process.env.FIREBASE_PROJECT_ID?.trim()
+      ? process.env.FIREBASE_PROJECT_ID.trim()
+      : 'wedecorenquries',
+    GOOGLE_APPLICATION_CREDENTIALS: process.env.GOOGLE_APPLICATION_CREDENTIALS,
+    FIREBASE_AUTH_PROVIDER:
+      (process.env
+        .FIREBASE_AUTH_PROVIDER as EnvConfig['FIREBASE_AUTH_PROVIDER']) ??
+      'firebase',
     redisUrl: `redis://${redisAuth}${redisHost}:${redisPort}`,
   };
 };

@@ -252,3 +252,56 @@ describe('validateEnv — SENTRY_DSN (R2-06)', () => {
     expect(result.SENTRY_DSN).toBe(dsn);
   });
 });
+
+/**
+ * M5-01 (ADR-019 phase 1) — Firebase login bridge configuration.
+ */
+describe('validateEnv — Firebase bridge (M5-01)', () => {
+  const baseConfig = {
+    DATABASE_URL: 'postgresql://eventos:eventos@localhost:5432/eventos',
+    JWT_SECRET: 'a'.repeat(32),
+  };
+
+  it('defaults the project id and provider', () => {
+    const result = validateEnv({ ...baseConfig });
+
+    expect(result.FIREBASE_PROJECT_ID).toBe('wedecorenquries');
+    expect(result.FIREBASE_AUTH_PROVIDER).toBe('firebase');
+    expect(result.GOOGLE_APPLICATION_CREDENTIALS).toBeUndefined();
+  });
+
+  it('accepts an explicit project id and credentials path', () => {
+    const result = validateEnv({
+      ...baseConfig,
+      FIREBASE_PROJECT_ID: 'my-project',
+      GOOGLE_APPLICATION_CREDENTIALS: '/tmp/sa.json',
+    });
+
+    expect(result.FIREBASE_PROJECT_ID).toBe('my-project');
+    expect(result.GOOGLE_APPLICATION_CREDENTIALS).toBe('/tmp/sa.json');
+  });
+
+  it('allows the in-memory test verifier outside deployed tiers', () => {
+    const result = validateEnv({
+      ...baseConfig,
+      NODE_ENV: 'development',
+      FIREBASE_AUTH_PROVIDER: 'test',
+    });
+
+    expect(result.FIREBASE_AUTH_PROVIDER).toBe('test');
+  });
+
+  it.each(['staging', 'production'])(
+    'refuses FIREBASE_AUTH_PROVIDER=test in %s',
+    (nodeEnv) => {
+      expect(() =>
+        validateEnv({
+          ...baseConfig,
+          NODE_ENV: nodeEnv,
+          CORS_ORIGIN: 'https://app.example.com',
+          FIREBASE_AUTH_PROVIDER: 'test',
+        }),
+      ).toThrow(/FIREBASE_AUTH_PROVIDER/);
+    },
+  );
+});

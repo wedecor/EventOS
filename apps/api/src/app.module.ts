@@ -11,6 +11,7 @@ import {
   buildPinoHttpOptions,
 } from './config/logging.config';
 import { DatabaseModule, PrismaModule } from './database';
+import { AppThrottlerGuard, ThrottlingModule } from './shared/throttling';
 import { StorageModule } from './shared/storage/storage.module';
 import { MailModule } from './shared/mail/mail.module';
 import { LlmModule } from './shared/llm';
@@ -62,6 +63,7 @@ export { LOG_REDACT_CONFIG };
     }),
     DatabaseModule,
     PrismaModule,
+    ThrottlingModule,
     StorageModule,
     MailModule,
     LlmModule,
@@ -97,6 +99,9 @@ export { LOG_REDACT_CONFIG };
     // Registered AFTER JwtAuthGuard so the authenticated identity is present; guards
     // run in registration order.
     { provide: APP_GUARD, useClass: PermissionsGuard },
+    // M5-01 — global rate limits (120/min per user, 30/min per unauthenticated IP,
+    // Redis-backed). Registered AFTER the JWT guard so `req.user` keys the limit.
+    { provide: APP_GUARD, useClass: AppThrottlerGuard },
   ],
 })
 export class AppModule {}

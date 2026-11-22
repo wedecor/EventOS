@@ -33,3 +33,13 @@ export const changePasswordSchema = z.object({
 });
 
 export type ChangePasswordBody = z.infer<typeof changePasswordSchema>;
+
+// M5-01 (ADR-019 phase 1) — Firebase login bridge. Strict: unknown keys rejected.
+export const firebaseExchangeSchema = z
+  .object({
+    idToken: z.string().min(1, 'idToken is required.').max(4096),
+    client: z.enum(['mobile', 'web']).optional(),
+  })
+  .strict();
+
+export type FirebaseExchangeBody = z.infer<typeof firebaseExchangeSchema>;

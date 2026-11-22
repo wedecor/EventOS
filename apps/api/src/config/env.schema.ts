@@ -100,8 +100,29 @@ export const envSchema = z
       .int()
       .positive()
       .default(3600),
+    // M5-01 (ADR-019 phase 1) — Firebase login bridge. The project id is the
+    // Firebase project whose ID tokens are accepted. `firebase` uses
+    // Application Default Credentials (Cloud Run service account);
+    // `GOOGLE_APPLICATION_CREDENTIALS` is only for local development and must be
+    // git-ignored. `test` is an in-memory verifier and is refused in
+    // staging/production; `none` disables the exchange endpoint.
+    FIREBASE_PROJECT_ID: z.string().min(1).default('wedecorenquries'),
+    GOOGLE_APPLICATION_CREDENTIALS: z.string().optional(),
+    FIREBASE_AUTH_PROVIDER: z
+      .enum(['firebase', 'test', 'none'])
+      .default('firebase'),
   })
   .superRefine((config, ctx) => {
+    if (
+      config.FIREBASE_AUTH_PROVIDER === 'test' &&
+      STRICT_CORS_NODE_ENVS.has(config.NODE_ENV)
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['FIREBASE_AUTH_PROVIDER'],
+        message: `FIREBASE_AUTH_PROVIDER=test is not allowed in NODE_ENV=${config.NODE_ENV}.`,
+      });
+    }
     if (config.AI_PROVIDER === 'openai' && !config.AI_API_KEY) {
       ctx.addIssue({
         code: 'custom',

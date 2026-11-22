@@ -5,6 +5,9 @@ export type AuthUserDto = {
   email: string;
   name: string;
   role: string;
+  // Populated by the M5-01 Firebase exchange so native clients can gate UI
+  // without a second call. Omitted by the password login flow.
+  permissions?: readonly string[];
 };
 
 // Result of a login/refresh. `refreshToken` and `refreshTokenExpiresAt` are used
