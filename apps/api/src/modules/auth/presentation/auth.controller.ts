@@ -9,6 +9,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import type { CookieOptions, Request, Response } from 'express';
 import { ZodValidationPipe } from '../../../common/pipes/zod-validation.pipe';
 import type { EnvConfig } from '../../../config';
@@ -20,17 +21,24 @@ import {
 } from '../../../shared/presentation/openapi.helpers';
 import { resultToResponse } from '../../../shared/presentation/result-to-response.helper';
 import { TenantId } from '../../../shared/presentation/tenant-context.decorator';
+import {
+  RATE_LIMIT_FIREBASE_EXCHANGE_PER_MINUTE,
+  RATE_LIMIT_WINDOW_MS,
+} from '../../../shared/throttling/rate-limits';
 import type { AuthTokensDto, AuthUserDto } from '../application/dtos/auth.dto';
 import { AuthApplicationService } from '../application/services/auth.application.service';
+import { FirebaseExchangeApplicationService } from '../application/services/firebase-exchange.application.service';
 import { PasswordChangeService } from '../application/services/password-change.service';
 import type { AuthenticatedUser } from '../domain/authenticated-user';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { Public } from './decorators/public.decorator';
 import {
   changePasswordSchema,
+  firebaseExchangeSchema,
   loginSchema,
   refreshSchema,
   type ChangePasswordBody,
+  type FirebaseExchangeBody,
   type LoginBody,
   type RefreshBody,
 } from './schemas/auth.schemas';
@@ -41,6 +49,8 @@ const REFRESH_COOKIE_PATH = '/api/v1/auth';
 type AuthResponseBody = {
   accessToken: string;
   expiresIn: number;
+  // Present only for native clients (`client: 'mobile'`) on the Firebase exchange.
+  refreshToken?: string;
   user: AuthUserDto;
 };
 
@@ -51,6 +61,7 @@ export class AuthController {
     private readonly authService: AuthApplicationService,
     private readonly passwordChangeService: PasswordChangeService,
     private readonly configService: ConfigService<EnvConfig, true>,
+    private readonly firebaseExchangeService: FirebaseExchangeApplicationService,
   ) {}
 
   @Public()
@@ -73,6 +84,54 @@ export class AuthController {
   ) {
     const result = await this.authService.login(tenantId, body);
     return this.respondWithTokens(result, res);
+  }
+
+  // M5-01 (ADR-019 phase 1) — TEMPORARY Firebase login bridge.
+  @Public()
+  @Post('firebase/exchange')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({
+    default: {
+      limit: RATE_LIMIT_FIREBASE_EXCHANGE_PER_MINUTE,
+      ttl: RATE_LIMIT_WINDOW_MS,
+    },
+  })
+  @ApiOperation({
+    summary:
+      'Exchange a Firebase ID token for an EventOS session (temporary bridge)',
+    description:
+      'Verifies the Firebase ID token (signature, expiry, revocation, audience, iat ≤ 5 min) and issues the standard EventOS session for the linked user. 403 `IDENTITY_NOT_LINKED` when the Firebase uid has not been linked by an administrator. With `client: "mobile"` the refresh token is also returned in the response body (the cookie is always set). Rate limited to 10/min per IP.',
+    security: [],
+  })
+  @ApiZodBody(firebaseExchangeSchema)
+  @ApiDataResponse(
+    200,
+    'Session issued; access token (and refresh token for mobile clients) returned',
+  )
+  @ApiStandardErrors()
+  async firebaseExchange(
+    @TenantId() tenantId: string,
+    @Req() req: Request,
+    @Body(new ZodValidationPipe(firebaseExchangeSchema))
+    body: FirebaseExchangeBody,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const result = await this.firebaseExchangeService.exchange(tenantId, {
+      idToken: body.idToken,
+      client: body.client,
+      ipAddress: req.ip ?? null,
+      userAgent: truncate(req.headers['user-agent'], 256),
+    });
+
+    if (!result.ok) {
+      return resultToResponse(result);
+    }
+
+    return this.respondWithTokens(
+      success(result.value.tokens),
+      res,
+      result.value.includeRefreshTokenInBody,
+    );
   }
 
   @Public()
@@ -149,6 +208,7 @@ export class AuthController {
   private respondWithTokens(
     result: Result<AuthTokensDto>,
     res: Response,
+    includeRefreshToken = false,
   ): { data: AuthResponseBody } {
     if (result.ok) {
       this.setRefreshCookie(
@@ -158,13 +218,17 @@ export class AuthController {
       );
     }
 
-    // Never return the refresh token in the JSON body — it lives only in the
-    // HTTP-only cookie (ADR-008). On failure this passes the error through so
-    // resultToResponse maps it to the correct status.
+    // The refresh token lives in the HTTP-only cookie (ADR-008) and is NOT returned
+    // in the JSON body — except for native clients on the M5-01 Firebase exchange
+    // (`client: 'mobile'`), which keep it in secure storage. On failure this passes
+    // the error through so resultToResponse maps it to the correct status.
     const bodyResult: Result<AuthResponseBody> = result.ok
       ? success({
           accessToken: result.value.accessToken,
           expiresIn: result.value.expiresIn,
+          ...(includeRefreshToken
+            ? { refreshToken: result.value.refreshToken }
+            : {}),
           user: result.value.user,
         })
       : result;
@@ -211,4 +275,12 @@ export class AuthController {
       path: REFRESH_COOKIE_PATH,
     };
   }
+}
+
+function truncate(
+  value: string | string[] | undefined,
+  max: number,
+): string | null {
+  const first = Array.isArray(value) ? value[0] : value;
+  return first ? first.slice(0, max) : null;
 }

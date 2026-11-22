@@ -20,9 +20,16 @@ component_notes:
   postgresql:
     rpo_binding: primary
     requires: continuous_wal_archiving_plus_daily_full
+    gcp_cloud_sql:
+      instance: eventos-pg
+      pitr: enabled
+      transaction_log_retention_days: 7
+      daily_backups_retained: 30
+      restore_method: clone --point-in-time (new instance)
   redis:
     rpo_binding: relaxed
     note: Daily RDB; data loss of cache/throttle/queue state is acceptable (docs/16).
+    gcp_memorystore: Basic tier, no persistence; start empty after any restore (M5-01).
   object_storage:
     rpo_binding: provider_replication
   configuration:

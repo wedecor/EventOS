@@ -106,4 +106,36 @@ describe('PermissionService', () => {
       expect(ROLE_PERMISSIONS[role]).toBeDefined();
     }
   });
+
+  it('grants users:write only to owner and admin (M5-01 identity linking)', () => {
+    for (const role of PHASE1_ROLES) {
+      expect(service.hasPermission(role, 'users:write')).toBe(
+        role === 'owner' || role === 'admin',
+      );
+    }
+  });
+
+  it('exposes synced Enquiries financials only to finance, owner and admin (M5-01)', () => {
+    for (const role of PHASE1_ROLES) {
+      expect(service.hasPermission(role, 'integrations:financials:read')).toBe(
+        role === 'finance' || role === 'owner' || role === 'admin',
+      );
+    }
+  });
+
+  it('limits Enquiries feed administration to owner and admin (M5-01)', () => {
+    for (const role of PHASE1_ROLES) {
+      expect(service.hasPermission(role, 'integrations:enquiries:manage')).toBe(
+        role === 'owner' || role === 'admin',
+      );
+    }
+  });
+
+  it('lets only owner, admin and operations_manager edit booking details (M5-01)', () => {
+    for (const role of PHASE1_ROLES) {
+      expect(service.hasPermission(role, 'bookings:update')).toBe(
+        role === 'owner' || role === 'admin' || role === 'operations_manager',
+      );
+    }
+  });
 });

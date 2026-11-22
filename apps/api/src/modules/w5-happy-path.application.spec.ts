@@ -94,6 +94,8 @@ describe('W5 happy path (application)', () => {
       }),
       findById: jest.fn(),
       findByPhone: jest.fn().mockResolvedValue([]),
+      findByPhoneNormalized: jest.fn().mockResolvedValue(null),
+      findByEmail: jest.fn().mockResolvedValue(null),
       findByDisplayName: jest.fn().mockResolvedValue(null),
       update: jest.fn(),
       listAll: jest.fn(),

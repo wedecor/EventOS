@@ -4,6 +4,7 @@ export { AuditLogRepository } from './audit-log.repository';
 export {
   AUDIT_ACTIONS,
   AUDIT_ENTITY_TYPES,
+  SYSTEM_ACTOR_ID,
   type AuditEntry,
   type AuditOutcome,
 } from './audit-log.entry';

@@ -1,5 +1,6 @@
 import { Controller, Get, HttpCode, HttpStatus, Res } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { SkipThrottle } from '@nestjs/throttler';
 import type { Response } from 'express';
 import { Public } from '../../modules/auth';
 import {
@@ -11,6 +12,8 @@ import { HealthService } from './health.service';
 // Infrastructure liveness/readiness probes are unauthenticated so orchestrators
 // can reach them without credentials (exempt from the global JwtAuthGuard).
 @Public()
+// Orchestrator probes must never be rate limited.
+@SkipThrottle()
 @ApiTags('Health')
 @Controller('health')
 export class HealthController {

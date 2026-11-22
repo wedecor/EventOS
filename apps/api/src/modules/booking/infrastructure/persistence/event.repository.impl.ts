@@ -178,7 +178,9 @@ export class EventRepositoryImpl
     return {
       tenant: { connect: { id: tenantId } },
       customer: { connect: { id: data.customerId } },
-      quotation: { connect: { id: data.quotationId } },
+      quotation: data.quotationId
+        ? { connect: { id: data.quotationId } }
+        : undefined,
       lead: data.leadId ? { connect: { id: data.leadId } } : undefined,
       bookingNumber: data.bookingNumber,
       status: data.status ?? 'approved',
@@ -194,6 +196,9 @@ export class EventRepositoryImpl
       executionOwner: data.executionOwnerId
         ? { connect: { id: data.executionOwnerId } }
         : undefined,
+      completedAt: data.completedAt ?? null,
+      source: data.source ?? 'eventos',
+      externalRef: data.externalRef ?? null,
     };
   }
 
@@ -241,6 +246,8 @@ export class EventRepositoryImpl
       executionOwnerId: event.executionOwnerId,
       cancellationReason: event.cancellationReason,
       completedAt: event.completedAt,
+      source: event.source,
+      externalRef: event.externalRef,
       createdAt: event.createdAt,
       updatedAt: event.updatedAt,
       version: event.version,

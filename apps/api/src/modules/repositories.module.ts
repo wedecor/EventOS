@@ -4,6 +4,8 @@ import { SuggestionRepository } from './admin/domain/repositories/suggestion.rep
 import { SuggestionRepositoryImpl } from './admin/infrastructure/persistence/suggestion.repository.impl';
 import { EventRepository } from './booking/domain/repositories/event.repository';
 import { EventRepositoryImpl } from './booking/infrastructure/persistence/event.repository.impl';
+import { EventFunctionRepository } from './booking/domain/repositories/event-function.repository';
+import { EventFunctionRepositoryImpl } from './booking/infrastructure/persistence/event-function.repository.impl';
 import { EventNoteRepository } from './booking/domain/repositories/event-note.repository';
 import { EventNoteRepositoryImpl } from './booking/infrastructure/persistence/event-note.repository.impl';
 import { CustomerRepository } from './customer/domain/repositories/customer.repository';
@@ -102,6 +104,12 @@ import { StoredDocumentRepository } from './documents/domain/repositories/stored
 import { StoredDocumentRepositoryImpl } from './documents/infrastructure/persistence/stored-document.repository.impl';
 import { IntegrationSettingsRepository } from './integrations/domain/repositories/integration-settings.repository';
 import { IntegrationSettingsRepositoryImpl } from './integrations/infrastructure/persistence/integration-settings.repository.impl';
+import { EnquiriesDeliveryLog } from './integrations/application/ports/enquiries-delivery-log';
+import { EnquiriesFeedConfig } from './integrations/application/ports/enquiries-feed.config';
+import { ConfigEnquiriesFeedConfig } from './integrations/infrastructure/config-enquiries-feed.config';
+import { EnquiriesSyncStore } from './integrations/domain/repositories/enquiries-sync.store';
+import { PrismaEnquiriesSyncStore } from './integrations/infrastructure/persistence/enquiries-sync.store.impl';
+import { RedisEnquiriesDeliveryLog } from './integrations/infrastructure/redis/redis-enquiries-delivery-log';
 
 @Module({
   imports: [PrismaModule],
@@ -133,6 +141,7 @@ import { IntegrationSettingsRepositoryImpl } from './integrations/infrastructure
       useClass: QuotationLineItemRepositoryImpl,
     },
     { provide: EventRepository, useClass: EventRepositoryImpl },
+    { provide: EventFunctionRepository, useClass: EventFunctionRepositoryImpl },
     { provide: EventNoteRepository, useClass: EventNoteRepositoryImpl },
     { provide: PaymentRepository, useClass: PaymentRepositoryImpl },
     { provide: TaskRepository, useClass: TaskRepositoryImpl },
@@ -270,6 +279,10 @@ import { IntegrationSettingsRepositoryImpl } from './integrations/infrastructure
       provide: IntegrationSettingsRepository,
       useClass: IntegrationSettingsRepositoryImpl,
     },
+    // M5-01 — Enquiries feed (temporary bridge)
+    { provide: EnquiriesSyncStore, useClass: PrismaEnquiriesSyncStore },
+    { provide: EnquiriesDeliveryLog, useClass: RedisEnquiriesDeliveryLog },
+    { provide: EnquiriesFeedConfig, useClass: ConfigEnquiriesFeedConfig },
     {
       provide: AiExecutionRepository,
       useClass: AiExecutionRepositoryImpl,
@@ -288,6 +301,7 @@ import { IntegrationSettingsRepositoryImpl } from './integrations/infrastructure
     QuotationRepository,
     QuotationLineItemRepository,
     EventRepository,
+    EventFunctionRepository,
     EventNoteRepository,
     PaymentRepository,
     TaskRepository,
@@ -326,6 +340,9 @@ import { IntegrationSettingsRepositoryImpl } from './integrations/infrastructure
     NotificationPreferenceRepository,
     StoredDocumentRepository,
     IntegrationSettingsRepository,
+    EnquiriesSyncStore,
+    EnquiriesDeliveryLog,
+    EnquiriesFeedConfig,
     AiExecutionRepository,
   ],
 })

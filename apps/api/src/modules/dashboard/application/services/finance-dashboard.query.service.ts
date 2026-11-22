@@ -115,7 +115,9 @@ export class FinanceDashboardQueryService {
 
     const quotations = await this.quotationRepository.findByIds(
       tenantId,
-      activeEvents.map((event) => event.quotationId),
+      activeEvents
+        .map((event) => event.quotationId)
+        .filter((id): id is string => id !== null),
     );
     const quotationById = new Map(
       quotations.map((quotation) => [quotation.id, quotation]),
@@ -135,7 +137,9 @@ export class FinanceDashboardQueryService {
 
     const items = activeEvents
       .map((event) => {
-        const quotation = quotationById.get(event.quotationId);
+        const quotation = event.quotationId
+          ? quotationById.get(event.quotationId)
+          : undefined;
         const quotationTotal = quotation?.totalAmount ?? 0;
         const confirmedPaid = confirmedPaidByBooking.get(event.id) ?? 0;
         // Metric: bookingCollectionGap (excludes advances without bookingId).

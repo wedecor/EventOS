@@ -5,6 +5,7 @@ export default (): EnvConfig & { redisUrl: string } => {
   const redisHost = process.env.REDIS_HOST ?? 'localhost';
   const redisPort = process.env.REDIS_PORT ?? '6379';
   const redisAuth = redisPassword ? `:${redisPassword}@` : '';
+  const redisUrlOverride = process.env.REDIS_URL?.trim() || undefined;
 
   // R1-04 — `validate: validateEnv` (env.schema.ts) already runs before this
   // factory during ConfigModule.forRoot() and fails bootstrap first if
@@ -37,6 +38,7 @@ export default (): EnvConfig & { redisUrl: string } => {
     REDIS_HOST: redisHost,
     REDIS_PORT: Number(redisPort),
     REDIS_PASSWORD: redisPassword,
+    REDIS_URL: redisUrlOverride,
     JWT_SECRET: jwtSecret,
     SENTRY_DSN: process.env.SENTRY_DSN?.trim()
       ? process.env.SENTRY_DSN.trim()
@@ -96,6 +98,21 @@ export default (): EnvConfig & { redisUrl: string } => {
     AI_RATE_LIMIT_WINDOW_SECONDS: process.env.AI_RATE_LIMIT_WINDOW_SECONDS
       ? Number(process.env.AI_RATE_LIMIT_WINDOW_SECONDS)
       : 3600,
-    redisUrl: `redis://${redisAuth}${redisHost}:${redisPort}`,
+    FIREBASE_PROJECT_ID: process.env.FIREBASE_PROJECT_ID?.trim()
+      ? process.env.FIREBASE_PROJECT_ID.trim()
+      : 'wedecorenquries',
+    GOOGLE_APPLICATION_CREDENTIALS: process.env.GOOGLE_APPLICATION_CREDENTIALS,
+    FIREBASE_AUTH_PROVIDER:
+      (process.env
+        .FIREBASE_AUTH_PROVIDER as EnvConfig['FIREBASE_AUTH_PROVIDER']) ??
+      'firebase',
+    ENQUIRIES_FEED_SECRET:
+      process.env.ENQUIRIES_FEED_SECRET?.trim() || undefined,
+    ENQUIRIES_FEED_SECRET_NEXT:
+      process.env.ENQUIRIES_FEED_SECRET_NEXT?.trim() || undefined,
+    ENQUIRIES_FEED_TENANT_ID:
+      process.env.ENQUIRIES_FEED_TENANT_ID?.trim() || undefined,
+    redisUrl:
+      redisUrlOverride ?? `redis://${redisAuth}${redisHost}:${redisPort}`,
   };
 };

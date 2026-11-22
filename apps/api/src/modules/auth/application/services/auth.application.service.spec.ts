@@ -21,6 +21,7 @@ describe('AuthApplicationService', () => {
     name: 'We Decor Admin',
     role: 'admin',
     passwordHash: '$2b$12$hashedvalue',
+    disabledAt: null,
     createdAt: new Date(),
     updatedAt: new Date(),
     version: 1,
@@ -132,6 +133,34 @@ describe('AuthApplicationService', () => {
       refreshTokenHash: generated.tokenHash,
       expiresAt: generated.expiresAt,
     });
+  });
+
+  it('rejects login for a disabled user with FORBIDDEN (M5-01) after the password is proven', async () => {
+    userRepository.findByEmail.mockResolvedValue({
+      ...baseUser,
+      disabledAt: new Date(),
+    });
+    passwordService.compare.mockResolvedValue(true);
+
+    const result = await service.login(tenantId, {
+      email: baseUser.email,
+      password: 'correct-password',
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('FORBIDDEN');
+    }
+    expect(sessionRepository.create).not.toHaveBeenCalled();
+  });
+
+  it('issueSessionForUser creates an access token and a new session (M5-01)', async () => {
+    const tokens = await service.issueSessionForUser(tenantId, baseUser);
+
+    expect(tokens.accessToken).toBe('access-token');
+    expect(tokens.refreshToken).toBe('session-new.raw-token');
+    expect(tokens.user.id).toBe(baseUser.id);
+    expect(sessionRepository.create).toHaveBeenCalledTimes(1);
   });
 
   it('rejects login for an unknown user without checking the password', async () => {
@@ -292,6 +321,27 @@ describe('AuthApplicationService', () => {
     if (result.ok) {
       expect(result.value.refreshToken).toBe('session-new.raw-token');
     }
+  });
+
+  it('rejects refresh when the user has since been disabled (M5-01)', async () => {
+    tokenService.parseRefreshToken.mockReturnValue({
+      sessionId: 'session-1',
+      rawToken: 'raw-token',
+    });
+    sessionRepository.findById.mockResolvedValue(baseSession);
+    tokenService.matchesRefreshToken.mockReturnValue(true);
+    userRepository.findById.mockResolvedValue({
+      ...baseUser,
+      disabledAt: new Date(),
+    });
+
+    const result = await service.refresh(tenantId, 'session-1.raw-token');
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('UNAUTHENTICATED');
+    }
+    expect(sessionRepository.create).not.toHaveBeenCalled();
   });
 
   it('rejects a malformed refresh token', async () => {

@@ -3,6 +3,7 @@ import { resolveSentryDsn } from './instrument';
 
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { SwaggerModule } from '@nestjs/swagger';
 import * as Sentry from '@sentry/nestjs';
 import compression from 'compression';
@@ -13,18 +14,26 @@ import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common';
 import type { EnvConfig } from './config';
+import { configureProxyTrust } from './shared/http/trust-proxy';
 import {
   buildPhase1OpenApiConfig,
   finalizePhase1OpenApiDocument,
 } from './shared/presentation/openapi.document';
 
 async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create(AppModule, {
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     bufferLogs: true,
+    // M5-01 — the Enquiries feed verifies its HMAC over the exact raw bytes
+    // (`req.rawBody`). Only the Buffer is retained; parsing is unchanged.
+    rawBody: true,
   });
 
   const logger = app.get(Logger);
   app.useLogger(logger);
+
+  // M5-01 — Cloud Run terminates TLS and appends the client address to
+  // X-Forwarded-For: trust exactly one hop (see shared/http/trust-proxy.ts).
+  configureProxyTrust(app);
 
   const configService = app.get(ConfigService<EnvConfig, true>);
   const port = configService.get('PORT', { infer: true });

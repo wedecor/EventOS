@@ -80,13 +80,24 @@ if [[ "${CORS_ORIGIN:-}" == http://* ]]; then
   fail=1
 fi
 require DATABASE_URL
-require REDIS_HOST
-require REDIS_PORT
+if is_placeholder "${REDIS_URL-}"; then
+  # Discrete host/port, or a single REDIS_URL (M5-01, Memorystore on Cloud Run).
+  require REDIS_HOST
+  require REDIS_PORT
+else
+  echo "OK: REDIS_URL"
+fi
 require JWT_SECRET
 if [[ ${#JWT_SECRET} -lt 32 ]]; then
   echo "ERROR: JWT_SECRET must be at least 32 characters (got ${#JWT_SECRET})"
   fail=1
 fi
+require ENQUIRIES_FEED_SECRET
+if [[ ${#ENQUIRIES_FEED_SECRET} -lt 32 ]]; then
+  echo "ERROR: ENQUIRIES_FEED_SECRET must be at least 32 characters (got ${#ENQUIRIES_FEED_SECRET})"
+  fail=1
+fi
+require ENQUIRIES_FEED_TENANT_ID
 
 echo
 echo "== Documented for production readiness (docs/16; not yet boot-required) =="

@@ -15,6 +15,13 @@ import { REDIS_CLIENT } from './redis.constants';
       provide: REDIS_CLIENT,
       inject: [ConfigService],
       useFactory: (configService: ConfigService<EnvConfig, true>) => {
+        const options = { maxRetriesPerRequest: null, lazyConnect: true };
+        // M5-01 — REDIS_URL (Memorystore / rediss://) wins over HOST/PORT/PASSWORD.
+        const url = configService.get('REDIS_URL', { infer: true });
+        if (url) {
+          return new Redis(url, options);
+        }
+
         const password = configService.get('REDIS_PASSWORD', { infer: true });
         const host = configService.get('REDIS_HOST', { infer: true });
         const port = configService.get('REDIS_PORT', { infer: true });
@@ -23,8 +30,7 @@ import { REDIS_CLIENT } from './redis.constants';
           host,
           port,
           password: password || undefined,
-          maxRetriesPerRequest: null,
-          lazyConnect: true,
+          ...options,
         });
       },
     },

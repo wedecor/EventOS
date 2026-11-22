@@ -7,6 +7,18 @@ import { validateEnv } from './env.schema';
  * invokes during bootstrap (see `configuration.spec.ts` / `bootstrap.spec.ts`
  * for the layers that consume its result).
  */
+// M5-01 — staging/production additionally require the Enquiries feed secret + tenant
+// and durable storage (GCS with a bucket; local is rejected).
+const feedConfig = {
+  ENQUIRIES_FEED_SECRET: 'f'.repeat(32),
+  ENQUIRIES_FEED_TENANT_ID: '00000000-0000-0000-0000-000000000001',
+};
+const durableStorageConfig = {
+  STORAGE_PROVIDER: 'gcs' as const,
+  STORAGE_BUCKET: 'eventos-prod-files',
+};
+const deployedConfig = { ...feedConfig, ...durableStorageConfig };
+
 describe('validateEnv — JWT_SECRET (R1-04)', () => {
   const baseConfig = {
     DATABASE_URL: 'postgresql://eventos:eventos@localhost:5432/eventos',
@@ -78,6 +90,7 @@ describe('validateEnv — JWT_SECRET (R1-04)', () => {
         // R1-06 — production requires an explicit CORS_ORIGIN; irrelevant to
         // this JWT_SECRET-focused assertion, so it's supplied unconditionally.
         CORS_ORIGIN: 'https://app.wedecor.com',
+        ...deployedConfig,
       });
       expect(result.JWT_SECRET).toBe(validSecret);
     }
@@ -163,6 +176,7 @@ describe('validateEnv — CORS_ORIGIN (R1-06)', () => {
       ...baseConfig,
       NODE_ENV: 'production',
       CORS_ORIGIN: 'https://app.wedecor.com',
+      ...deployedConfig,
     });
 
     expect(result.CORS_ORIGIN).toBe('https://app.wedecor.com');
@@ -205,6 +219,8 @@ describe('validateEnv — CORS_ORIGIN (R1-06)', () => {
       ...baseConfig,
       NODE_ENV: 'staging',
       CORS_ORIGIN: 'https://staging.wedecor.com',
+      ...deployedConfig,
+      STORAGE_BUCKET: 'eventos-staging-files',
     });
 
     expect(result.CORS_ORIGIN).toBe('https://staging.wedecor.com');
@@ -250,5 +266,219 @@ describe('validateEnv — SENTRY_DSN (R2-06)', () => {
     const result = validateEnv({ ...baseConfig, SENTRY_DSN: dsn });
 
     expect(result.SENTRY_DSN).toBe(dsn);
+  });
+});
+
+/**
+ * M5-01 (ADR-019 phase 1) — Firebase login bridge configuration.
+ */
+describe('validateEnv — Firebase bridge (M5-01)', () => {
+  const baseConfig = {
+    DATABASE_URL: 'postgresql://eventos:eventos@localhost:5432/eventos',
+    JWT_SECRET: 'a'.repeat(32),
+  };
+
+  it('defaults the project id and provider', () => {
+    const result = validateEnv({ ...baseConfig });
+
+    expect(result.FIREBASE_PROJECT_ID).toBe('wedecorenquries');
+    expect(result.FIREBASE_AUTH_PROVIDER).toBe('firebase');
+    expect(result.GOOGLE_APPLICATION_CREDENTIALS).toBeUndefined();
+  });
+
+  it('accepts an explicit project id and credentials path', () => {
+    const result = validateEnv({
+      ...baseConfig,
+      FIREBASE_PROJECT_ID: 'my-project',
+      GOOGLE_APPLICATION_CREDENTIALS: '/tmp/sa.json',
+    });
+
+    expect(result.FIREBASE_PROJECT_ID).toBe('my-project');
+    expect(result.GOOGLE_APPLICATION_CREDENTIALS).toBe('/tmp/sa.json');
+  });
+
+  it('allows the in-memory test verifier outside deployed tiers', () => {
+    const result = validateEnv({
+      ...baseConfig,
+      NODE_ENV: 'development',
+      FIREBASE_AUTH_PROVIDER: 'test',
+    });
+
+    expect(result.FIREBASE_AUTH_PROVIDER).toBe('test');
+  });
+
+  it.each(['staging', 'production'])(
+    'refuses FIREBASE_AUTH_PROVIDER=test in %s',
+    (nodeEnv) => {
+      expect(() =>
+        validateEnv({
+          ...baseConfig,
+          NODE_ENV: nodeEnv,
+          CORS_ORIGIN: 'https://app.example.com',
+          ...deployedConfig,
+          FIREBASE_AUTH_PROVIDER: 'test',
+        }),
+      ).toThrow(/FIREBASE_AUTH_PROVIDER/);
+    },
+  );
+});
+
+/**
+ * M5-01 — Enquiries → EventOS booking feed configuration. The HMAC secret and the
+ * tenant are required wherever the feed is exposed (staging/production); local
+ * development and tests run without them (the endpoint then rejects every request).
+ */
+describe('validateEnv — Enquiries feed (M5-01)', () => {
+  const baseConfig = {
+    DATABASE_URL: 'postgresql://eventos:eventos@localhost:5432/eventos',
+    JWT_SECRET: 'a'.repeat(32),
+    CORS_ORIGIN: 'https://app.wedecor.com',
+  };
+
+  it('does not require feed settings in development or test', () => {
+    for (const nodeEnv of ['development', 'test']) {
+      const result = validateEnv({ ...baseConfig, NODE_ENV: nodeEnv });
+      expect(result.ENQUIRIES_FEED_SECRET).toBeUndefined();
+      expect(result.ENQUIRIES_FEED_TENANT_ID).toBeUndefined();
+    }
+  });
+
+  it.each(['staging', 'production'])(
+    'requires ENQUIRIES_FEED_SECRET and ENQUIRIES_FEED_TENANT_ID in %s',
+    (nodeEnv) => {
+      expect(() =>
+        validateEnv({
+          ...baseConfig,
+          NODE_ENV: nodeEnv,
+          ...durableStorageConfig,
+        }),
+      ).toThrow(/ENQUIRIES_FEED_SECRET.*required/s);
+      expect(() =>
+        validateEnv({
+          ...baseConfig,
+          NODE_ENV: nodeEnv,
+          ...durableStorageConfig,
+          ENQUIRIES_FEED_SECRET: feedConfig.ENQUIRIES_FEED_SECRET,
+        }),
+      ).toThrow(/ENQUIRIES_FEED_TENANT_ID.*required/s);
+      expect(() =>
+        validateEnv({
+          ...baseConfig,
+          NODE_ENV: nodeEnv,
+          ...durableStorageConfig,
+          ENQUIRIES_FEED_TENANT_ID: feedConfig.ENQUIRIES_FEED_TENANT_ID,
+        }),
+      ).toThrow(/ENQUIRIES_FEED_SECRET.*required/s);
+    },
+  );
+
+  it('rejects short secrets and a non-UUID tenant', () => {
+    expect(() =>
+      validateEnv({ ...baseConfig, ENQUIRIES_FEED_SECRET: 'short' }),
+    ).toThrow(/at least 32 characters/);
+    expect(() =>
+      validateEnv({ ...baseConfig, ENQUIRIES_FEED_SECRET_NEXT: 'short' }),
+    ).toThrow(/at least 32 characters/);
+    expect(() =>
+      validateEnv({ ...baseConfig, ENQUIRIES_FEED_TENANT_ID: 'not-a-uuid' }),
+    ).toThrow(/must be a UUID/);
+  });
+
+  it('treats blank values as unset and accepts the rotation secret', () => {
+    const blank = validateEnv({
+      ...baseConfig,
+      ENQUIRIES_FEED_SECRET: '   ',
+      ENQUIRIES_FEED_SECRET_NEXT: '',
+    });
+    expect(blank.ENQUIRIES_FEED_SECRET).toBeUndefined();
+    expect(blank.ENQUIRIES_FEED_SECRET_NEXT).toBeUndefined();
+
+    const rotating = validateEnv({
+      ...baseConfig,
+      NODE_ENV: 'production',
+      ...deployedConfig,
+      ENQUIRIES_FEED_SECRET_NEXT: 'n'.repeat(40),
+    });
+    expect(rotating.ENQUIRIES_FEED_SECRET_NEXT).toBe('n'.repeat(40));
+  });
+});
+
+describe('validateEnv — STORAGE_PROVIDER (M5-01 durable uploads)', () => {
+  const baseConfig = {
+    DATABASE_URL: 'postgresql://eventos:eventos@localhost:5432/eventos',
+    JWT_SECRET: 'a'.repeat(32),
+    CORS_ORIGIN: 'https://app.wedecor.com',
+    ...feedConfig,
+  };
+
+  it('allows local storage in development and test', () => {
+    for (const nodeEnv of ['development', 'test']) {
+      const result = validateEnv({
+        ...baseConfig,
+        NODE_ENV: nodeEnv,
+        STORAGE_PROVIDER: 'local',
+      });
+      expect(result.STORAGE_PROVIDER).toBe('local');
+    }
+  });
+
+  it.each(['staging', 'production'])(
+    'rejects STORAGE_PROVIDER=local in %s',
+    (nodeEnv) => {
+      expect(() =>
+        validateEnv({
+          ...baseConfig,
+          NODE_ENV: nodeEnv,
+          STORAGE_PROVIDER: 'local',
+        }),
+      ).toThrow(/STORAGE_PROVIDER=local is not allowed/);
+    },
+  );
+
+  it('requires STORAGE_BUCKET when STORAGE_PROVIDER=gcs in production', () => {
+    expect(() =>
+      validateEnv({
+        ...baseConfig,
+        NODE_ENV: 'production',
+        STORAGE_PROVIDER: 'gcs',
+      }),
+    ).toThrow(/STORAGE_BUCKET/);
+  });
+
+  it('accepts gcs with a bucket in production', () => {
+    const result = validateEnv({
+      ...baseConfig,
+      NODE_ENV: 'production',
+      ...durableStorageConfig,
+    });
+    expect(result.STORAGE_PROVIDER).toBe('gcs');
+    expect(result.STORAGE_BUCKET).toBe('eventos-prod-files');
+  });
+});
+
+describe('validateEnv — REDIS_URL (M5-01)', () => {
+  const baseConfig = {
+    DATABASE_URL: 'postgresql://eventos:eventos@localhost:5432/eventos',
+    JWT_SECRET: 'a'.repeat(32),
+  };
+
+  it('is optional and trimmed', () => {
+    expect(validateEnv(baseConfig).REDIS_URL).toBeUndefined();
+    expect(
+      validateEnv({ ...baseConfig, REDIS_URL: '  redis://10.0.0.3:6379 ' })
+        .REDIS_URL,
+    ).toBe('redis://10.0.0.3:6379');
+    expect(
+      validateEnv({ ...baseConfig, REDIS_URL: '' }).REDIS_URL,
+    ).toBeUndefined();
+  });
+
+  it('accepts rediss:// and rejects other schemes', () => {
+    expect(
+      validateEnv({ ...baseConfig, REDIS_URL: 'rediss://host:6380' }).REDIS_URL,
+    ).toBe('rediss://host:6380');
+    expect(() =>
+      validateEnv({ ...baseConfig, REDIS_URL: 'http://host' }),
+    ).toThrow(/REDIS_URL/);
   });
 });

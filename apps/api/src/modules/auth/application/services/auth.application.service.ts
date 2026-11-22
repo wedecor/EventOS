@@ -64,10 +64,16 @@ export class AuthApplicationService {
       return this.registerFailedAttempt(tenantId, input.email);
     }
 
+    // M5-01 — a disabled user cannot start a session (checked only after the
+    // credentials are proven, so it never reveals account state to a guesser).
+    if (user.disabledAt) {
+      return failure('FORBIDDEN', 'This account is disabled.');
+    }
+
     // R1-05 — a good login clears the failure counter and the progressive
     // lockout escalation level for this email.
     await this.loginThrottle.reset(tenantId, input.email);
-    return success(await this.issueTokens(tenantId, user));
+    return success(await this.issueSessionForUser(tenantId, user));
   }
 
   // R1-05 — record the failed attempt; if it trips the lockout threshold the
@@ -135,11 +141,11 @@ export class AuthApplicationService {
     await this.sessionRepository.revoke(tenantId, session.id);
 
     const user = await this.userRepository.findById(tenantId, session.userId);
-    if (!user) {
+    if (!user || user.disabledAt) {
       return failure('UNAUTHENTICATED', 'Invalid or expired refresh token.');
     }
 
-    return success(await this.issueTokens(tenantId, user));
+    return success(await this.issueSessionForUser(tenantId, user));
   }
 
   // Idempotent logout: revoke the presented session's refresh token. Malformed or
@@ -157,7 +163,13 @@ export class AuthApplicationService {
     return success({ success: true });
   }
 
-  private async issueTokens(
+  /**
+   * Issues an access JWT + a new refresh-token session for an already-authenticated
+   * user. Shared by password login, refresh rotation and the M5-01 Firebase
+   * exchange so every path produces identical sessions. The caller is responsible
+   * for having verified the user's identity and that the user is not disabled.
+   */
+  async issueSessionForUser(
     tenantId: string,
     user: UserRecord,
   ): Promise<AuthTokensDto> {

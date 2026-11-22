@@ -35,6 +35,7 @@ import { ExecutionProgressService } from '../application/services/execution-prog
 import { WorkspaceService } from '../application/services/workspace.service';
 import { WorkspaceProgressService } from '../application/services/workspace-progress.service';
 import { WorkspaceActivityService } from '../application/services/workspace-activity.service';
+import { EventFunctionApplicationService } from '../application/services/event-function.application.service';
 import { EventNoteApplicationService } from '../application/services/event-note.application.service';
 import { PaymentApplicationService } from '../../payment/application/services/payment.application.service';
 import { InventoryMovementApplicationService } from '../../inventory/application/services/inventory-movement.application.service';
@@ -61,11 +62,13 @@ import {
   cancelBookingSchema,
   completeBookingSchema,
   createEventNoteSchema,
+  updateBookingDetailsSchema,
   updateBookingStatusSchema,
   type AdvanceExecutionStageBody,
   type AssignExecutionOwnerBody,
   type CancelBookingBody,
   type CreateEventNoteBody,
+  type UpdateBookingDetailsBody,
   type UpdateBookingStatusBody,
 } from './schemas/booking.schemas';
 
@@ -90,6 +93,7 @@ export class BookingController {
     private readonly financialDocumentService: FinancialDocumentApplicationService,
     private readonly communicationService: CommunicationApplicationService,
     private readonly reminderService: ReminderApplicationService,
+    private readonly eventFunctionService: EventFunctionApplicationService,
   ) {}
 
   @Get()
@@ -150,6 +154,22 @@ export class BookingController {
   async retrieveBooking(@TenantId() tenantId: string, @Param('id') id: string) {
     const result = await this.bookingService.retrieveBooking(tenantId, id);
     return resultToResponse(result);
+  }
+
+  // M5-01 — functions (ceremonies) of a booking, populated by the Enquiries feed
+  @Get(':id/functions')
+  @Permissions('bookings:read')
+  @ApiOperation({ summary: 'List the functions (ceremonies) of a booking' })
+  @ApiUuidParam('id')
+  @ApiDataResponse(200, 'Functions listed')
+  @ApiStandardErrors()
+  async listFunctionsForBooking(
+    @TenantId() tenantId: string,
+    @Param('id') id: string,
+  ) {
+    return resultToResponse(
+      await this.eventFunctionService.listForBooking(tenantId, id),
+    );
   }
 
   @Get(':id/payments')
@@ -520,6 +540,57 @@ export class BookingController {
     if (!result.ok) {
       return resultToResponse(result);
     }
+  }
+
+  // M5-01 — edit booking details; synced bookings return 409 SOURCE_OWNED
+  @Patch(':id')
+  @Permissions('bookings:update')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Update booking details',
+    description:
+      'Edits type, dates, venue, guest count and requirements. On bookings synced from the Enquiries app these fields are source-owned: a real change returns `409 SOURCE_OWNED` ("Edit this in the Enquiries app"). Workspace, tasks, staff, inventory and notes are unaffected.',
+  })
+  @ApiUuidParam('id')
+  @ApiIfMatchHeader(true)
+  @ApiZodBody(updateBookingDetailsSchema)
+  @ApiDataResponse(200, 'Booking updated')
+  @ApiStandardErrors()
+  async updateBookingDetails(
+    @TenantId() tenantId: string,
+    @Param('id') id: string,
+    @IfMatchVersion() version: number | undefined,
+    @Body(new ZodValidationPipe(updateBookingDetailsSchema))
+    body: UpdateBookingDetailsBody,
+  ) {
+    if (version === undefined) {
+      return resultToResponse(
+        failure(
+          'VALIDATION_ERROR',
+          'If-Match header with version is required.',
+        ),
+      );
+    }
+
+    const date = (value: string | null | undefined) =>
+      value === undefined || value === null
+        ? value
+        : new Date(`${value}T00:00:00.000Z`);
+
+    const result = await this.bookingService.updateBookingDetails(
+      tenantId,
+      id,
+      {
+        eventType: body.eventType,
+        eventStartDate: date(body.eventStartDate),
+        eventEndDate: date(body.eventEndDate),
+        venueName: body.venueName,
+        guestCount: body.guestCount,
+        requirementsNotes: body.requirementsNotes,
+        version,
+      },
+    );
+    return resultToResponse(result);
   }
 
   // PATCH status (activate booking: approved → in_preparation)

@@ -1,4 +1,5 @@
 import { join } from 'node:path';
+import { GcsStorageAdapter } from './gcs-storage.adapter';
 import {
   LocalStorageAdapter,
   normalizeLocalRoot,
@@ -14,10 +15,26 @@ export type StorageEnv = {
   STORAGE_SECRET_KEY?: string;
   STORAGE_BUCKET?: string;
   STORAGE_REGION?: string;
+  /** Optional GCP project id for the native GCS client (ADC otherwise). */
+  GOOGLE_CLOUD_PROJECT?: string;
+  GCLOUD_PROJECT?: string;
 };
 
 export function createStoragePort(env: StorageEnv = process.env): StoragePort {
   const provider = (env.STORAGE_PROVIDER ?? 'local').toLowerCase();
+
+  if (provider === 'gcs') {
+    const bucket = env.STORAGE_BUCKET?.trim();
+    if (!bucket) {
+      throw new Error(
+        'STORAGE_PROVIDER=gcs requires STORAGE_BUCKET (ADC; no HMAC keys).',
+      );
+    }
+    return new GcsStorageAdapter({
+      bucket,
+      projectId: env.GOOGLE_CLOUD_PROJECT ?? env.GCLOUD_PROJECT,
+    });
+  }
 
   if (provider === 's3') {
     const accessKeyId = env.STORAGE_ACCESS_KEY;
@@ -36,6 +53,12 @@ export function createStoragePort(env: StorageEnv = process.env): StoragePort {
       bucket,
       forcePathStyle: true,
     });
+  }
+
+  if (provider === 'none') {
+    throw new Error(
+      'STORAGE_PROVIDER=none is not supported for createStoragePort; use local, gcs, or s3.',
+    );
   }
 
   const root = normalizeLocalRoot(

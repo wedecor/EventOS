@@ -59,6 +59,12 @@ import { TenantSettingsApplicationService } from './tenant/application/services/
 import { ProcurementLineApplicationService } from './vendor/application/services/procurement-line.application.service';
 import { VendorApplicationService } from './vendor/application/services/vendor.application.service';
 import { VendorProcurementApplicationService } from './vendor/application/services/vendor-procurement.application.service';
+import { EventFunctionApplicationService } from './booking/application/services/event-function.application.service';
+import { EventFunctionUsageQuery } from '../shared/application/ports/event-function-usage.query';
+import { NoReferencesEventFunctionUsageQuery } from '../shared/application/ports/event-function-usage.query.impl';
+import { EnquiriesAdminApplicationService } from './integrations/application/services/enquiries-admin.application.service';
+import { EnquiriesSignatureService } from './integrations/application/services/enquiries-signature.service';
+import { EnquiriesSyncApplicationService } from './integrations/application/services/enquiries-sync.application.service';
 import { RepositoriesModule } from './repositories.module';
 
 @Module({
@@ -116,6 +122,14 @@ import { RepositoriesModule } from './repositories.module';
     CommunicationTemplateApplicationService,
     OutboundEmailApplicationService,
     IntegrationSettingsApplicationService,
+    EventFunctionApplicationService,
+    EnquiriesSignatureService,
+    EnquiriesSyncApplicationService,
+    EnquiriesAdminApplicationService,
+    {
+      provide: EventFunctionUsageQuery,
+      useClass: NoReferencesEventFunctionUsageQuery,
+    },
     ReminderApplicationService,
     NotificationPreferenceApplicationService,
     CalendarApplicationService,
@@ -172,6 +186,10 @@ import { RepositoriesModule } from './repositories.module';
     CommunicationTemplateApplicationService,
     OutboundEmailApplicationService,
     IntegrationSettingsApplicationService,
+    EventFunctionApplicationService,
+    EnquiriesSignatureService,
+    EnquiriesSyncApplicationService,
+    EnquiriesAdminApplicationService,
     ReminderApplicationService,
     NotificationPreferenceApplicationService,
     CalendarApplicationService,
