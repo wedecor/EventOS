@@ -76,6 +76,33 @@ This document defines how Event OS is built, deployed, and operated across envir
 
 ---
 
+## Google Cloud Run Topology (M5-01)
+
+Production and staging run on Google Cloud Run in project `wedecorenquries`, region
+`asia-south1`. This supersedes the single-server layout for the first launch (the
+modular monolith is unchanged).
+
+| Component | Choice |
+|-----------|--------|
+| API | Cloud Run service per environment (`eventos-api-staging` min 0, `eventos-api-prod` min 1), port 4000, concurrency 40, image from `apps/api/Dockerfile` |
+| Database | Cloud SQL PostgreSQL 16 `eventos-pg`, private IP, one instance with databases `eventos_staging` and `eventos_prod`; daily backups (30 retained) + 7-day PITR; connected over the Cloud SQL unix socket |
+| Redis | Memorystore Basic 1 GB through a Serverless VPC Access connector (staging db `/1`, prod db `/0`) |
+| Migrations | Cloud Run Job `eventos-migrate-<env>` using the Dockerfile `migrator` target, executed before each deploy |
+| Production seed | One-off Cloud Run Job `eventos-seed-prod`: tenant "We Decor Events" + owner user only |
+| Secrets | Secret Manager (`JWT_SECRET`, `DATABASE_URL`, `REDIS_URL`, `ENQUIRIES_FEED_SECRET`, `SENTRY_DSN`), per-secret accessor on `eventos-api@…` |
+| Registry | Artifact Registry `asia-south1-docker.pkg.dev/wedecorenquries/eventos` |
+| DNS | Cloudflare, DNS-only: `api.wedecorevents.com` → prod and `api-staging.wedecorevents.com` → staging via Cloud Run domain mappings |
+| Identity | Runtime SA `eventos-api@wedecorenquries.iam.gserviceaccount.com` (Cloud SQL Client, Firebase Auth Viewer); CI via Workload Identity Federation |
+
+Trusted proxy: the API trusts exactly **one** proxy hop (Cloud Run's front end) for
+client-IP resolution (per-IP throttling). Do not enable the Cloudflare proxy without raising
+the hop count. Known gap: document uploads use ephemeral local storage on Cloud Run until
+S3-compatible storage is configured. The temporary Firebase/Enquiries bridge
+(ADR-019) is documented in
+[integrations/enquiries-bridge-contract.md](./integrations/enquiries-bridge-contract.md).
+
+---
+
 ## Containerization
 
 ### Docker
@@ -157,29 +184,30 @@ Merge to main
     └── Docker image build (no registry push / no cloud deploy)
     │
     ▼
-Main CI complete — staging deploy is not automated in-repo yet
+Main CI complete — `deploy.yml` then deploys to staging (M5-01)
 ```
 
-> **R3-12:** Target future pipeline may add image push, staging deploy, and smoke tests. Today’s workflows are `.github/workflows/pull-request.yml` and `main-branch.yml` only. Staging/monitoring/logging/DR/storage/Sentry live cloud wiring is **repository preparation** under `infrastructure/*` (see CHANGELOG 0.5.0).
+> **R3-12 / M5-01:** Image push, staging/production deploy and smoke tests are implemented by `.github/workflows/deploy.yml` (below). The quality workflows are `pull-request.yml` and `main-branch.yml`. Staging/monitoring/logging/DR/storage/Sentry live cloud wiring is **repository preparation** under `infrastructure/*` (see CHANGELOG 0.5.0).
 
-### Production Deploy (target)
+### Deploy Pipeline (M5-01 — `.github/workflows/deploy.yml`)
 
 ```
-Release tag created (v1.2.0)
-    │
-    ├── All main branch checks
-    ├── Build production Docker images (tagged with version)
-    ├── Push to production registry
-    ├── Run database migrations (production)
-    ├── Deploy to production (rolling update)
-    ├── Smoke tests
-    └── Notify team (Slack/email)
-    │
-    ▼
-Production deployment complete
+push to main ──► verify (build + jest) ──► staging  (automatic)
+push tag v*  ──► verify (build + jest) ──► production (GitHub Environment approval)
+                                              │
+        build API + migrator images ─► push to Artifact Registry
+        ─► run Cloud Run Job `eventos-migrate-<env>` (prisma migrate deploy, wait)
+        ─► gcloud run services replace (cloudrun.<env>.yaml)
+        ─► smoke: GET /health/ready == 200, unsigned feed POST == 401
+        ─► on failure: traffic back to the previous revision
 ```
 
-*Not automated in the current repository.*
+- Authentication from GitHub to Google Cloud is **Workload Identity Federation** — no
+  service-account JSON keys exist. The `production` GitHub Environment requires reviewers.
+- Scripts and one-time setup: [`infrastructure/gcp/README.md`](../infrastructure/gcp/README.md)
+  (`deploy.sh`, `rollback.sh`, `cloudrun.staging.yaml`, `cloudrun.prod.yaml`).
+- Notification (Slack/email) is not automated.
+
 ### Deployment Rules
 
 1. **Database migrations run before new code deploys** — Backward-compatible migrations only
@@ -210,9 +238,9 @@ IDs will fail Prisma’s migration history check until it is reset.
 1. Developer creates migration locally (prisma migrate dev)
 2. Migration SQL reviewed in PR
 3. CI runs migration against test database
-4. On staging deploy: migration runs automatically before app start
-5. On production deploy: migration runs automatically before app start
-6. App starts only after migration succeeds
+4. On staging deploy: the `eventos-migrate-staging` Cloud Run Job runs `prisma migrate deploy` and the pipeline waits for it
+5. On production deploy: the `eventos-migrate-prod` Job does the same
+6. The new revision is deployed only after the migration job succeeds (migrations never run at app start)
 ```
 
 ### Migration Safety Rules
@@ -227,9 +255,9 @@ IDs will fail Prisma’s migration history check until it is reset.
 
 ### Rollback
 
-- **Application rollback:** Deploy previous Docker image (instant)
+- **Application rollback:** `infrastructure/gcp/rollback.sh <staging|prod>` shifts 100% of traffic to the previous Cloud Run revision (instant)
 - **Migration rollback:** Only if migration has a documented `down` migration; otherwise, forward-fix with new migration
-- **Data rollback:** Restore from backup (last resort; RPO < 1 hour)
+- **Data rollback:** Cloud SQL point-in-time recovery (clone to a new instance; 7-day window) — see `infrastructure/disaster-recovery/` (last resort; RPO < 1 hour)
 
 ---
 
@@ -244,9 +272,15 @@ IDs will fail Prisma’s migration history check until it is reset.
 | `LOG_LEVEL` | All | Pino level (`info` default) |
 | `DATABASE_URL` | All | PostgreSQL connection string |
 | `REDIS_HOST` / `REDIS_PORT` / `REDIS_PASSWORD` | All | Redis connection (login throttle, cache, queue broker) |
+| `REDIS_URL` | Optional | Single Redis URL (`redis://` / `rediss://`); wins over host/port/password when set (Cloud Run + Memorystore) |
 | `JWT_SECRET` | All | JWT access-token signing key (min 32 characters / 256 bits) |
 | `CORS_ORIGIN` | All | Allowed CORS origin(s). `*` OK in development; required and non-wildcard in staging/production |
 | `SENTRY_DSN` | Optional | Error tracking DSN — SDK wired in `apps/api/src/instrument.ts`; absent/blank = no-op |
+| `ENQUIRIES_FEED_SECRET` | Staging, Prod (**required**) | HMAC secret (≥ 32 chars) for the Enquiries → EventOS booking feed |
+| `ENQUIRIES_FEED_SECRET_NEXT` | Optional | Second accepted secret during rotation |
+| `ENQUIRIES_FEED_TENANT_ID` | Staging, Prod (**required**) | Tenant the feed writes to (never read from the request) |
+| `FIREBASE_PROJECT_ID` / `FIREBASE_AUTH_PROVIDER` | All | Firebase login bridge (default project `wedecorenquries`, provider `firebase`; ADC on Cloud Run, no key file) |
+| `SEED_OWNER_EMAIL` / `SEED_OWNER_NAME` / `SEED_OWNER_PASSWORD` | Seed job | `prisma/seed-prod.ts`: one owner user, no demo data (email required, password optional) |
 | `SEED_ADMIN_PASSWORD` | Dev/seed | Optional; sets seeded admin password when running `prisma:seed` |
 | `STORAGE_*` / `AI_*` / `EMAIL_*` | Staging, Prod (future) | Object storage / AI / email — prepared in docs/`infrastructure`; not required by current `env.schema.ts` |
 
@@ -370,10 +404,12 @@ Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`
 | [05-system-architecture.md](./05-system-architecture.md) | System components deployed |
 | [07-database-philosophy.md](./07-database-philosophy.md) | Migration strategy |
 | [14-security-principles.md](./14-security-principles.md) | Infrastructure security |
+| [integrations/enquiries-bridge-contract.md](./integrations/enquiries-bridge-contract.md) | Enquiries feed + Firebase login bridge (M5-01) |
+| [../infrastructure/gcp/README.md](../infrastructure/gcp/README.md) | Cloud Run setup, deploy, rollback |
 | [19-development-workflow.md](./19-development-workflow.md) | Development to deployment flow |
 | [20-definition-of-done.md](./20-definition-of-done.md) | Deployment in DoD |
 
 ---
 
-*Last updated: 2026-07-06*
+*Last updated: 2026-11-23 (M5-01)*
 *Owner: Founding Engineering*
