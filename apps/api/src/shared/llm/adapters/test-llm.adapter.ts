@@ -34,20 +34,24 @@ export class TestLlmAdapter implements LlmPort {
     this.callCount = 0;
   }
 
-  async completeStructured(
+  completeStructured(
     request: LlmStructuredRequest,
   ): Promise<LlmStructuredResult> {
     this.callCount += 1;
     this.lastRequest = request;
 
     if (this.behavior.mode === 'timeout') {
-      throw new LlmProviderError('Test LLM timed out.', 'TIMEOUT');
+      return Promise.reject(
+        new LlmProviderError('Test LLM timed out.', 'TIMEOUT'),
+      );
     }
     if (this.behavior.mode === 'failure') {
-      throw new LlmProviderError('Test LLM provider failure.', 'PROVIDER_ERROR');
+      return Promise.reject(
+        new LlmProviderError('Test LLM provider failure.', 'PROVIDER_ERROR'),
+      );
     }
     if (this.behavior.mode === 'invalid-json') {
-      return {
+      return Promise.resolve({
         provider: this.providerName,
         model: this.model,
         content: 'not-json{{{',
@@ -57,10 +61,10 @@ export class TestLlmAdapter implements LlmPort {
           totalTokens: 15,
         },
         estimatedCostUsd: null,
-      };
+      });
     }
     if (this.behavior.mode === 'fixed') {
-      return {
+      return Promise.resolve({
         provider: this.providerName,
         model: this.model,
         content: this.behavior.content,
@@ -70,14 +74,14 @@ export class TestLlmAdapter implements LlmPort {
           totalTokens: 60,
         },
         estimatedCostUsd: null,
-      };
+      });
     }
 
     const userMessage =
-      [...request.messages].reverse().find((m) => m.role === 'user')
-        ?.content ?? '';
+      [...request.messages].reverse().find((m) => m.role === 'user')?.content ??
+      '';
     const content = buildDeterministicLeadIntelligence(userMessage);
-    return {
+    return Promise.resolve({
       provider: this.providerName,
       model: this.model,
       content: JSON.stringify(content),
@@ -87,7 +91,7 @@ export class TestLlmAdapter implements LlmPort {
         totalTokens: 170,
       },
       estimatedCostUsd: null,
-    };
+    });
   }
 }
 
@@ -185,12 +189,20 @@ export function buildDeterministicLeadIntelligence(
       ? (context.customer as { displayName: string }).displayName
       : null;
 
+  const asText = (value: unknown): string => {
+    if (typeof value === 'string') return value;
+    if (typeof value === 'number' || typeof value === 'boolean') {
+      return String(value);
+    }
+    return '';
+  };
+  const eventTypeText = asText(eventType.value);
+  const eventStartText = asText(eventStart.value);
+
   const summaryParts = [
     customerName ? `Lead for ${customerName}` : 'Lead enquiry',
-    eventType.value ? `(${String(eventType.value)})` : '(event type unknown)',
-    eventStart.value
-      ? `starting ${String(eventStart.value).slice(0, 10)}`
-      : 'date unknown',
+    eventTypeText ? `(${eventTypeText})` : '(event type unknown)',
+    eventStartText ? `starting ${eventStartText.slice(0, 10)}` : 'date unknown',
   ];
 
   return {

@@ -69,6 +69,8 @@ describe('buildQuotationPdf', () => {
     });
     const asString = result.buffer.toString('latin1');
     // Multiple page objects indicate multi-page document.
-    expect((asString.match(/\/Type \/Page\b/g) ?? []).length).toBeGreaterThan(1);
+    expect((asString.match(/\/Type \/Page\b/g) ?? []).length).toBeGreaterThan(
+      1,
+    );
   });
 });

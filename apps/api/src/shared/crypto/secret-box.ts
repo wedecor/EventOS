@@ -1,4 +1,9 @@
-import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from 'node:crypto';
+import {
+  createCipheriv,
+  createDecipheriv,
+  randomBytes,
+  scryptSync,
+} from 'node:crypto';
 
 const PREFIX = 'v1';
 
@@ -24,10 +29,7 @@ export function encryptSecret(plaintext: string, secretKey: string): string {
   ].join('.');
 }
 
-export function decryptSecret(
-  ciphertext: string,
-  secretKey: string,
-): string {
+export function decryptSecret(ciphertext: string, secretKey: string): string {
   const [prefix, ivB64, tagB64, dataB64] = ciphertext.split('.');
   if (prefix !== PREFIX || !ivB64 || !tagB64 || !dataB64) {
     throw new Error('Invalid ciphertext');

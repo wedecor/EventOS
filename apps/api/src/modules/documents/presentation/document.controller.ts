@@ -24,11 +24,7 @@ import {
 import type { Request } from 'express';
 import { memoryStorage } from 'multer';
 import { z } from 'zod';
-import {
-  CurrentUser,
-  Permissions,
-  type AuthenticatedUser,
-} from '../../auth';
+import { CurrentUser, Permissions, type AuthenticatedUser } from '../../auth';
 import { ZodValidationPipe } from '../../../common/pipes/zod-validation.pipe';
 import { failure } from '../../../shared/application/result';
 import { IfMatchVersion } from '../../../shared/presentation/if-match.decorator';
@@ -53,9 +49,9 @@ const listQuerySchema = z
     (value) =>
       Boolean(
         value.customerId ||
-          value.quotationId ||
-          value.bookingId ||
-          value.invoiceId,
+        value.quotationId ||
+        value.bookingId ||
+        value.invoiceId,
       ),
     { message: 'At least one filter id is required' },
   );

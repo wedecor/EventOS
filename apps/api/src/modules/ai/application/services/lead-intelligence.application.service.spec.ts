@@ -89,7 +89,7 @@ describe('LeadIntelligenceApplicationService', () => {
       contextBuilder as unknown as LeadIntelligenceContextBuilder,
       llm,
       { record: auditRecord } as never,
-      { create: aiExecutionCreate } as never,
+      { create: aiExecutionCreate },
       aiUsageThrottle as never,
     );
   });
@@ -229,9 +229,9 @@ describe('LeadIntelligenceApplicationService', () => {
     if (!result.ok) {
       expect(result.error.code).toBe('VALIDATION_ERROR');
     }
-    expect(leadIntelligenceResultSchema.safeParse({ summary: 'x' }).success).toBe(
-      false,
-    );
+    expect(
+      leadIntelligenceResultSchema.safeParse({ summary: 'x' }).success,
+    ).toBe(false);
   });
 
   it('maps provider timeout and failure safely', async () => {

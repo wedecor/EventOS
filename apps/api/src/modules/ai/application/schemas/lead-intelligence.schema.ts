@@ -6,11 +6,7 @@ import { z } from 'zod';
  * Models must not invent dates, budgets, venues, or commitments.
  */
 
-export const evidenceStatusSchema = z.enum([
-  'explicit',
-  'inferred',
-  'unknown',
-]);
+export const evidenceStatusSchema = z.enum(['explicit', 'inferred', 'unknown']);
 
 export const evidencedStringSchema = z.object({
   value: z.string().nullable(),

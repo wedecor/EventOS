@@ -52,6 +52,18 @@ export class QuotationRepositoryImpl
     return quotations.map((quotation) => this.mapQuotation(quotation));
   }
 
+  async findLatestByLeadId(
+    tenantId: string,
+    leadId: string,
+  ): Promise<QuotationRecord | null> {
+    const quotation = await this.prisma.quotation.findFirst({
+      where: { tenantId, leadId },
+      orderBy: [{ quotationNumber: 'desc' }, { revisionNumber: 'desc' }],
+    });
+
+    return quotation ? this.mapQuotation(quotation) : null;
+  }
+
   async findLatestRevision(
     tenantId: string,
     quotationNumber: number,
@@ -116,7 +128,12 @@ export class QuotationRepositoryImpl
         ? {
             OR: [
               { venue: { contains: options.q, mode: 'insensitive' as const } },
-              { eventType: { contains: options.q, mode: 'insensitive' as const } },
+              {
+                eventType: {
+                  contains: options.q,
+                  mode: 'insensitive' as const,
+                },
+              },
               { notes: { contains: options.q, mode: 'insensitive' as const } },
             ],
           }

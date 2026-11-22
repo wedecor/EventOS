@@ -77,6 +77,8 @@ export abstract class LeadRepository {
     stage: LeadStage,
   ): Promise<LeadRecord[]>;
 
+  abstract listAll(tenantId: string): Promise<LeadRecord[]>;
+
   abstract update(
     tenantId: string,
     id: string,

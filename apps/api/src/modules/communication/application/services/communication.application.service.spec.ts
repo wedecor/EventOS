@@ -54,8 +54,8 @@ describe('CommunicationApplicationService', () => {
     leadRepository = { findById: jest.fn() };
 
     service = new CommunicationApplicationService(
-      recordRepository as never,
-      attachmentRepository as never,
+      recordRepository,
+      attachmentRepository,
       templateRepository as never,
       eventRepository as never,
       customerRepository as never,

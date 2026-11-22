@@ -42,7 +42,8 @@ export default (): EnvConfig & { redisUrl: string } => {
       ? process.env.SENTRY_DSN.trim()
       : undefined,
     STORAGE_PROVIDER:
-      (process.env.STORAGE_PROVIDER as EnvConfig['STORAGE_PROVIDER']) ?? 'local',
+      (process.env.STORAGE_PROVIDER as EnvConfig['STORAGE_PROVIDER']) ??
+      'local',
     STORAGE_LOCAL_ROOT: process.env.STORAGE_LOCAL_ROOT,
     STORAGE_ENDPOINT: process.env.STORAGE_ENDPOINT,
     STORAGE_ACCESS_KEY: process.env.STORAGE_ACCESS_KEY,

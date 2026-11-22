@@ -160,7 +160,10 @@ export class OutboundEmailApplicationService {
     if (!invoice) {
       return failure('NOT_FOUND', 'Invoice not found.');
     }
-    const customer = await this.customers.findById(tenantId, invoice.customerId);
+    const customer = await this.customers.findById(
+      tenantId,
+      invoice.customerId,
+    );
     if (!customer) {
       return failure('NOT_FOUND', 'Customer not found.');
     }

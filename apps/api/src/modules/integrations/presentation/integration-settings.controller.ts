@@ -8,11 +8,7 @@ import {
   Post,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import {
-  CurrentUser,
-  Permissions,
-  type AuthenticatedUser,
-} from '../../auth';
+import { CurrentUser, Permissions, type AuthenticatedUser } from '../../auth';
 import { ZodValidationPipe } from '../../../common/pipes/zod-validation.pipe';
 import { failure } from '../../../shared/application/result';
 import { IfMatchVersion } from '../../../shared/presentation/if-match.decorator';
@@ -55,8 +51,7 @@ export class IntegrationSettingsController {
   @Permissions('settings:write')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary:
-      'Update integration settings (write-only secrets; never returned)',
+    summary: 'Update integration settings (write-only secrets; never returned)',
   })
   @ApiIfMatchHeader(true)
   @ApiZodBody(updateIntegrationSettingsSchema)
@@ -91,8 +86,7 @@ export class IntegrationSettingsController {
   @Permissions('settings:write')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary:
-      'Test email provider connection (acceptance ≠ delivery proof)',
+    summary: 'Test email provider connection (acceptance ≠ delivery proof)',
   })
   @ApiZodBody(testEmailSchema)
   @ApiDataResponse(200, 'Email connection test result')

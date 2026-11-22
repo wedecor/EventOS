@@ -45,13 +45,13 @@ export function createMailPort(env: MailEnv = process.env): MailPort {
   if (provider === 'none') {
     return {
       providerName: 'none',
-      async send() {
-        return {
+      send() {
+        return Promise.resolve({
           accepted: false,
           provider: 'none',
-          status: 'failed',
+          status: 'failed' as const,
           errorMessage: 'Mail provider is disabled (MAIL_PROVIDER=none).',
-        };
+        });
       },
     };
   }

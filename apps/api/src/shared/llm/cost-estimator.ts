@@ -19,8 +19,7 @@ export function estimateLlmCostUsd(
     return null;
   }
 
-  const input =
-    (usage.promptTokens / 1_000_000) * pricing.inputPricePer1M;
+  const input = (usage.promptTokens / 1_000_000) * pricing.inputPricePer1M;
   const output =
     (usage.completionTokens / 1_000_000) * pricing.outputPricePer1M;
   return Math.round((input + output) * 1_000_000) / 1_000_000;

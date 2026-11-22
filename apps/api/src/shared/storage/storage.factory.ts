@@ -1,5 +1,8 @@
 import { join } from 'node:path';
-import { LocalStorageAdapter, normalizeLocalRoot } from './local-storage.adapter';
+import {
+  LocalStorageAdapter,
+  normalizeLocalRoot,
+} from './local-storage.adapter';
 import { S3StorageAdapter } from './s3-storage.adapter';
 import type { StoragePort } from './storage.port';
 

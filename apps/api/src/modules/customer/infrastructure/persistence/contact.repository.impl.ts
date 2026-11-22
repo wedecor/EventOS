@@ -56,6 +56,10 @@ export class ContactRepositoryImpl
     });
   }
 
+  async countByCustomer(tenantId: string, customerId: string): Promise<number> {
+    return this.countByCustomerId(tenantId, customerId);
+  }
+
   private mapRecord(contact: Contact): ContactRecord {
     return {
       id: contact.id,

@@ -12,7 +12,12 @@ import {
   Query,
   StreamableFile,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiProduces, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiProduces,
+  ApiTags,
+} from '@nestjs/swagger';
 import { z } from 'zod';
 import { CurrentUser, Permissions, type AuthenticatedUser } from '../../auth';
 import { ZodValidationPipe } from '../../../common/pipes/zod-validation.pipe';

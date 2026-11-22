@@ -160,9 +160,7 @@ describe('outstanding balance definitions (M4-AI remediation)', () => {
     it('canceled bookings do not change open-invoice formulas (status-driven)', () => {
       // Bookings are not an input — canceled booking invoices still counted if sent.
       expect(
-        computeOpenInvoiceFaceValue([
-          { status: 'sent', totalAmount: 7000 },
-        ]),
+        computeOpenInvoiceFaceValue([{ status: 'sent', totalAmount: 7000 }]),
       ).toBe(7000);
     });
   });
@@ -182,9 +180,7 @@ describe('outstanding balance definitions (M4-AI remediation)', () => {
       expect(ar).toBe(80000);
       // Face value ignores payments entirely:
       expect(
-        computeOpenInvoiceFaceValue([
-          { status: 'sent', totalAmount: 100000 },
-        ]),
+        computeOpenInvoiceFaceValue([{ status: 'sent', totalAmount: 100000 }]),
       ).toBe(100000);
     });
   });

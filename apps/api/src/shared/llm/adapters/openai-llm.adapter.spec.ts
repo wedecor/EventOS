@@ -5,15 +5,16 @@ describe('OpenAiLlmAdapter', () => {
     const fetchImpl = jest.fn().mockResolvedValue({
       ok: true,
       status: 200,
-      json: async () => ({
-        model: 'gpt-4o-mini',
-        choices: [{ message: { content: '{"ok":true}' } }],
-        usage: {
-          prompt_tokens: 11,
-          completion_tokens: 7,
-          total_tokens: 18,
-        },
-      }),
+      json: () =>
+        Promise.resolve({
+          model: 'gpt-4o-mini',
+          choices: [{ message: { content: '{"ok":true}' } }],
+          usage: {
+            prompt_tokens: 11,
+            completion_tokens: 7,
+            total_tokens: 18,
+          },
+        }),
     });
 
     const adapter = new OpenAiLlmAdapter({
@@ -55,7 +56,7 @@ describe('OpenAiLlmAdapter', () => {
       fetchImpl: jest.fn().mockResolvedValue({
         ok: false,
         status: 500,
-        json: async () => ({}),
+        json: () => Promise.resolve({}),
       }) as never,
     });
 

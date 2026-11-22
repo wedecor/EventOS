@@ -74,7 +74,10 @@ export class LeadIntelligenceApplicationService {
       return failure(
         'RATE_LIMITED',
         `AI usage limit reached${throttle.scope ? ` (${throttle.scope})` : ''}. Try again in ${throttle.retryAfterSeconds}s.`,
-        { retryAfterSeconds: throttle.retryAfterSeconds, scope: throttle.scope },
+        {
+          retryAfterSeconds: throttle.retryAfterSeconds,
+          scope: throttle.scope,
+        },
       );
     }
 
@@ -201,7 +204,10 @@ export class LeadIntelligenceApplicationService {
                   'INVALID_STATE',
                   'AI provider is disabled for this environment.',
                 )
-              : failure('EXTERNAL_SERVICE_ERROR', 'AI provider request failed.');
+              : failure(
+                  'EXTERNAL_SERVICE_ERROR',
+                  'AI provider request failed.',
+                );
 
         await this.recordOutcome({
           tenantId,

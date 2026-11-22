@@ -103,9 +103,9 @@ describe('validateEnv — AI provider (M4-AI)', () => {
   });
 
   it('requires AI_API_KEY when AI_PROVIDER=openai', () => {
-    expect(() =>
-      validateEnv({ ...baseConfig, AI_PROVIDER: 'openai' }),
-    ).toThrow(/AI_API_KEY/);
+    expect(() => validateEnv({ ...baseConfig, AI_PROVIDER: 'openai' })).toThrow(
+      /AI_API_KEY/,
+    );
   });
 
   it('accepts openai with a server-side key', () => {

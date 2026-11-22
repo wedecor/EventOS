@@ -48,5 +48,7 @@ export class LlmProviderError extends Error {
 export interface LlmPort {
   readonly providerName: string;
   readonly model: string;
-  completeStructured(request: LlmStructuredRequest): Promise<LlmStructuredResult>;
+  completeStructured(
+    request: LlmStructuredRequest,
+  ): Promise<LlmStructuredResult>;
 }

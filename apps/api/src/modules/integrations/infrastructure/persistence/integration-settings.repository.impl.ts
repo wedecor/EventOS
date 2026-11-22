@@ -78,7 +78,9 @@ export class IntegrationSettingsRepositoryImpl
             ? { emailProvider: data.emailProvider }
             : {}),
           ...(data.fromName !== undefined ? { fromName: data.fromName } : {}),
-          ...(data.fromEmail !== undefined ? { fromEmail: data.fromEmail } : {}),
+          ...(data.fromEmail !== undefined
+            ? { fromEmail: data.fromEmail }
+            : {}),
           ...(data.smtpUser !== undefined ? { smtpUser: data.smtpUser } : {}),
           ...(data.smtpPasswordEncrypted !== undefined
             ? { smtpPasswordEncrypted: data.smtpPasswordEncrypted }
@@ -121,7 +123,11 @@ export class IntegrationSettingsRepositoryImpl
       });
       return this.map(row);
     } catch (error: unknown) {
-      return this.toConcurrentModification('IntegrationSettings', tenantId, error);
+      return this.toConcurrentModification(
+        'IntegrationSettings',
+        tenantId,
+        error,
+      );
     }
   }
 

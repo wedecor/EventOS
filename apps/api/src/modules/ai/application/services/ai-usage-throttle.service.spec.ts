@@ -32,10 +32,7 @@ describe('AiUsageThrottleService', () => {
         return undefined;
       }),
     };
-    const service = new AiUsageThrottleService(
-      redis as never,
-      config as never,
-    );
+    const service = new AiUsageThrottleService(redis as never, config as never);
     return { service, redis };
   }
 

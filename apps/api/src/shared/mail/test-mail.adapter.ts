@@ -14,15 +14,15 @@ export class TestMailAdapter implements MailPort {
   readonly sent: CapturedMail[] = [];
   failNext = false;
 
-  async send(message: MailMessage): Promise<MailSendResult> {
+  send(message: MailMessage): Promise<MailSendResult> {
     if (this.failNext) {
       this.failNext = false;
-      return {
+      return Promise.resolve({
         accepted: false,
         provider: this.providerName,
         status: 'failed',
         errorMessage: 'TestMailAdapter forced failure',
-      };
+      });
     }
     const providerMessageId = `test-${this.sent.length + 1}-${Date.now()}`;
     this.sent.push({
@@ -30,12 +30,12 @@ export class TestMailAdapter implements MailPort {
       capturedAt: new Date(),
       providerMessageId,
     });
-    return {
+    return Promise.resolve({
       accepted: true,
       provider: this.providerName,
       providerMessageId,
       status: 'accepted',
-    };
+    });
   }
 
   clear(): void {

@@ -154,10 +154,7 @@ export class QuotationApplicationService {
     }
 
     if (input.discountAmount !== undefined && input.discountAmount < 0) {
-      return failure(
-        'VALIDATION_ERROR',
-        'Discount amount cannot be negative.',
-      );
+      return failure('VALIDATION_ERROR', 'Discount amount cannot be negative.');
     }
 
     if (input.taxAmount !== undefined && input.taxAmount < 0) {
@@ -186,8 +183,7 @@ export class QuotationApplicationService {
         tenantId,
         quotationId,
       );
-      const discountAmount =
-        input.discountAmount ?? existing.discountAmount;
+      const discountAmount = input.discountAmount ?? existing.discountAmount;
       const taxAmount = input.taxAmount ?? existing.taxAmount;
       const totals = calculateQuotationTotals({
         lineItems,

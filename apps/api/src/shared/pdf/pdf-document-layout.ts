@@ -179,7 +179,11 @@ export function drawTotalsBlock(
       .font(row.bold ? 'Helvetica-Bold' : 'Helvetica')
       .fontSize(row.bold ? 11 : 10)
       .fillColor('#1a1a1a');
-    doc.text(row.label, 350, doc.y, { width: 90, align: 'right', continued: false });
+    doc.text(row.label, 350, doc.y, {
+      width: 90,
+      align: 'right',
+      continued: false,
+    });
     const y = doc.y - 12;
     doc.text(formatMoney(row.amount, totals.currency), 450, y, {
       width: 95,

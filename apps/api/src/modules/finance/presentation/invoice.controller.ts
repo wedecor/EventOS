@@ -15,11 +15,7 @@ import {
   ApiProduces,
   ApiTags,
 } from '@nestjs/swagger';
-import {
-  CurrentUser,
-  Permissions,
-  type AuthenticatedUser,
-} from '../../auth';
+import { CurrentUser, Permissions, type AuthenticatedUser } from '../../auth';
 import { ZodValidationPipe } from '../../../common/pipes/zod-validation.pipe';
 import { failure } from '../../../shared/application/result';
 import { IfMatchVersion } from '../../../shared/presentation/if-match.decorator';

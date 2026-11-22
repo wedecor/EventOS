@@ -91,6 +91,10 @@ export function buildStorageKey(
 ): string {
   const yyyy = String(now.getUTCFullYear());
   const mm = String(now.getUTCMonth() + 1).padStart(2, '0');
-  const ext = extension.startsWith('.') ? extension : extension ? `.${extension}` : '';
+  const ext = extension.startsWith('.')
+    ? extension
+    : extension
+      ? `.${extension}`
+      : '';
   return `${tenantId}/${yyyy}/${mm}/${randomUUID()}${ext}`;
 }

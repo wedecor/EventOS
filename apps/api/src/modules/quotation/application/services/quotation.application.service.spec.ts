@@ -214,13 +214,11 @@ describe('QuotationApplicationService', () => {
         version: 1,
       },
     ]);
-    quotationRepository.update.mockImplementation(
-      async (_t, _id, data, _v) => ({
-        ...baseQuotation,
-        ...data,
-        version: 2,
-      }),
-    );
+    quotationRepository.update.mockImplementation((_t, _id, data, _v) => ({
+      ...baseQuotation,
+      ...data,
+      version: 2,
+    }));
 
     const result = await service.updateQuotation(
       tenantId,
@@ -265,13 +263,11 @@ describe('QuotationApplicationService', () => {
         version: 1,
       },
     ]);
-    quotationRepository.update.mockImplementation(
-      async (_t, _id, data) => ({
-        ...baseQuotation,
-        ...data,
-        version: 2,
-      }),
-    );
+    quotationRepository.update.mockImplementation((_t, _id, data) => ({
+      ...baseQuotation,
+      ...data,
+      version: 2,
+    }));
 
     const result = await service.updateQuotation(
       tenantId,
@@ -311,13 +307,11 @@ describe('QuotationApplicationService', () => {
         version: 1,
       },
     ]);
-    quotationRepository.update.mockImplementation(
-      async (_t, _id, data) => ({
-        ...baseQuotation,
-        ...data,
-        version: 2,
-      }),
-    );
+    quotationRepository.update.mockImplementation((_t, _id, data) => ({
+      ...baseQuotation,
+      ...data,
+      version: 2,
+    }));
 
     const result = await service.updateQuotation(
       tenantId,
@@ -376,13 +370,11 @@ describe('QuotationApplicationService', () => {
         version: 1,
       },
     ]);
-    quotationRepository.update.mockImplementation(
-      async (_t, _id, data) => ({
-        ...baseQuotation,
-        ...data,
-        version: 3,
-      }),
-    );
+    quotationRepository.update.mockImplementation((_t, _id, data) => ({
+      ...baseQuotation,
+      ...data,
+      version: 3,
+    }));
 
     const result = await service.updateQuotation(
       tenantId,
@@ -420,13 +412,11 @@ describe('QuotationApplicationService', () => {
         version: 1,
       },
     ]);
-    quotationRepository.update.mockImplementation(
-      async (_t, _id, data, version) => ({
-        ...baseQuotation,
-        ...data,
-        version: version + 1,
-      }),
-    );
+    quotationRepository.update.mockImplementation((_t, _id, data, version) => ({
+      ...baseQuotation,
+      ...data,
+      version: version + 1,
+    }));
 
     const first = await service.updateQuotation(
       tenantId,

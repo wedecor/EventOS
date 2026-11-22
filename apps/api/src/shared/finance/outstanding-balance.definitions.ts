@@ -57,7 +57,9 @@ export function computeCustomerInvoiceOutstanding(
 
 export type OpenInvoiceStatuses = 'sent' | 'partially_paid';
 
-export function isOpenInvoiceStatus(status: string): status is OpenInvoiceStatuses {
+export function isOpenInvoiceStatus(
+  status: string,
+): status is OpenInvoiceStatuses {
   return status === 'sent' || status === 'partially_paid';
 }
 

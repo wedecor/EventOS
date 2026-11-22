@@ -1,7 +1,11 @@
 import { ConcurrentModificationError } from '../../../../shared/database';
 import { DomainEventPublisher } from '../../../../shared/events/domain-event.base';
-import { CustomerCreatedEvent } from '../../../../shared/events/sprint1-domain.events';
+import {
+  ContactAddedEvent,
+  CustomerCreatedEvent,
+} from '../../../../shared/events/sprint1-domain.events';
 import { CustomerApplicationService } from './customer.application.service';
+import type { ContactRepository } from '../../domain/repositories/contact.repository';
 import type {
   CustomerRecord,
   CustomerRepository,
@@ -26,6 +30,7 @@ describe('CustomerApplicationService', () => {
   };
 
   let customerRepository: jest.Mocked<CustomerRepository>;
+  let contactRepository: jest.Mocked<ContactRepository>;
   let eventPublisher: jest.Mocked<DomainEventPublisher>;
   let service: CustomerApplicationService;
 
@@ -41,11 +46,19 @@ describe('CustomerApplicationService', () => {
       findAll: jest.fn(),
       findPage: jest.fn(),
       update: jest.fn(),
+      listAll: jest.fn(),
     };
     eventPublisher = { publish };
+    contactRepository = {
+      create: jest.fn(),
+      findByCustomerId: jest.fn(),
+      countByCustomerId: jest.fn(),
+      countByCustomer: jest.fn(),
+    };
 
     service = new CustomerApplicationService(
       customerRepository,
+      contactRepository,
       eventPublisher,
     );
   });
@@ -250,5 +263,31 @@ describe('CustomerApplicationService', () => {
     if (!result.ok) {
       expect(result.error.code).toBe('CONCURRENT_MODIFICATION');
     }
+  });
+
+  it('adds a contact and publishes ContactAdded', async () => {
+    customerRepository.findById.mockResolvedValue(baseCustomer);
+    contactRepository.create.mockResolvedValue({
+      id: 'contact-1',
+      tenantId,
+      customerId,
+      name: 'Rahul',
+      role: 'groom',
+      phone: '+919876543210',
+      email: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      version: 1,
+    });
+    contactRepository.countByCustomer.mockResolvedValue(+2);
+
+    const result = await service.addContact(tenantId, customerId, {
+      name: 'Rahul',
+      role: 'groom',
+      phone: { countryCode: '+91', number: '9876543210' },
+    });
+
+    expect(result.ok).toBe(true);
+    expect(publish).toHaveBeenCalledWith(expect.any(ContactAddedEvent));
   });
 });

@@ -32,4 +32,10 @@ export abstract class ContactRepository {
     tenantId: string,
     customerId: string,
   ): Promise<number>;
+
+  /** Alias used by Sprint 1 UAT customer flows — same as countByCustomerId. */
+  abstract countByCustomer(
+    tenantId: string,
+    customerId: string,
+  ): Promise<number>;
 }

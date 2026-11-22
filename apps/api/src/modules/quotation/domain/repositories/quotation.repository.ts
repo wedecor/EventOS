@@ -85,6 +85,11 @@ export abstract class QuotationRepository {
     quotationNumber: number,
   ): Promise<QuotationRecord | null>;
 
+  abstract findLatestByLeadId(
+    tenantId: string,
+    leadId: string,
+  ): Promise<QuotationRecord | null>;
+
   abstract findMaxQuotationNumber(tenantId: string): Promise<number>;
 
   // EP1-FIN-003 — Dashboard: batch quotation totals read for pending-payments aggregation

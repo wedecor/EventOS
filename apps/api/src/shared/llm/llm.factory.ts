@@ -43,10 +43,12 @@ export function createLlmPort(env: LlmEnv = process.env): LlmPort {
     return {
       providerName: 'none',
       model,
-      async completeStructured() {
-        throw new LlmProviderError(
-          'LLM provider is disabled (AI_PROVIDER=none).',
-          'DISABLED',
+      completeStructured() {
+        return Promise.reject(
+          new LlmProviderError(
+            'LLM provider is disabled (AI_PROVIDER=none).',
+            'DISABLED',
+          ),
         );
       },
     };

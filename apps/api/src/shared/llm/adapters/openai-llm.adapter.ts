@@ -147,7 +147,11 @@ export class OpenAiLlmAdapter implements LlmPort {
         error instanceof Error &&
         (error.name === 'AbortError' || error.message.includes('aborted'))
       ) {
-        throw new LlmProviderError('OpenAI request timed out.', 'TIMEOUT', error);
+        throw new LlmProviderError(
+          'OpenAI request timed out.',
+          'TIMEOUT',
+          error,
+        );
       }
       if (error instanceof LlmProviderError) {
         throw error;

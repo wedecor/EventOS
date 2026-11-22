@@ -208,10 +208,7 @@ export class LeadController {
   @ApiUuidParam('id')
   @ApiDataResponse(200, 'Follow-ups listed')
   @ApiStandardErrors()
-  async listFollowUps(
-    @TenantId() tenantId: string,
-    @Param('id') id: string,
-  ) {
+  async listFollowUps(@TenantId() tenantId: string, @Param('id') id: string) {
     const result = await this.leadService.listFollowUpsForLead(tenantId, id);
     return resultToResponse(result);
   }

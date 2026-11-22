@@ -82,6 +82,11 @@ export class CustomerRepositoryImpl
     return customers.map((customer) => this.mapCustomer(customer));
   }
 
+  /** Sprint 1 UAT alias — same tenant listing as findAll. */
+  async listAll(tenantId: string): Promise<CustomerRecord[]> {
+    return this.findAll(tenantId);
+  }
+
   async findPage(
     tenantId: string,
     options: {

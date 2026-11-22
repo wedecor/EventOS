@@ -1,7 +1,11 @@
 import { mkdir, readFile, unlink, writeFile, access } from 'node:fs/promises';
 import { dirname, join, normalize, resolve } from 'node:path';
 import { constants } from 'node:fs';
-import type { StorageObject, StoragePort, StoragePutInput } from './storage.port';
+import type {
+  StorageObject,
+  StoragePort,
+  StoragePutInput,
+} from './storage.port';
 
 export class LocalStorageAdapter implements StoragePort {
   readonly providerName = 'local';

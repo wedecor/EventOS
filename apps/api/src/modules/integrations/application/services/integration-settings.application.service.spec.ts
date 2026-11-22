@@ -48,11 +48,19 @@ describe('IntegrationSettingsApplicationService', () => {
     repository = {
       findByTenantId: jest.fn().mockResolvedValue(baseSettings),
       create: jest.fn(),
-      update: jest.fn().mockImplementation(async (_t, data, version) => ({
-        ...baseSettings,
-        ...data,
-        version: version + 1,
-      })),
+      update: jest
+        .fn()
+        .mockImplementation(
+          (
+            _t: string,
+            data: Partial<typeof baseSettings>,
+            version: number,
+          ): typeof baseSettings => ({
+            ...baseSettings,
+            ...data,
+            version: version + 1,
+          }),
+        ),
     };
     auditLog = { record: jest.fn().mockResolvedValue(undefined) };
     config = {
@@ -77,17 +85,17 @@ describe('IntegrationSettingsApplicationService', () => {
     storage = {
       providerName: 'local',
       put: jest.fn().mockResolvedValue(undefined),
-      get: jest
-        .fn()
-        .mockResolvedValue({ body: Buffer.from('eventos-storage-connection-test') }),
+      get: jest.fn().mockResolvedValue({
+        body: Buffer.from('eventos-storage-connection-test'),
+      }),
       delete: jest.fn().mockResolvedValue(undefined),
     };
 
     service = new IntegrationSettingsApplicationService(
-      repository as never,
+      repository,
       auditLog as never,
       config as never,
-      mail as never,
+      mail,
       storage as never,
     );
   });

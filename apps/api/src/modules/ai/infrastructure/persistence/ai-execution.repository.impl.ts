@@ -26,9 +26,7 @@ export class AiExecutionRepositoryImpl
       data: {
         tenant: { connect: { id: tenantId } },
         user: { connect: { id: data.userId } },
-        ...(data.leadId
-          ? { lead: { connect: { id: data.leadId } } }
-          : {}),
+        ...(data.leadId ? { lead: { connect: { id: data.leadId } } } : {}),
         feature: data.feature,
         provider: data.provider,
         model: data.model,

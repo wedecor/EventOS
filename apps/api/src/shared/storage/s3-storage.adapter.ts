@@ -5,7 +5,11 @@ import {
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
-import type { StorageObject, StoragePort, StoragePutInput } from './storage.port';
+import type {
+  StorageObject,
+  StoragePort,
+  StoragePutInput,
+} from './storage.port';
 
 export type S3StorageConfig = {
   endpoint?: string;

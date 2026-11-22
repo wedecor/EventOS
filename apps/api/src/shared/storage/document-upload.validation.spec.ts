@@ -49,7 +49,11 @@ describe('document-upload.validation', () => {
   });
 
   it('builds tenant-scoped storage keys without client path input', () => {
-    const key = buildStorageKey('tenant-1', '.pdf', new Date('2026-11-12T00:00:00Z'));
+    const key = buildStorageKey(
+      'tenant-1',
+      '.pdf',
+      new Date('2026-11-12T00:00:00Z'),
+    );
     expect(key.startsWith('tenant-1/2026/11/')).toBe(true);
     expect(key.endsWith('.pdf')).toBe(true);
     expect(key.includes('..')).toBe(false);

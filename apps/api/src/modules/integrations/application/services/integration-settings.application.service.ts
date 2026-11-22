@@ -56,9 +56,7 @@ export class IntegrationSettingsApplicationService {
     @Inject(STORAGE_PORT) private readonly storage: StoragePort,
   ) {}
 
-  async getSettings(
-    tenantId: string,
-  ): Promise<Result<IntegrationSettingsDto>> {
+  async getSettings(tenantId: string): Promise<Result<IntegrationSettingsDto>> {
     const settings = await this.getOrCreate(tenantId);
     return success(toIntegrationSettingsDto(settings));
   }
@@ -84,7 +82,8 @@ export class IntegrationSettingsApplicationService {
     const secretKey = this.encryptionKey();
     const patch: Parameters<IntegrationSettingsRepository['update']>[1] = {};
 
-    if (input.emailProvider !== undefined) patch.emailProvider = input.emailProvider;
+    if (input.emailProvider !== undefined)
+      patch.emailProvider = input.emailProvider;
     if (input.fromName !== undefined) patch.fromName = input.fromName;
     if (input.fromEmail !== undefined) {
       patch.fromEmail = input.fromEmail === '' ? null : input.fromEmail;
@@ -103,7 +102,10 @@ export class IntegrationSettingsApplicationService {
       patch.storageAccessKey = input.storageAccessKey;
     }
     if (input.smtpPassword !== undefined) {
-      patch.smtpPasswordEncrypted = encryptSecret(input.smtpPassword, secretKey);
+      patch.smtpPasswordEncrypted = encryptSecret(
+        input.smtpPassword,
+        secretKey,
+      );
       patch.emailSecretConfigured = true;
     }
     if (input.storageSecretKey !== undefined) {
@@ -224,7 +226,9 @@ export class IntegrationSettingsApplicationService {
       });
     } catch (error: unknown) {
       const message = sanitizePublicError(
-        error instanceof Error ? error.message : 'Email connection test failed.',
+        error instanceof Error
+          ? error.message
+          : 'Email connection test failed.',
       );
       await this.repository.update(
         tenantId,
@@ -307,7 +311,9 @@ export class IntegrationSettingsApplicationService {
       });
     } catch (error: unknown) {
       const message = sanitizePublicError(
-        error instanceof Error ? error.message : 'Storage connection test failed.',
+        error instanceof Error
+          ? error.message
+          : 'Storage connection test failed.',
       );
       await this.repository.update(
         tenantId,

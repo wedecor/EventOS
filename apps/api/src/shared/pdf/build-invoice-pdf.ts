@@ -1,8 +1,4 @@
-import {
-  formatMoney,
-  formatPdfDate,
-  padDocumentNumber,
-} from './format-money';
+import { formatMoney, formatPdfDate, padDocumentNumber } from './format-money';
 import {
   collectPdfBuffer,
   createPdfDocument,
@@ -64,11 +60,7 @@ export async function buildInvoicePdf(
   drawKeyValue(doc, 'Invoice date', formatPdfDate(input.invoiceDate));
   drawKeyValue(doc, 'Status', input.status);
   if (input.bookingNumber != null) {
-    drawKeyValue(
-      doc,
-      'Booking',
-      `B-${padDocumentNumber(input.bookingNumber)}`,
-    );
+    drawKeyValue(doc, 'Booking', `B-${padDocumentNumber(input.bookingNumber)}`);
   }
   doc.moveDown(0.4);
 
@@ -92,7 +84,11 @@ export async function buildInvoicePdf(
     lineTotalAmount: line.quantity * line.unitPriceAmount,
   }));
 
-  doc.font('Helvetica-Bold').fontSize(11).fillColor('#1a1a1a').text('Line items');
+  doc
+    .font('Helvetica-Bold')
+    .fontSize(11)
+    .fillColor('#1a1a1a')
+    .text('Line items');
   doc.moveDown(0.35);
   drawLineItemsTable({
     doc,
