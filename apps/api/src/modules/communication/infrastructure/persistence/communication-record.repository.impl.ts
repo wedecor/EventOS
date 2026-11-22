@@ -42,6 +42,7 @@ export class CommunicationRecordRepositoryImpl
         ...(data.customerId
           ? { customer: { connect: { id: data.customerId } } }
           : {}),
+        ...(data.leadId ? { lead: { connect: { id: data.leadId } } } : {}),
         ...(data.vendorId
           ? { vendor: { connect: { id: data.vendorId } } }
           : {}),
@@ -124,6 +125,22 @@ export class CommunicationRecordRepositoryImpl
     return rows.map((r) => this.map(r));
   }
 
+  async findByLeadId(
+    tenantId: string,
+    leadId: string,
+    options?: { includeDeleted?: boolean },
+  ): Promise<CommunicationRecordRecord[]> {
+    const rows = await this.prisma.communicationRecord.findMany({
+      where: {
+        tenantId,
+        leadId,
+        ...(options?.includeDeleted ? {} : { deletedAt: null }),
+      },
+      orderBy: { occurredAt: 'desc' },
+    });
+    return rows.map((r) => this.map(r));
+  }
+
   async update(
     tenantId: string,
     id: string,
@@ -138,6 +155,7 @@ export class CommunicationRecordRepositoryImpl
           body: data.body,
           bookingId: data.bookingId,
           customerId: data.customerId,
+          leadId: data.leadId,
           vendorId: data.vendorId,
           staffMemberId: data.staffMemberId,
           templateId: data.templateId,
@@ -200,6 +218,7 @@ export class CommunicationRecordRepositoryImpl
       tenantId: row.tenantId,
       bookingId: row.bookingId,
       customerId: row.customerId,
+      leadId: row.leadId,
       vendorId: row.vendorId,
       staffMemberId: row.staffMemberId,
       templateId: row.templateId,

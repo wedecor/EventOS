@@ -90,6 +90,42 @@ describe('validateEnv — JWT_SECRET (R1-04)', () => {
  * development keeps the permissive `*` default; staging and production must
  * set an explicit, non-wildcard CORS_ORIGIN or bootstrap fails.
  */
+describe('validateEnv — AI provider (M4-AI)', () => {
+  const baseConfig = {
+    DATABASE_URL: 'postgresql://eventos:eventos@localhost:5432/eventos',
+    JWT_SECRET: 'a'.repeat(32),
+  };
+
+  it('defaults to the test adapter', () => {
+    const result = validateEnv({ ...baseConfig });
+    expect(result.AI_PROVIDER).toBe('test');
+    expect(result.AI_MODEL).toBe('gpt-4o-mini');
+  });
+
+  it('requires AI_API_KEY when AI_PROVIDER=openai', () => {
+    expect(() =>
+      validateEnv({ ...baseConfig, AI_PROVIDER: 'openai' }),
+    ).toThrow(/AI_API_KEY/);
+  });
+
+  it('accepts openai with a server-side key', () => {
+    const result = validateEnv({
+      ...baseConfig,
+      AI_PROVIDER: 'openai',
+      AI_API_KEY: 'sk-test-key',
+    });
+    expect(result.AI_PROVIDER).toBe('openai');
+    expect(result.AI_API_KEY).toBe('sk-test-key');
+  });
+
+  it('defaults AI rate-limit caps', () => {
+    const result = validateEnv({ ...baseConfig });
+    expect(result.AI_RATE_LIMIT_PER_USER_PER_HOUR).toBe(30);
+    expect(result.AI_RATE_LIMIT_PER_TENANT_PER_HOUR).toBe(200);
+    expect(result.AI_RATE_LIMIT_WINDOW_SECONDS).toBe(3600);
+  });
+});
+
 describe('validateEnv — CORS_ORIGIN (R1-06)', () => {
   const baseConfig = {
     DATABASE_URL: 'postgresql://eventos:eventos@localhost:5432/eventos',

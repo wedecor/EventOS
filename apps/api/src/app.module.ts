@@ -13,6 +13,7 @@ import {
 import { DatabaseModule, PrismaModule } from './database';
 import { StorageModule } from './shared/storage/storage.module';
 import { MailModule } from './shared/mail/mail.module';
+import { LlmModule } from './shared/llm';
 import { AdminModule } from './modules/admin/admin.module';
 import { ApplicationServicesModule } from './modules/application-services.module';
 import { BookingModule } from './modules/booking/booking.module';
@@ -63,6 +64,7 @@ export { LOG_REDACT_CONFIG };
     PrismaModule,
     StorageModule,
     MailModule,
+    LlmModule,
     RepositoriesModule,
     ApplicationServicesModule,
     LeadModule,

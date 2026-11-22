@@ -18,6 +18,8 @@ export const LOG_REDACT_CONFIG: { paths: string[]; censor: string } = {
     'req.body.currentPassword',
     'req.body.newPassword',
     'req.body.refreshToken',
+    'req.body.apiKey',
+    'req.body.AI_API_KEY',
   ],
   censor: '[Redacted]',
 };

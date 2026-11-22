@@ -25,6 +25,7 @@ export const communicationStatusSchema = z.enum([
 export const createCommunicationSchema = z.object({
   bookingId: z.string().uuid().optional(),
   customerId: z.string().uuid().optional(),
+  leadId: z.string().uuid().optional(),
   vendorId: z.string().uuid().optional(),
   staffMemberId: z.string().uuid().optional(),
   templateId: z.string().uuid().optional(),
@@ -41,6 +42,7 @@ export const updateCommunicationSchema = z.object({
   body: z.string().nullable().optional(),
   bookingId: z.string().uuid().nullable().optional(),
   customerId: z.string().uuid().nullable().optional(),
+  leadId: z.string().uuid().nullable().optional(),
   vendorId: z.string().uuid().nullable().optional(),
   staffMemberId: z.string().uuid().nullable().optional(),
   templateId: z.string().uuid().nullable().optional(),

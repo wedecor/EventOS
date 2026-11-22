@@ -194,6 +194,324 @@ describe('QuotationApplicationService', () => {
       expect.objectContaining({ notes: 'Updated notes' }),
       1,
     );
+    expect(lineItemRepository.findByQuotationId).not.toHaveBeenCalled();
+  });
+
+  it('recalculates totals when discount changes', async () => {
+    quotationRepository.findById.mockResolvedValue(baseQuotation);
+    lineItemRepository.findByQuotationId.mockResolvedValue([
+      {
+        id: 'li-1',
+        tenantId,
+        quotationId,
+        description: 'Decor',
+        quantity: 1,
+        unitPriceAmount: 100000,
+        currency: 'INR',
+        sortOrder: 0,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        version: 1,
+      },
+    ]);
+    quotationRepository.update.mockImplementation(
+      async (_t, _id, data, _v) => ({
+        ...baseQuotation,
+        ...data,
+        version: 2,
+      }),
+    );
+
+    const result = await service.updateQuotation(
+      tenantId,
+      quotationId,
+      { discountAmount: 10000 },
+      1,
+    );
+
+    expect(result.ok).toBe(true);
+    expect(quotationRepository.update).toHaveBeenCalledWith(
+      tenantId,
+      quotationId,
+      expect.objectContaining({
+        discountAmount: 10000,
+        taxAmount: 18000,
+        subtotalAmount: 100000,
+        totalAmount: 108000, // 100000 - 10000 + 18000
+      }),
+      1,
+    );
+  });
+
+  it('recalculates totals when tax changes', async () => {
+    quotationRepository.findById.mockResolvedValue({
+      ...baseQuotation,
+      discountAmount: 0,
+      taxAmount: 0,
+      totalAmount: 100000,
+    });
+    lineItemRepository.findByQuotationId.mockResolvedValue([
+      {
+        id: 'li-1',
+        tenantId,
+        quotationId,
+        description: 'Decor',
+        quantity: 2,
+        unitPriceAmount: 50000,
+        currency: 'INR',
+        sortOrder: 0,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        version: 1,
+      },
+    ]);
+    quotationRepository.update.mockImplementation(
+      async (_t, _id, data) => ({
+        ...baseQuotation,
+        ...data,
+        version: 2,
+      }),
+    );
+
+    const result = await service.updateQuotation(
+      tenantId,
+      quotationId,
+      { taxAmount: 18000 },
+      1,
+    );
+
+    expect(result.ok).toBe(true);
+    expect(quotationRepository.update).toHaveBeenCalledWith(
+      tenantId,
+      quotationId,
+      expect.objectContaining({
+        discountAmount: 0,
+        taxAmount: 18000,
+        subtotalAmount: 100000,
+        totalAmount: 118000,
+      }),
+      1,
+    );
+  });
+
+  it('recalculates totals for combined discount and tax changes', async () => {
+    quotationRepository.findById.mockResolvedValue(baseQuotation);
+    lineItemRepository.findByQuotationId.mockResolvedValue([
+      {
+        id: 'li-1',
+        tenantId,
+        quotationId,
+        description: 'Package',
+        quantity: 1,
+        unitPriceAmount: 20000,
+        currency: 'INR',
+        sortOrder: 0,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        version: 1,
+      },
+    ]);
+    quotationRepository.update.mockImplementation(
+      async (_t, _id, data) => ({
+        ...baseQuotation,
+        ...data,
+        version: 2,
+      }),
+    );
+
+    const result = await service.updateQuotation(
+      tenantId,
+      quotationId,
+      { discountAmount: 2000, taxAmount: 3600 },
+      1,
+    );
+
+    expect(result.ok).toBe(true);
+    expect(quotationRepository.update).toHaveBeenCalledWith(
+      tenantId,
+      quotationId,
+      expect.objectContaining({
+        subtotalAmount: 20000,
+        discountAmount: 2000,
+        taxAmount: 3600,
+        totalAmount: 21600,
+      }),
+      1,
+    );
+  });
+
+  it('recalculates after line items then discount/tax (uses current lines)', async () => {
+    quotationRepository.findById.mockResolvedValue({
+      ...baseQuotation,
+      discountAmount: 0,
+      taxAmount: 0,
+      subtotalAmount: 50000,
+      totalAmount: 50000,
+    });
+    lineItemRepository.findByQuotationId.mockResolvedValue([
+      {
+        id: 'li-1',
+        tenantId,
+        quotationId,
+        description: 'A',
+        quantity: 1,
+        unitPriceAmount: 30000,
+        currency: 'INR',
+        sortOrder: 0,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        version: 1,
+      },
+      {
+        id: 'li-2',
+        tenantId,
+        quotationId,
+        description: 'B',
+        quantity: 1,
+        unitPriceAmount: 20000,
+        currency: 'INR',
+        sortOrder: 1,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        version: 1,
+      },
+    ]);
+    quotationRepository.update.mockImplementation(
+      async (_t, _id, data) => ({
+        ...baseQuotation,
+        ...data,
+        version: 3,
+      }),
+    );
+
+    const result = await service.updateQuotation(
+      tenantId,
+      quotationId,
+      { discountAmount: 5000, taxAmount: 9000 },
+      2,
+    );
+
+    expect(result.ok).toBe(true);
+    expect(quotationRepository.update).toHaveBeenCalledWith(
+      tenantId,
+      quotationId,
+      expect.objectContaining({
+        subtotalAmount: 50000,
+        totalAmount: 54000,
+      }),
+      2,
+    );
+  });
+
+  it('supports repeated discount updates with recalculation each time', async () => {
+    quotationRepository.findById.mockResolvedValue(baseQuotation);
+    lineItemRepository.findByQuotationId.mockResolvedValue([
+      {
+        id: 'li-1',
+        tenantId,
+        quotationId,
+        description: 'Decor',
+        quantity: 1,
+        unitPriceAmount: 100000,
+        currency: 'INR',
+        sortOrder: 0,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        version: 1,
+      },
+    ]);
+    quotationRepository.update.mockImplementation(
+      async (_t, _id, data, version) => ({
+        ...baseQuotation,
+        ...data,
+        version: version + 1,
+      }),
+    );
+
+    const first = await service.updateQuotation(
+      tenantId,
+      quotationId,
+      { discountAmount: 5000 },
+      1,
+    );
+    expect(first.ok).toBe(true);
+
+    quotationRepository.findById.mockResolvedValue({
+      ...baseQuotation,
+      discountAmount: 5000,
+      totalAmount: 113000,
+      version: 2,
+    });
+
+    const second = await service.updateQuotation(
+      tenantId,
+      quotationId,
+      { discountAmount: 8000 },
+      2,
+    );
+    expect(second.ok).toBe(true);
+    expect(quotationRepository.update).toHaveBeenLastCalledWith(
+      tenantId,
+      quotationId,
+      expect.objectContaining({
+        discountAmount: 8000,
+        totalAmount: 110000,
+      }),
+      2,
+    );
+  });
+
+  it('does not mutate historical non-draft quotation totals via update', async () => {
+    quotationRepository.findById.mockResolvedValue({
+      ...baseQuotation,
+      status: 'sent',
+      totalAmount: 118000,
+    });
+
+    const result = await service.updateQuotation(
+      tenantId,
+      quotationId,
+      { discountAmount: 99999 },
+      1,
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('INVALID_STATE');
+    }
+    expect(quotationRepository.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects negative discount amounts', async () => {
+    quotationRepository.findById.mockResolvedValue(baseQuotation);
+
+    const result = await service.updateQuotation(
+      tenantId,
+      quotationId,
+      { discountAmount: -1 },
+      1,
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('VALIDATION_ERROR');
+    }
+  });
+
+  it('rejects negative tax amounts', async () => {
+    quotationRepository.findById.mockResolvedValue(baseQuotation);
+
+    const result = await service.updateQuotation(
+      tenantId,
+      quotationId,
+      { taxAmount: -5 },
+      1,
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('VALIDATION_ERROR');
+    }
   });
 
   it('maps concurrent modification failures on update', async () => {

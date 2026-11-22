@@ -49,7 +49,11 @@ export class AnalyticsController {
 
   @Get('dashboard')
   @Permissions('analytics:read')
-  @ApiOperation({ summary: 'Founder BI dashboard KPIs (read-only)' })
+  @ApiOperation({
+    summary: 'Founder BI dashboard KPIs (read-only)',
+    description:
+      '`outstandingPayments` uses metric `openInvoiceNetOfInvoiceLinkedPayments` (open invoice face value − confirmed payments with invoiceId). Distinct from bookingCollectionGap and customerInvoiceOutstanding.',
+  })
   @ApiZodQuery('from', periodQuerySchema.shape.from, { required: false })
   @ApiZodQuery('to', periodQuerySchema.shape.to, { required: false })
   @ApiDataResponse(200, 'Analytics dashboard')
@@ -81,7 +85,11 @@ export class AnalyticsController {
 
   @Get('finance')
   @Permissions('analytics:read')
-  @ApiOperation({ summary: 'Financial analytics (read-only)' })
+  @ApiOperation({
+    summary: 'Financial analytics (read-only)',
+    description:
+      '`outstandingReceivables` uses metric `openInvoiceFaceValue` (sum of sent + partially_paid invoice totals; payments not subtracted).',
+  })
   @ApiZodQuery('from', periodQuerySchema.shape.from, { required: false })
   @ApiZodQuery('to', periodQuerySchema.shape.to, { required: false })
   @ApiDataResponse(200, 'Finance analytics')

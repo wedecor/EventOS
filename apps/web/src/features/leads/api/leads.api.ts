@@ -1,5 +1,9 @@
 import { apiClient } from '@/shared/api/client';
 import {
+  parseLeadIntelligence,
+  type LeadIntelligenceResponse,
+} from '../schemas/lead-intelligence.schemas';
+import {
   parseFollowUp,
   parseFollowUpList,
   parseLead,
@@ -17,7 +21,7 @@ function ifMatchHeader(version: number): Record<string, string> {
   return { 'If-Match': `"${version}"` };
 }
 
-/** Lead endpoints from frozen OpenAPI. No general PATCH /leads/:id. */
+/** Lead endpoints from frozen OpenAPI (+ M4-AI Lead Intelligence). */
 export const leadsApi = {
   async list(): Promise<Lead[]> {
     const { data } = await apiClient.get<unknown>('/api/v1/leads');
@@ -85,5 +89,14 @@ export const leadsApi = {
       { headers: ifMatchHeader(version) },
     );
     return parseFollowUp(data);
+  },
+
+  /** Read-only AI analysis — never writes lead fields. */
+  async generateIntelligence(id: string): Promise<LeadIntelligenceResponse> {
+    const { data } = await apiClient.post<unknown>(
+      `/api/v1/leads/${id}/ai/intelligence`,
+      {},
+    );
+    return parseLeadIntelligence(data);
   },
 };

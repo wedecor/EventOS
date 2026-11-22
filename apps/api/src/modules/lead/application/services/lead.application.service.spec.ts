@@ -80,6 +80,7 @@ describe('LeadApplicationService', () => {
       followUpRepository,
       advancePaymentQuery,
       eventPublisher,
+      { record: jest.fn().mockResolvedValue(undefined) } as never,
     );
   });
 

@@ -896,6 +896,406 @@
         "tags": [
           "Leads"
         ]
+      },
+      "patch": {
+        "description": "Updates mutable lead attributes. Stage changes use PATCH /leads/:id/stage. Terminal-stage leads cannot be updated. Requires If-Match version.",
+        "operationId": "LeadController_updateLead",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "description": "Resource version for optimistic concurrency (quoted integer, e.g. `\"1\"`).",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "example": "\"1\""
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "customerId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "sourceDetail": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "eventType": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "eventDate": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "start": {
+                            "type": "string",
+                            "format": "date",
+                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                          },
+                          "end": {
+                            "type": "string",
+                            "format": "date",
+                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                          }
+                        },
+                        "required": [
+                          "start",
+                          "end"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "venue": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "estimatedBudget": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "amount": {
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "currency": {
+                            "default": "INR",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "amount",
+                          "currency"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "guestCount": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "notes": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Lead updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error (`VALIDATION_ERROR`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "example": "VALIDATION_ERROR"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "description": "Optional structured details (validation issues, etc.)",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated (`INVALID_CREDENTIALS` / `UNAUTHENTICATED`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "example": "VALIDATION_ERROR"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "description": "Optional structured details (validation issues, etc.)",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden (`FORBIDDEN`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "example": "VALIDATION_ERROR"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "description": "Optional structured details (validation issues, etc.)",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found (`NOT_FOUND`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "example": "VALIDATION_ERROR"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "description": "Optional structured details (validation issues, etc.)",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict (`CONCURRENT_MODIFICATION`, `INVALID_STATE`, `DUPLICATE_*`, …)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "example": "VALIDATION_ERROR"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "description": "Optional structured details (validation issues, etc.)",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Business rule violation (`EP1-BR-001` / `002` / `003`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "example": "VALIDATION_ERROR"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "description": "Optional structured details (validation issues, etc.)",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited (`RATE_LIMITED`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "example": "VALIDATION_ERROR"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "description": "Optional structured details (validation issues, etc.)",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "Not implemented (`NOT_IMPLEMENTED`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "example": "VALIDATION_ERROR"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "description": "Optional structured details (validation issues, etc.)",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Update lead fields (non-stage)",
+        "tags": [
+          "Leads"
+        ]
       }
     },
     "/api/v1/leads/{id}/stage": {
@@ -2057,6 +2457,531 @@
           }
         ],
         "summary": "Schedule a follow-up for a lead",
+        "tags": [
+          "Leads"
+        ]
+      }
+    },
+    "/api/v1/leads/{id}/communications": {
+      "get": {
+        "operationId": "LeadController_listLeadCommunications",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lead communications listed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error (`VALIDATION_ERROR`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "example": "VALIDATION_ERROR"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "description": "Optional structured details (validation issues, etc.)",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated (`INVALID_CREDENTIALS` / `UNAUTHENTICATED`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "example": "VALIDATION_ERROR"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "description": "Optional structured details (validation issues, etc.)",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden (`FORBIDDEN`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "example": "VALIDATION_ERROR"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "description": "Optional structured details (validation issues, etc.)",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found (`NOT_FOUND`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "example": "VALIDATION_ERROR"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "description": "Optional structured details (validation issues, etc.)",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict (`CONCURRENT_MODIFICATION`, `INVALID_STATE`, `DUPLICATE_*`, …)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "example": "VALIDATION_ERROR"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "description": "Optional structured details (validation issues, etc.)",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Business rule violation (`EP1-BR-001` / `002` / `003`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "example": "VALIDATION_ERROR"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "description": "Optional structured details (validation issues, etc.)",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited (`RATE_LIMITED`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "example": "VALIDATION_ERROR"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "description": "Optional structured details (validation issues, etc.)",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "Not implemented (`NOT_IMPLEMENTED`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "example": "VALIDATION_ERROR"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "description": "Optional structured details (validation issues, etc.)",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List communications for a lead",
+        "tags": [
+          "Leads"
+        ]
+      }
+    },
+    "/api/v1/leads/{id}/ai/intelligence": {
+      "post": {
+        "description": "Analyzes authorized lead context and returns validated structured insights. Does not update the lead, create quotations, send email, or modify financial records.",
+        "operationId": "LeadController_generateLeadIntelligence",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lead intelligence generated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error (`VALIDATION_ERROR`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "example": "VALIDATION_ERROR"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "description": "Optional structured details (validation issues, etc.)",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated (`INVALID_CREDENTIALS` / `UNAUTHENTICATED`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "example": "VALIDATION_ERROR"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "description": "Optional structured details (validation issues, etc.)",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden (`FORBIDDEN`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "example": "VALIDATION_ERROR"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "description": "Optional structured details (validation issues, etc.)",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found (`NOT_FOUND`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "example": "VALIDATION_ERROR"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "description": "Optional structured details (validation issues, etc.)",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict (`CONCURRENT_MODIFICATION`, `INVALID_STATE`, `DUPLICATE_*`, …)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "example": "VALIDATION_ERROR"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "description": "Optional structured details (validation issues, etc.)",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Business rule violation (`EP1-BR-001` / `002` / `003`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "example": "VALIDATION_ERROR"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "description": "Optional structured details (validation issues, etc.)",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited (`RATE_LIMITED`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "example": "VALIDATION_ERROR"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "description": "Optional structured details (validation issues, etc.)",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "Not implemented (`NOT_IMPLEMENTED`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "example": "VALIDATION_ERROR"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "description": "Optional structured details (validation issues, etc.)",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Generate read-only Lead Intelligence (M4-AI.1)",
         "tags": [
           "Leads"
         ]
@@ -5704,6 +6629,7 @@
     },
     "/api/v1/clients/{customerId}/financial-summary": {
       "get": {
+        "description": "`outstandingBalance` uses metric `customerInvoiceOutstanding` (non-void invoiced − confirmed booking payments). Distinct from bookingCollectionGap and openInvoiceFaceValue. Draft invoices currently inflate invoiced.",
         "operationId": "CustomerIntelligenceController_financialSummary",
         "parameters": [
           {
@@ -48276,6 +49202,11 @@
                     "format": "uuid",
                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                   },
+                  "leadId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
                   "vendorId": {
                     "type": "string",
                     "format": "uuid",
@@ -48915,6 +49846,18 @@
                     ]
                   },
                   "customerId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "leadId": {
                     "anyOf": [
                       {
                         "type": "string",
@@ -55791,6 +56734,7 @@
     },
     "/api/v1/analytics/dashboard": {
       "get": {
+        "description": "`outstandingPayments` uses metric `openInvoiceNetOfInvoiceLinkedPayments` (open invoice face value − confirmed payments with invoiceId). Distinct from bookingCollectionGap and customerInvoiceOutstanding.",
         "operationId": "AnalyticsController_dashboard",
         "parameters": [
           {
@@ -56329,6 +57273,7 @@
     },
     "/api/v1/analytics/finance": {
       "get": {
+        "description": "`outstandingReceivables` uses metric `openInvoiceFaceValue` (sum of sent + partially_paid invoice totals; payments not subtracted).",
         "operationId": "AnalyticsController_finance",
         "parameters": [
           {
@@ -61284,6 +62229,7 @@
     },
     "/api/v1/dashboards/pending-payments": {
       "get": {
+        "description": "Metric `bookingCollectionGap`. Excludes cancelled bookings. Advances without bookingId are not subtracted. Distinct from customerInvoiceOutstanding and openInvoiceFaceValue.",
         "operationId": "DashboardController_getPendingPayments",
         "parameters": [],
         "responses": {
@@ -61528,7 +62474,7 @@
             "bearer": []
           }
         ],
-        "summary": "Get pending payments",
+        "summary": "Booking collection gap (quotation total − confirmed booking payments)",
         "tags": [
           "Dashboard"
         ]

@@ -30,6 +30,7 @@ import {
   type ApproveQuotationResultDto,
   type QuotationDto,
 } from '../dtos/quotation.dto';
+import { calculateQuotationTotals } from './quotation-totals.calculator';
 
 export type CreateQuotationInput = Omit<
   CreateQuotationData,
@@ -152,15 +153,58 @@ export class QuotationApplicationService {
       });
     }
 
+    if (input.discountAmount !== undefined && input.discountAmount < 0) {
+      return failure(
+        'VALIDATION_ERROR',
+        'Discount amount cannot be negative.',
+      );
+    }
+
+    if (input.taxAmount !== undefined && input.taxAmount < 0) {
+      return failure('VALIDATION_ERROR', 'Tax amount cannot be negative.');
+    }
+
+    const discountOrTaxTouched =
+      input.discountAmount !== undefined || input.taxAmount !== undefined;
+
     try {
+      if (!discountOrTaxTouched) {
+        const quotation = await this.quotationRepository.update(
+          tenantId,
+          quotationId,
+          {
+            validUntil: input.validUntil,
+            notes: input.notes,
+          },
+          version,
+        );
+        return success(toQuotationDto(quotation));
+      }
+
+      // Authoritative totals path (same formula as line-item mutations).
+      const lineItems = await this.lineItemRepository.findByQuotationId(
+        tenantId,
+        quotationId,
+      );
+      const discountAmount =
+        input.discountAmount ?? existing.discountAmount;
+      const taxAmount = input.taxAmount ?? existing.taxAmount;
+      const totals = calculateQuotationTotals({
+        lineItems,
+        discountAmount,
+        taxAmount,
+      });
+
       const quotation = await this.quotationRepository.update(
         tenantId,
         quotationId,
         {
           validUntil: input.validUntil,
           notes: input.notes,
-          discountAmount: input.discountAmount,
-          taxAmount: input.taxAmount,
+          discountAmount,
+          taxAmount,
+          subtotalAmount: totals.subtotalAmount,
+          totalAmount: totals.totalAmount,
         },
         version,
       );

@@ -5,6 +5,11 @@ import {
   success,
   type Result,
 } from '../../../../shared/application/result';
+import {
+  AUDIT_ACTIONS,
+  AUDIT_ENTITY_TYPES,
+  AuditLogService,
+} from '../../../../shared/audit';
 import { ConcurrentModificationError } from '../../../../shared/database';
 import { DomainEventPublisher } from '../../../../shared/events/domain-event.base';
 import {
@@ -60,6 +65,7 @@ export class LeadApplicationService {
     private readonly followUpRepository: FollowUpRepository,
     private readonly advancePaymentQuery: AdvancePaymentQuery,
     private readonly eventPublisher: DomainEventPublisher,
+    private readonly auditLog: AuditLogService,
   ) {}
 
   async listLeads(tenantId: string): Promise<Result<LeadDto[]>> {
@@ -113,6 +119,7 @@ export class LeadApplicationService {
     leadId: string,
     input: UpdateLeadInput,
     version: number,
+    actorId?: string,
   ): Promise<Result<LeadDto>> {
     const existing = await this.leadRepository.findById(tenantId, leadId);
     if (!existing) {
@@ -152,9 +159,37 @@ export class LeadApplicationService {
         input,
         version,
       );
-      return success(toLeadDto(lead));
+      const result = success(toLeadDto(lead));
+      if (actorId) {
+        await this.auditLog.record({
+          actorId,
+          tenantId,
+          action: AUDIT_ACTIONS.LEAD_UPDATED,
+          entityType: AUDIT_ENTITY_TYPES.LEAD,
+          entityId: leadId,
+          outcome: 'success',
+          metadata: {
+            fields: Object.keys(input).filter(
+              (key) => input[key as keyof UpdateLeadInput] !== undefined,
+            ),
+          },
+        });
+      }
+      return result;
     } catch (error: unknown) {
-      return this.handleConcurrency(error, leadId);
+      const failureResult = this.handleConcurrency<LeadDto>(error, leadId);
+      if (actorId && !failureResult.ok) {
+        await this.auditLog.record({
+          actorId,
+          tenantId,
+          action: AUDIT_ACTIONS.LEAD_UPDATED,
+          entityType: AUDIT_ENTITY_TYPES.LEAD,
+          entityId: leadId,
+          outcome: 'failure',
+          metadata: { errorCode: failureResult.error.code },
+        });
+      }
+      return failureResult;
     }
   }
 

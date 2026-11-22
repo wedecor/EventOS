@@ -66,8 +66,50 @@ export const envSchema = z
       .transform((value) => (value == null ? undefined : value === 'true')),
     MAIL_WEBHOOK_SECRET: z.string().optional(),
     MAIL_IDEMPOTENCY_WINDOW_SEC: z.coerce.number().int().positive().optional(),
+    // M4-AI — LLM provider (default test adapter; no live calls without key).
+    AI_PROVIDER: z.enum(['test', 'openai', 'none']).default('test'),
+    AI_MODEL: z.string().default('gpt-4o-mini'),
+    AI_API_KEY: z
+      .string()
+      .optional()
+      .transform((value) => {
+        const trimmed = value?.trim();
+        return trimmed && trimmed.length > 0 ? trimmed : undefined;
+      }),
+    AI_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
+    AI_MAX_RETRIES: z.coerce.number().int().min(0).max(3).default(1),
+    /** USD per 1M input tokens — optional cost estimate only. */
+    AI_INPUT_PRICE_PER_1M: z.coerce.number().nonnegative().optional(),
+    /** USD per 1M output tokens — optional cost estimate only. */
+    AI_OUTPUT_PRICE_PER_1M: z.coerce.number().nonnegative().optional(),
+    /** Max AI feature calls per user per window (0 = disabled). */
+    AI_RATE_LIMIT_PER_USER_PER_HOUR: z.coerce
+      .number()
+      .int()
+      .nonnegative()
+      .default(30),
+    /** Max AI feature calls per tenant per window (0 = disabled). */
+    AI_RATE_LIMIT_PER_TENANT_PER_HOUR: z.coerce
+      .number()
+      .int()
+      .nonnegative()
+      .default(200),
+    /** Sliding fixed window length for AI rate limits (seconds). */
+    AI_RATE_LIMIT_WINDOW_SECONDS: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(3600),
   })
   .superRefine((config, ctx) => {
+    if (config.AI_PROVIDER === 'openai' && !config.AI_API_KEY) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['AI_API_KEY'],
+        message:
+          'AI_PROVIDER=openai requires AI_API_KEY (server-side only; never expose to clients).',
+      });
+    }
     // R1-06 (docs/14 §CORS: "No wildcard origins in production"; docs/16
     // §Environment Variables: "CORS_ORIGIN | All | Allowed CORS origin(s)") —
     // `development` keeps the permissive `*` default so local dev keeps

@@ -10,6 +10,7 @@ describe('CommunicationApplicationService', () => {
     findAll: jest.Mock;
     findByBookingId: jest.Mock;
     findByCustomerId: jest.Mock;
+    findByLeadId: jest.Mock;
     findByQuotationId: jest.Mock;
     findByInvoiceId: jest.Mock;
     update: jest.Mock;
@@ -25,6 +26,7 @@ describe('CommunicationApplicationService', () => {
   let customerRepository: { findById: jest.Mock };
   let vendorRepository: { findById: jest.Mock };
   let staffMemberRepository: { findById: jest.Mock };
+  let leadRepository: { findById: jest.Mock };
 
   beforeEach(() => {
     recordRepository = {
@@ -33,6 +35,7 @@ describe('CommunicationApplicationService', () => {
       findAll: jest.fn(),
       findByBookingId: jest.fn(),
       findByCustomerId: jest.fn(),
+      findByLeadId: jest.fn(),
       findByQuotationId: jest.fn(),
       findByInvoiceId: jest.fn(),
       update: jest.fn(),
@@ -48,15 +51,17 @@ describe('CommunicationApplicationService', () => {
     customerRepository = { findById: jest.fn() };
     vendorRepository = { findById: jest.fn() };
     staffMemberRepository = { findById: jest.fn() };
+    leadRepository = { findById: jest.fn() };
 
     service = new CommunicationApplicationService(
-      recordRepository,
-      attachmentRepository,
+      recordRepository as never,
+      attachmentRepository as never,
       templateRepository as never,
       eventRepository as never,
       customerRepository as never,
       vendorRepository as never,
       staffMemberRepository as never,
+      leadRepository as never,
     );
   });
 
@@ -66,6 +71,7 @@ describe('CommunicationApplicationService', () => {
       tenantId,
       bookingId: null,
       customerId: null,
+      leadId: null,
       vendorId: null,
       staffMemberId: null,
       templateId: null,
@@ -352,6 +358,159 @@ describe('CommunicationApplicationService', () => {
     expect(bad.ok).toBe(false);
     if (!bad.ok) {
       expect(bad.error.code).toBe('VALIDATION_ERROR');
+    }
+  });
+
+  it('associates a communication with a lead when leadId is valid', async () => {
+    leadRepository.findById.mockResolvedValue({ id: 'lead-1' });
+    recordRepository.create.mockResolvedValue({
+      id: 'comm-lead',
+      tenantId,
+      bookingId: null,
+      customerId: null,
+      leadId: 'lead-1',
+      vendorId: null,
+      staffMemberId: null,
+      templateId: null,
+      quotationId: null,
+      invoiceId: null,
+      channel: 'whatsapp',
+      direction: 'outgoing',
+      status: 'draft',
+      subject: null,
+      body: 'Hi',
+      recipientAddress: null,
+      provider: null,
+      providerMessageId: null,
+      failureReason: null,
+      createdByUserId: 'user-1',
+      occurredAt: new Date(),
+      sentAt: null,
+      deliveredAt: null,
+      readAt: null,
+      failedAt: null,
+      deletedAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      version: 1,
+    });
+
+    const result = await service.create(tenantId, {
+      channel: 'whatsapp',
+      direction: 'outgoing',
+      leadId: 'lead-1',
+      body: 'Hi',
+      createdByUserId: 'user-1',
+    });
+
+    expect(result.ok).toBe(true);
+    expect(recordRepository.create).toHaveBeenCalledWith(
+      tenantId,
+      expect.objectContaining({ leadId: 'lead-1' }),
+    );
+    if (result.ok) {
+      expect(result.value.leadId).toBe('lead-1');
+    }
+  });
+
+  it('rejects lead association when lead is not in tenant scope', async () => {
+    leadRepository.findById.mockResolvedValue(null);
+
+    const result = await service.create(tenantId, {
+      channel: 'email',
+      direction: 'outgoing',
+      leadId: 'missing-lead',
+      body: 'Hi',
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('NOT_FOUND');
+    }
+    expect(recordRepository.create).not.toHaveBeenCalled();
+  });
+
+  it('lists lead communications and keeps null leadId records out of that list', async () => {
+    leadRepository.findById.mockResolvedValue({ id: 'lead-1' });
+    recordRepository.findByLeadId.mockResolvedValue([
+      {
+        id: 'comm-with-lead',
+        tenantId,
+        bookingId: null,
+        customerId: null,
+        leadId: 'lead-1',
+        vendorId: null,
+        staffMemberId: null,
+        templateId: null,
+        quotationId: null,
+        invoiceId: null,
+        channel: 'email',
+        direction: 'outgoing',
+        status: 'draft',
+        subject: null,
+        body: 'linked',
+        recipientAddress: null,
+        provider: null,
+        providerMessageId: null,
+        failureReason: null,
+        createdByUserId: null,
+        occurredAt: new Date(),
+        sentAt: null,
+        deliveredAt: null,
+        readAt: null,
+        failedAt: null,
+        deletedAt: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        version: 1,
+      },
+    ]);
+
+    const listed = await service.listByLead(tenantId, 'lead-1');
+    expect(listed.ok).toBe(true);
+    if (listed.ok) {
+      expect(listed.value).toHaveLength(1);
+      expect(listed.value[0].leadId).toBe('lead-1');
+    }
+
+    // Historical rows with null leadId remain listable via listAll.
+    recordRepository.findAll.mockResolvedValue([
+      {
+        id: 'comm-legacy',
+        tenantId,
+        bookingId: null,
+        customerId: null,
+        leadId: null,
+        vendorId: null,
+        staffMemberId: null,
+        templateId: null,
+        quotationId: null,
+        invoiceId: null,
+        channel: 'email',
+        direction: 'outgoing',
+        status: 'draft',
+        subject: null,
+        body: 'legacy',
+        recipientAddress: null,
+        provider: null,
+        providerMessageId: null,
+        failureReason: null,
+        createdByUserId: null,
+        occurredAt: new Date(),
+        sentAt: null,
+        deliveredAt: null,
+        readAt: null,
+        failedAt: null,
+        deletedAt: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        version: 1,
+      },
+    ]);
+    const all = await service.listAll(tenantId);
+    expect(all.ok).toBe(true);
+    if (all.ok) {
+      expect(all.value[0].leadId).toBeNull();
     }
   });
 });

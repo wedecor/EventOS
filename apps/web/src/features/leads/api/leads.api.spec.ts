@@ -103,4 +103,46 @@ describe('leadsApi', () => {
       dueAt: '2026-07-20T10:00:00.000Z',
     });
   });
+
+  it('generates read-only lead intelligence', async () => {
+    const { leadsApi } = await import('./leads.api');
+    post.mockResolvedValue({
+      data: {
+        data: {
+          leadId: 'l1',
+          generatedAt: '2026-11-12T00:00:00.000Z',
+          promptVersion: 'lead-intelligence.v1',
+          provider: 'test',
+          model: 'test-model',
+          usage: {
+            promptTokens: 1,
+            completionTokens: 1,
+            totalTokens: 2,
+            estimatedCostUsd: null,
+          },
+          intelligence: {
+            summary: 'Sparse lead',
+            eventType: { value: null, evidence: 'unknown' },
+            eventDate: {
+              start: { value: null, evidence: 'unknown' },
+              end: { value: null, evidence: 'unknown' },
+            },
+            venue: { value: null, evidence: 'unknown' },
+            budget: { value: null, evidence: 'unknown' },
+            guestCount: { value: null, evidence: 'unknown' },
+            knownRequirements: [],
+            missingInformation: ['eventType'],
+            suggestedQualificationQuestions: ['What is the event type?'],
+            suggestedFollowUpPriority: 'high',
+            confidenceNotes: null,
+          },
+          readOnly: true,
+        },
+      },
+    });
+
+    const result = await leadsApi.generateIntelligence('l1');
+    expect(result.readOnly).toBe(true);
+    expect(post).toHaveBeenCalledWith('/api/v1/leads/l1/ai/intelligence', {});
+  });
 });

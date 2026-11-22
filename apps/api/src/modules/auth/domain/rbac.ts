@@ -122,6 +122,8 @@ export const PERMISSIONS = [
   'suggestions:dismiss',
   'settings:read',
   'settings:write',
+  // M4-AI — invoke AI features (compose with domain read perms, e.g. leads:read)
+  'ai:use',
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
@@ -163,6 +165,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'calendar:read',
     'analytics:read',
     'dashboards:read',
+    'ai:use',
   ],
 
   sales: [
@@ -173,6 +176,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'quotations:read',
     'quotations:write',
     'quotations:send',
+    'ai:use',
   ],
 
   operations_manager: [

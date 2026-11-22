@@ -4,6 +4,11 @@ type Json = Record<string, unknown>;
 
 let cachedToken: string | null = null;
 
+/** Clear cached bearer token (e.g. after role changes in E2E). */
+export function clearApiAuthCache(): void {
+  cachedToken = null;
+}
+
 async function loginToken(): Promise<string> {
   if (cachedToken) return cachedToken;
   const { email, password } = requireE2eCredentials();

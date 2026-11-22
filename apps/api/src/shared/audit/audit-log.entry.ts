@@ -29,6 +29,8 @@ export const AUDIT_ACTIONS = {
   PAYMENT_RECORDED: 'payment.recorded',
   VENDOR_EXPENSE_CREATED: 'vendor_expense.created',
   INTEGRATION_SETTINGS_UPDATED: 'integration.settings_updated',
+  LEAD_UPDATED: 'lead.updated',
+  LEAD_AI_INTELLIGENCE: 'lead.ai_intelligence',
 } as const;
 
 export const AUDIT_ENTITY_TYPES = {
@@ -38,4 +40,5 @@ export const AUDIT_ENTITY_TYPES = {
   PAYMENT: 'Payment',
   VENDOR_EXPENSE: 'VendorExpense',
   INTEGRATION_SETTINGS: 'IntegrationSettings',
+  LEAD: 'Lead',
 } as const;

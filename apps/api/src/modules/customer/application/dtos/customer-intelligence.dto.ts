@@ -95,8 +95,14 @@ export type CustomerFinancialSummaryDto = {
   customerId: string;
   currency: string;
   totalQuoted: number;
+  /** Sum of invoice totals where status !== void (draft included). */
   totalInvoiced: number;
+  /** Confirmed payments on the customer's bookings. */
   totalPaid: number;
+  /**
+   * Metric `customerInvoiceOutstanding` = max(0, totalInvoiced − totalPaid).
+   * Not the same as bookingCollectionGap or openInvoiceFaceValue.
+   */
   outstandingBalance: number;
   quotationCount: number;
   invoiceCount: number;

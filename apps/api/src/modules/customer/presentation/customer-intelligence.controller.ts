@@ -108,7 +108,11 @@ export class CustomerIntelligenceController {
 
   @Get('financial-summary')
   @Permissions('clients:read')
-  @ApiOperation({ summary: 'Customer financial summary (read-only)' })
+  @ApiOperation({
+    summary: 'Customer financial summary (read-only)',
+    description:
+      '`outstandingBalance` uses metric `customerInvoiceOutstanding` (non-void invoiced − confirmed booking payments). Distinct from bookingCollectionGap and openInvoiceFaceValue. Draft invoices currently inflate invoiced.',
+  })
   @ApiUuidParam('customerId')
   @ApiDataResponse(200, 'Customer financial summary')
   @ApiStandardErrors()

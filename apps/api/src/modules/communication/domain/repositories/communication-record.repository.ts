@@ -9,6 +9,7 @@ export type CommunicationRecordRecord = {
   tenantId: string;
   bookingId: string | null;
   customerId: string | null;
+  leadId: string | null;
   vendorId: string | null;
   staffMemberId: string | null;
   templateId: string | null;
@@ -38,6 +39,7 @@ export type CommunicationRecordRecord = {
 export type CreateCommunicationRecordData = {
   bookingId?: string | null;
   customerId?: string | null;
+  leadId?: string | null;
   vendorId?: string | null;
   staffMemberId?: string | null;
   templateId?: string | null;
@@ -65,6 +67,7 @@ export type UpdateCommunicationRecordData = {
   body?: string | null;
   bookingId?: string | null;
   customerId?: string | null;
+  leadId?: string | null;
   vendorId?: string | null;
   staffMemberId?: string | null;
   templateId?: string | null;
@@ -107,6 +110,12 @@ export abstract class CommunicationRecordRepository {
   abstract findByCustomerId(
     tenantId: string,
     customerId: string,
+    options?: { includeDeleted?: boolean },
+  ): Promise<CommunicationRecordRecord[]>;
+
+  abstract findByLeadId(
+    tenantId: string,
+    leadId: string,
     options?: { includeDeleted?: boolean },
   ): Promise<CommunicationRecordRecord[]>;
 

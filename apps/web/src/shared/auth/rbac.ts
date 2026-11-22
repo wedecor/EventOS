@@ -92,6 +92,7 @@ export const PERMISSIONS = [
   'suggestions:dismiss',
   'settings:read',
   'settings:write',
+  'ai:use',
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
@@ -127,6 +128,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'calendar:read',
     'analytics:read',
     'dashboards:read',
+    'ai:use',
   ],
   sales: [
     'leads:read',
@@ -136,6 +138,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'quotations:read',
     'quotations:write',
     'quotations:send',
+    'ai:use',
   ],
   operations_manager: [
     'leads:read',

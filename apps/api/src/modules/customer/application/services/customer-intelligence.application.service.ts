@@ -4,6 +4,7 @@ import {
   success,
   type Result,
 } from '../../../../shared/application/result';
+import { computeCustomerInvoiceOutstanding } from '../../../../shared/finance/outstanding-balance.definitions';
 import { EventRepository } from '../../../booking/domain/repositories/event.repository';
 import { CommunicationRecordRepository } from '../../../communication/domain/repositories/communication-record.repository';
 import { ReminderRepository } from '../../../communication/domain/repositories/reminder.repository';
@@ -620,13 +621,19 @@ export class CustomerIntelligenceApplicationService {
       confirmedPayments[0]?.currency ??
       'INR';
 
+    // Metric: customerInvoiceOutstanding (void excluded; draft included).
+    const outstandingBalance = computeCustomerInvoiceOutstanding({
+      totalInvoiced,
+      totalPaidOnBookings: totalPaid,
+    });
+
     return success({
       customerId,
       currency,
       totalQuoted,
       totalInvoiced,
       totalPaid,
-      outstandingBalance: Math.max(0, totalInvoiced - totalPaid),
+      outstandingBalance,
       quotationCount: quotations.length,
       invoiceCount: activeInvoices.length,
       paymentCount: confirmedPayments.length,

@@ -67,6 +67,34 @@ export default (): EnvConfig & { redisUrl: string } => {
     MAIL_IDEMPOTENCY_WINDOW_SEC: process.env.MAIL_IDEMPOTENCY_WINDOW_SEC
       ? Number(process.env.MAIL_IDEMPOTENCY_WINDOW_SEC)
       : undefined,
+    AI_PROVIDER:
+      (process.env.AI_PROVIDER as EnvConfig['AI_PROVIDER']) ?? 'test',
+    AI_MODEL: process.env.AI_MODEL ?? 'gpt-4o-mini',
+    AI_API_KEY: process.env.AI_API_KEY?.trim()
+      ? process.env.AI_API_KEY.trim()
+      : undefined,
+    AI_TIMEOUT_MS: process.env.AI_TIMEOUT_MS
+      ? Number(process.env.AI_TIMEOUT_MS)
+      : 30_000,
+    AI_MAX_RETRIES: process.env.AI_MAX_RETRIES
+      ? Number(process.env.AI_MAX_RETRIES)
+      : 1,
+    AI_INPUT_PRICE_PER_1M: process.env.AI_INPUT_PRICE_PER_1M
+      ? Number(process.env.AI_INPUT_PRICE_PER_1M)
+      : undefined,
+    AI_OUTPUT_PRICE_PER_1M: process.env.AI_OUTPUT_PRICE_PER_1M
+      ? Number(process.env.AI_OUTPUT_PRICE_PER_1M)
+      : undefined,
+    AI_RATE_LIMIT_PER_USER_PER_HOUR: process.env.AI_RATE_LIMIT_PER_USER_PER_HOUR
+      ? Number(process.env.AI_RATE_LIMIT_PER_USER_PER_HOUR)
+      : 30,
+    AI_RATE_LIMIT_PER_TENANT_PER_HOUR: process.env
+      .AI_RATE_LIMIT_PER_TENANT_PER_HOUR
+      ? Number(process.env.AI_RATE_LIMIT_PER_TENANT_PER_HOUR)
+      : 200,
+    AI_RATE_LIMIT_WINDOW_SECONDS: process.env.AI_RATE_LIMIT_WINDOW_SECONDS
+      ? Number(process.env.AI_RATE_LIMIT_WINDOW_SECONDS)
+      : 3600,
     redisUrl: `redis://${redisAuth}${redisHost}:${redisPort}`,
   };
 };

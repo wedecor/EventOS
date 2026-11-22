@@ -48,6 +48,7 @@ import {
   type Lead,
   type ScheduleFollowUpFormValues,
 } from '../schemas/lead.schemas';
+import { LeadIntelligencePanel } from './lead-intelligence-panel';
 
 function DetailField({ label, value }: { label: string; value: string }) {
   return (
@@ -454,6 +455,10 @@ export function LeadDetailPage() {
                   />
                 </dl>
               </ContentCard>
+            </PageSection>
+
+            <PageSection>
+              <LeadIntelligencePanel leadId={query.data.id} />
             </PageSection>
 
             <PageSection>

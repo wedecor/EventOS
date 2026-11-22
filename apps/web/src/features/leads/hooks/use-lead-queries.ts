@@ -13,6 +13,7 @@ export const leadKeys = {
   list: () => [...leadKeys.all, 'list'] as const,
   detail: (id: string) => [...leadKeys.all, 'detail', id] as const,
   followUps: (id: string) => [...leadKeys.all, 'follow-ups', id] as const,
+  intelligence: (id: string) => [...leadKeys.all, 'intelligence', id] as const,
 };
 
 export function useLeadsQuery() {
@@ -115,6 +116,16 @@ export function useUpdateFollowUpMutation(leadId: string) {
       void queryClient.invalidateQueries({
         queryKey: leadKeys.followUps(leadId),
       });
+    },
+  });
+}
+
+export function useGenerateLeadIntelligenceMutation(leadId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => leadsApi.generateIntelligence(leadId),
+    onSuccess: (data) => {
+      queryClient.setQueryData(leadKeys.intelligence(leadId), data);
     },
   });
 }

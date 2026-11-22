@@ -199,9 +199,14 @@ export class DashboardController {
     return resultToResponse(result);
   }
 
-  // EP1-FIN-003 — Pending payments (I3)
+  // EP1-FIN-003 — Booking collection gap (metricId: bookingCollectionGap)
   @Get('pending-payments')
-  @ApiOperation({ summary: 'Get pending payments' })
+  @ApiOperation({
+    summary:
+      'Booking collection gap (quotation total − confirmed booking payments)',
+    description:
+      'Metric `bookingCollectionGap`. Excludes cancelled bookings. Advances without bookingId are not subtracted. Distinct from customerInvoiceOutstanding and openInvoiceFaceValue.',
+  })
   @ApiDataResponse(200, 'Pending payments retrieved')
   @ApiStandardErrors()
   async getPendingPayments(@TenantId() tenantId: string) {

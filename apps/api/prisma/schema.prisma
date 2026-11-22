@@ -51,6 +51,7 @@ model Tenant {
   reminders Reminder[]
   notificationPreferences NotificationPreference[]
   auditLogs          AuditLog[]
+  aiExecutions       AiExecution[]
   passwordHistory    PasswordHistory[]
   timelineEntries    TimelineEntry[]
   contacts           Contact[]
@@ -117,6 +118,7 @@ model User {
   assignedReminders Reminder[] @relation("ReminderAssignedTo")
   notificationPreferences NotificationPreference[]
   uploadedStoredDocuments StoredDocument[] @relation("StoredDocumentUploadedBy")
+  aiExecutions AiExecution[] @relation("AiExecutionUser")
 
   @@unique([tenantId, email])
   @@index([tenantId])
@@ -187,6 +189,44 @@ model AuditLog {
   @@index([tenantId, entityType, entityId])
   @@index([tenantId, createdAt])
   @@map("audit_logs")
+}
+
+/// M4-AI — metadata-only AI execution log (no raw prompts / customer message bodies).
+enum AiExecutionStatus {
+  success
+  failure
+
+  @@map("ai_execution_status")
+}
+
+model AiExecution {
+  id               String            @id @default(uuid()) @db.Uuid
+  tenantId         String            @map("tenant_id") @db.Uuid
+  userId           String            @map("user_id") @db.Uuid
+  leadId           String?           @map("lead_id") @db.Uuid
+  feature          String
+  provider         String
+  model            String
+  promptVersion    String            @map("prompt_version")
+  status           AiExecutionStatus
+  promptTokens     Int?              @map("prompt_tokens")
+  completionTokens Int?              @map("completion_tokens")
+  totalTokens      Int?              @map("total_tokens")
+  estimatedCostUsd Decimal?          @map("estimated_cost_usd") @db.Decimal(12, 6)
+  durationMs       Int?              @map("duration_ms")
+  correlationId    String?           @map("correlation_id")
+  failureCategory  String?           @map("failure_category")
+  createdAt        DateTime          @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  user   User   @relation("AiExecutionUser", fields: [userId], references: [id], onDelete: Restrict)
+  lead   Lead?  @relation(fields: [leadId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, feature, createdAt])
+  @@index([tenantId, leadId, createdAt])
+  @@index([tenantId, userId, createdAt])
+  @@map("ai_executions")
 }
 
 // ---------------------------------------------------------------------------
@@ -447,6 +487,8 @@ model Lead {
   followUps     FollowUp[]
   stageHistory  LeadStageHistory[]
   quotations    Quotation[]
+  communicationRecords CommunicationRecord[]
+  aiExecutions  AiExecution[]
 
   @@index([tenantId, stage])
   @@index([tenantId, assignedToId])
@@ -1998,6 +2040,7 @@ model CommunicationRecord {
   tenantId         String                  @map("tenant_id") @db.Uuid
   bookingId        String?                 @map("booking_id") @db.Uuid
   customerId       String?                 @map("customer_id") @db.Uuid
+  leadId           String?                 @map("lead_id") @db.Uuid
   vendorId         String?                 @map("vendor_id") @db.Uuid
   staffMemberId    String?                 @map("staff_member_id") @db.Uuid
   templateId       String?                 @map("template_id") @db.Uuid
@@ -2026,6 +2069,7 @@ model CommunicationRecord {
   tenant      Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   booking     Event?                   @relation(fields: [bookingId], references: [id], onDelete: SetNull)
   customer    Customer?                @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  lead        Lead?                    @relation(fields: [leadId], references: [id], onDelete: SetNull)
   vendor      Vendor?                  @relation(fields: [vendorId], references: [id], onDelete: SetNull)
   staffMember StaffMember?             @relation(fields: [staffMemberId], references: [id], onDelete: SetNull)
   template    CommunicationTemplate?   @relation(fields: [templateId], references: [id], onDelete: SetNull)
@@ -2037,6 +2081,7 @@ model CommunicationRecord {
 
   @@index([tenantId, bookingId, occurredAt])
   @@index([tenantId, customerId, occurredAt])
+  @@index([tenantId, leadId, occurredAt])
   @@index([tenantId, quotationId, occurredAt])
   @@index([tenantId, invoiceId, occurredAt])
   @@index([tenantId, status, deletedAt])

@@ -6,6 +6,7 @@ export type CommunicationDto = {
   tenantId: string;
   bookingId: string | null;
   customerId: string | null;
+  leadId: string | null;
   vendorId: string | null;
   staffMemberId: string | null;
   templateId: string | null;

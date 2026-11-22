@@ -24,7 +24,7 @@ Host Homebrew Postgres already owns `127.0.0.1:5432`, so the default `eventos-po
 | PostgreSQL 16 | `eventos-postgres-e2e` | **55432** | DB name `eventos_e2e` |
 | Redis 7 | `eventos-redis-e2e` | **56379** | No persistence (`--save ''`) |
 | API (Nest) | host process | **3100** | Avoids port 3000 (WeDecor Reels) |
-| Web (Next) | host process | **3101** | Avoids conflicting apps |
+| Web (static export) | `serve out -l 3101` | **3101** | Serve `apps/web/out/` only — **never** `next start` (static `output: 'export'`) |
 
 Compose file: `infrastructure/docker/docker-compose.e2e.yml`
 

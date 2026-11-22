@@ -28,6 +28,8 @@ import { FinancialDocumentAuditEventRepository } from './finance/domain/reposito
 import { FinancialDocumentAuditEventRepositoryImpl } from './finance/infrastructure/persistence/financial-document-audit-event.repository.impl';
 import { CommunicationAttachmentRepository } from './communication/domain/repositories/communication-attachment.repository';
 import { CommunicationAttachmentRepositoryImpl } from './communication/infrastructure/persistence/communication-attachment.repository.impl';
+import { AiExecutionRepository } from './ai/domain/repositories/ai-execution.repository';
+import { AiExecutionRepositoryImpl } from './ai/infrastructure/persistence/ai-execution.repository.impl';
 import { CommunicationRecordRepository } from './communication/domain/repositories/communication-record.repository';
 import { CommunicationRecordRepositoryImpl } from './communication/infrastructure/persistence/communication-record.repository.impl';
 import { CommunicationTemplateRepository } from './communication/domain/repositories/communication-template.repository';
@@ -268,6 +270,10 @@ import { IntegrationSettingsRepositoryImpl } from './integrations/infrastructure
       provide: IntegrationSettingsRepository,
       useClass: IntegrationSettingsRepositoryImpl,
     },
+    {
+      provide: AiExecutionRepository,
+      useClass: AiExecutionRepositoryImpl,
+    },
   ],
   exports: [
     SuggestionRepository,
@@ -320,6 +326,7 @@ import { IntegrationSettingsRepositoryImpl } from './integrations/infrastructure
     NotificationPreferenceRepository,
     StoredDocumentRepository,
     IntegrationSettingsRepository,
+    AiExecutionRepository,
   ],
 })
 export class RepositoriesModule {}

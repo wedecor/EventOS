@@ -4,6 +4,10 @@ import { AdvancePaymentQuery } from '../shared/application/ports/advance-payment
 import { PrismaAdvancePaymentQuery } from '../shared/application/ports/advance-payment.query.impl';
 import { DomainEventPublisher } from '../shared/events/domain-event.base';
 import { NestDomainEventPublisher } from '../shared/events/domain-event.publisher';
+import { LlmModule } from '../shared/llm';
+import { AiUsageThrottleService } from './ai/application/services/ai-usage-throttle.service';
+import { LeadIntelligenceApplicationService } from './ai/application/services/lead-intelligence.application.service';
+import { LeadIntelligenceContextBuilder } from './ai/application/services/lead-intelligence-context.builder';
 import { SuggestionApplicationService } from './admin/application/services/suggestion.application.service';
 import { BookingApplicationService } from './booking/application/services/booking.application.service';
 import { ExecutionProgressService } from './booking/application/services/execution-progress.service';
@@ -58,8 +62,11 @@ import { VendorProcurementApplicationService } from './vendor/application/servic
 import { RepositoriesModule } from './repositories.module';
 
 @Module({
-  imports: [RepositoriesModule, AuditModule],
+  imports: [RepositoriesModule, AuditModule, LlmModule],
   providers: [
+    AiUsageThrottleService,
+    LeadIntelligenceContextBuilder,
+    LeadIntelligenceApplicationService,
     LeadApplicationService,
     CustomerApplicationService,
     ContactApplicationService,
@@ -115,6 +122,9 @@ import { RepositoriesModule } from './repositories.module';
     AnalyticsApplicationService,
   ],
   exports: [
+    AiUsageThrottleService,
+    LeadIntelligenceContextBuilder,
+    LeadIntelligenceApplicationService,
     LeadApplicationService,
     CustomerApplicationService,
     ContactApplicationService,

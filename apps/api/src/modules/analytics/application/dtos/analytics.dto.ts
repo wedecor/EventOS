@@ -11,6 +11,7 @@ export type MoneyAmountDto = {
 export type AnalyticsDashboardDto = {
   currency: string;
   totalRevenue: MoneyAmountDto;
+  /** Metric openInvoiceNetOfInvoiceLinkedPayments — not bookingCollectionGap. */
   outstandingPayments: MoneyAmountDto;
   monthlyRevenue: MoneyAmountDto;
   monthlyProfit: MoneyAmountDto;
@@ -49,6 +50,7 @@ export type AnalyticsFinanceDto = {
   revenue: MoneyAmountDto;
   expenses: MoneyAmountDto;
   grossProfit: MoneyAmountDto;
+  /** Metric openInvoiceFaceValue — payments not subtracted. */
   outstandingReceivables: MoneyAmountDto;
   procurementSpend: MoneyAmountDto;
   paymentCollectionTrend: Array<{

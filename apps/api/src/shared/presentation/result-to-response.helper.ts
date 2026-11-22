@@ -23,6 +23,8 @@ const ERROR_CODE_TO_STATUS: Record<string, HttpStatus> = {
   'EP1-BR-001': HttpStatus.UNPROCESSABLE_ENTITY,
   'EP1-BR-002': HttpStatus.UNPROCESSABLE_ENTITY,
   'EP1-BR-003': HttpStatus.UNPROCESSABLE_ENTITY,
+  // M4-AI — upstream LLM / provider failures
+  EXTERNAL_SERVICE_ERROR: HttpStatus.BAD_GATEWAY,
 };
 
 function toHttpStatus(code: string): HttpStatus {

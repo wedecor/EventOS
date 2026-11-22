@@ -4,6 +4,10 @@ import {
   success,
   type Result,
 } from '../../../../shared/application/result';
+import {
+  computeOpenInvoiceFaceValue,
+  computeOpenInvoiceNetOfInvoiceLinkedPayments,
+} from '../../../../shared/finance/outstanding-balance.definitions';
 import { EventRepository } from '../../../booking/domain/repositories/event.repository';
 import { CommunicationRecordRepository } from '../../../communication/domain/repositories/communication-record.repository';
 import { ReminderRepository } from '../../../communication/domain/repositories/reminder.repository';
@@ -267,9 +271,8 @@ export class AnalyticsApplicationService {
       )
       .reduce((s, p) => s + p.amount, 0);
 
-    const outstanding = invoices
-      .filter((i) => i.status === 'sent' || i.status === 'partially_paid')
-      .reduce((s, i) => s + i.totalAmount, 0);
+    // Metric: openInvoiceFaceValue / openInvoiceNetOfInvoiceLinkedPayments
+    const outstanding = computeOpenInvoiceFaceValue(invoices);
     const paidAgainstOpen = confirmedPayments
       .filter((p) => p.invoiceId != null)
       .reduce((s, p) => s + p.amount, 0);
@@ -321,7 +324,12 @@ export class AnalyticsApplicationService {
     return success({
       currency: CURRENCY,
       totalRevenue: money(totalRevenue),
-      outstandingPayments: money(Math.max(0, outstanding - paidAgainstOpen)),
+      outstandingPayments: money(
+        computeOpenInvoiceNetOfInvoiceLinkedPayments({
+          openInvoiceFaceValue: outstanding,
+          confirmedInvoiceLinkedPaymentsAmount: paidAgainstOpen,
+        }),
+      ),
       monthlyRevenue: money(monthlyRevenue),
       monthlyProfit: money(monthlyRevenue - monthlyExpenses),
       monthlyExpenses: money(monthlyExpenses),
@@ -460,9 +468,8 @@ export class AnalyticsApplicationService {
       .filter((e) => inRange(e.paidAt, from, to))
       .reduce((s, e) => s + e.amount, 0);
 
-    const outstanding = invoices
-      .filter((i) => i.status === 'sent' || i.status === 'partially_paid')
-      .reduce((s, i) => s + i.totalAmount, 0);
+    // Metric: openInvoiceFaceValue (payments not subtracted on finance view).
+    const outstanding = computeOpenInvoiceFaceValue(invoices);
 
     const months = new Set<string>();
     for (const p of confirmedPayments) months.add(toMonthKey(p.receivedAt));

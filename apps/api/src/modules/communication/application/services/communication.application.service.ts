@@ -12,6 +12,7 @@ import {
 import { ConcurrentModificationError } from '../../../../shared/database';
 import { EventRepository } from '../../../booking/domain/repositories/event.repository';
 import { CustomerRepository } from '../../../customer/domain/repositories/customer.repository';
+import { LeadRepository } from '../../../lead/domain/repositories/lead.repository';
 import { StaffMemberRepository } from '../../../staff/domain/repositories/staff-member.repository';
 import { VendorRepository } from '../../../vendor/domain/repositories/vendor.repository';
 import { CommunicationAttachmentRepository } from '../../domain/repositories/communication-attachment.repository';
@@ -27,6 +28,7 @@ import {
 export type CreateCommunicationInput = {
   bookingId?: string | null;
   customerId?: string | null;
+  leadId?: string | null;
   vendorId?: string | null;
   staffMemberId?: string | null;
   templateId?: string | null;
@@ -44,6 +46,7 @@ export type UpdateCommunicationInput = {
   body?: string | null;
   bookingId?: string | null;
   customerId?: string | null;
+  leadId?: string | null;
   vendorId?: string | null;
   staffMemberId?: string | null;
   templateId?: string | null;
@@ -89,6 +92,7 @@ export class CommunicationApplicationService {
     private readonly customerRepository: CustomerRepository,
     private readonly vendorRepository: VendorRepository,
     private readonly staffMemberRepository: StaffMemberRepository,
+    private readonly leadRepository: LeadRepository,
   ) {}
 
   async create(
@@ -117,6 +121,7 @@ export class CommunicationApplicationService {
     const record = await this.recordRepository.create(tenantId, {
       bookingId: input.bookingId,
       customerId: input.customerId,
+      leadId: input.leadId,
       vendorId: input.vendorId,
       staffMemberId: input.staffMemberId,
       templateId: input.templateId,
@@ -185,6 +190,18 @@ export class CommunicationApplicationService {
     return success(rows.map(toCommunicationDto));
   }
 
+  async listByLead(
+    tenantId: string,
+    leadId: string,
+  ): Promise<Result<CommunicationDto[]>> {
+    const lead = await this.leadRepository.findById(tenantId, leadId);
+    if (!lead) {
+      return failure('NOT_FOUND', 'Lead not found.');
+    }
+    const rows = await this.recordRepository.findByLeadId(tenantId, leadId);
+    return success(rows.map(toCommunicationDto));
+  }
+
   async updateMetadata(
     tenantId: string,
     id: string,
@@ -212,6 +229,7 @@ export class CommunicationApplicationService {
           body: input.body,
           bookingId: input.bookingId,
           customerId: input.customerId,
+          leadId: input.leadId,
           vendorId: input.vendorId,
           staffMemberId: input.staffMemberId,
           templateId: input.templateId,
@@ -405,6 +423,7 @@ export class CommunicationApplicationService {
     input: {
       bookingId?: string | null;
       customerId?: string | null;
+      leadId?: string | null;
       vendorId?: string | null;
       staffMemberId?: string | null;
       templateId?: string | null;
@@ -428,6 +447,12 @@ export class CommunicationApplicationService {
       );
       if (!customer) {
         return failure('NOT_FOUND', 'Customer not found.');
+      }
+    }
+    if (input.leadId) {
+      const lead = await this.leadRepository.findById(tenantId, input.leadId);
+      if (!lead) {
+        return failure('NOT_FOUND', 'Lead not found.');
       }
     }
     if (input.vendorId) {
