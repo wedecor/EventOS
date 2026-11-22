@@ -40,10 +40,20 @@ Confirm **RPO &lt; 1h** / **RTO &lt; 4h** targets still apply for SEV-1.
 - [ ] Verify TCP connect + `SELECT 1`
 - [ ] Spot-check row counts / critical tables (see restore-verification-checklist)
 
+### 4.2a Cloud SQL (GCP, M5-01)
+
+- [ ] `gcloud run services update-traffic eventos-api-<env> --to-revisions <known-good>=100` or scale to 0 to stop writes
+- [ ] Choose `RESTORE_TS` (UTC) inside the 7-day PITR window, or a daily backup (`gcloud sql backups list --instance=eventos-pg`)
+- [ ] `gcloud sql instances clone eventos-pg eventos-pg-restore-<date> --point-in-time=<RESTORE_TS>` (never overwrite the live instance first)
+- [ ] Verify with the restore verification checklist (`SELECT 1`, `_prisma_migrations`, critical row counts)
+- [ ] Add a new `eventos-<env>-database-url` secret version pointing at the clone's connection name, update `run.googleapis.com/cloudsql-instances` in the service YAML and redeploy (`infrastructure/gcp/deploy.sh <env>`)
+- [ ] Re-run Enquiries deliveries if the sender retains them (idempotent by delivery id and `sourceUpdatedAt`)
+- [ ] Keep the damaged instance until the incident is closed; then delete it deliberately (deletion protection is on)
+
 ### 4.3 Redis
 
 - [ ] Provision empty Redis **or** restore RDB if explicitly required
-- [ ] Update `REDIS_*` secrets
+- [ ] Update `REDIS_*` secrets (Cloud Run: the `eventos-<env>-redis-url` secret, then redeploy)
 - [ ] Prefer empty Redis after Postgres PITR to avoid stale queue payloads
 
 ### 4.4 Object storage

@@ -11,6 +11,10 @@ schedule:
     retention:
       daily: 30 days
       monthly: 12 months
+    gcp_cloud_sql_m5_01:
+      automated_backups_retained: 30   # daily, 21:00 UTC window
+      pitr_transaction_log_days: 7
+      monthly_long_term: export a monthly on-demand backup to GCS (operator task)
 
   - component: redis
     method: rdb_snapshots

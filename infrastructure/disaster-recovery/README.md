@@ -107,6 +107,49 @@ Source: docs/16 §Backup Strategy. See [retention-schedule.example.yaml](./reten
 
 Detailed runbook steps: [disaster-recovery-runbook.md](./disaster-recovery-runbook.md).
 
+### PostgreSQL — Google Cloud SQL (M5-01 production topology)
+
+The Cloud Run deployment (`infrastructure/gcp/`) uses one Cloud SQL for PostgreSQL 16
+instance (`eventos-pg`, `asia-south1`) holding `eventos_staging` and `eventos_prod`.
+
+| Item | Spec |
+|------|------|
+| Automated backups | Daily, window starts 21:00 UTC (02:30 IST), last **30** retained (matches the 30-day daily retention in docs/16) |
+| Point-in-time recovery | Enabled; transaction logs retained **7 days** (RPO of minutes within that window) |
+| Deletion protection | Enabled on the instance |
+| Restore method | **Clone** to a new instance at a timestamp (never restore over the live instance first) |
+| Pre-migration safety | Production deploys run `prisma migrate deploy` through the migration job; take an on-demand backup first for risky releases: `gcloud sql backups create --instance=eventos-pg` |
+| Restore drill | Quarterly, see [Cloud SQL restore drill](#cloud-sql-restore-drill) |
+
+Clone and verify (the commands are run by an operator; nothing here executes them):
+
+```bash
+# 1. Pick a recovery point (UTC, RFC 3339), within the 7-day PITR window.
+export RESTORE_TS="2026-11-23T05:30:00Z"
+
+# 2. Clone to a NEW instance (private IP, same network). The clone includes both databases.
+gcloud sql instances clone eventos-pg eventos-pg-restore-$(date +%Y%m%d)   --point-in-time="$RESTORE_TS" --project=wedecorenquries
+
+# 3. Verify, then cut over by updating the DATABASE_URL secret (new instance connection name)
+#    and redeploying; or export the damaged tables from the clone and import them.
+gcloud sql connect eventos-pg-restore-$(date +%Y%m%d) --user=postgres --database=eventos_prod
+```
+
+Redis (Memorystore Basic) has no persistence: after any Postgres restore start it empty.
+The Enquiries feed tolerates this — the replay ledger is advisory and `sourceUpdatedAt`
+ordering keeps redeliveries idempotent.
+
+#### Cloud SQL restore drill
+
+Run quarterly (record it in [quarterly-dr-drill-template.md](./quarterly-dr-drill-template.md)):
+
+1. Choose `RESTORE_TS` about one hour in the past; note the newest booking/lead `updated_at` in `eventos_staging` just before.
+2. `gcloud sql instances clone eventos-pg eventos-pg-drill --point-in-time="$RESTORE_TS"` — record the elapsed time (RTO evidence).
+3. Connect to the clone (`gcloud sql connect eventos-pg-drill --user=postgres --database=eventos_staging`) and run the [restore verification checklist](./restore-verification-checklist.md): `SELECT 1`, row counts on `tenants`, `users`, `bookings`, `external_record_links`, `_prisma_migrations` count equals the repo's migration count.
+4. Confirm data freshness: the newest `updated_at` is at or just before `RESTORE_TS` (RPO evidence).
+5. Delete the clone: `gcloud sql instances delete eventos-pg-drill` (drills never touch the live instance or `eventos_prod` writes).
+6. File the drill record and any gaps against the runbook.
+
 ### Redis — backup
 
 | Item | Spec |

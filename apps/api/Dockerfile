@@ -9,9 +9,9 @@
 # Build context: apps/api/
 
 # ---------------------------------------------------------------------------
-# Builder — install all deps, generate Prisma client, compile NestJS
+# Build — install all deps, generate Prisma client, compile NestJS
 # ---------------------------------------------------------------------------
-FROM node:22-alpine AS builder
+FROM node:22-alpine AS build
 
 WORKDIR /app
 
@@ -34,8 +34,28 @@ COPY . .
 # `prebuild` → `prisma generate`; `build` → `nest build`
 RUN pnpm build
 
-# Drop devDependencies so the runtime layer only ships production modules
-# (bcrypt native bindings and the generated Prisma client remain).
+# ---------------------------------------------------------------------------
+# Migrator (M5-01) — keeps devDependencies (prisma CLI, tsx) for one-off Cloud Run
+# Jobs: `prisma migrate deploy` (eventos-migrate-*) and the production seed
+# (eventos-seed-prod). Never started as the API. Build with `--target migrator`.
+# ---------------------------------------------------------------------------
+FROM build AS migrator
+
+ENV NODE_ENV=production
+
+# `node` is the unprivileged user shipped with the official image.
+USER node
+
+# Direct bin path (no corepack/pnpm at runtime: the unprivileged user cannot read root's cache).
+# The seed job overrides this: `node_modules/.bin/tsx prisma/seed-prod.ts`.
+CMD ["node_modules/.bin/prisma", "migrate", "deploy"]
+
+# ---------------------------------------------------------------------------
+# Builder — drop devDependencies so the runtime layer only ships production
+# modules (bcrypt native bindings and the generated Prisma client remain).
+# ---------------------------------------------------------------------------
+FROM build AS builder
+
 RUN pnpm prune --prod
 
 # ---------------------------------------------------------------------------

@@ -28,6 +28,7 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
     "prisma:seed": "prisma db seed",
+    "prisma:seed:prod": "tsx prisma/seed-prod.ts",
     "prisma:reset": "prisma migrate reset",
     "openapi:export": "pnpm build && node -r dotenv/config dist/src/openapi-export.js"
   },
