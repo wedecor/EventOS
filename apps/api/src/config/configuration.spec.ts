@@ -105,3 +105,35 @@ describe('configuration() — Enquiries feed (M5-01)', () => {
     expect(config.ENQUIRIES_FEED_TENANT_ID).toBeUndefined();
   });
 });
+
+describe('configuration() — REDIS_URL (M5-01)', () => {
+  const originalEnv = { ...process.env };
+
+  beforeEach(() => {
+    process.env.JWT_SECRET = 'a'.repeat(32);
+    process.env.DATABASE_URL =
+      'postgresql://eventos:eventos@localhost:5432/eventos';
+    process.env.REDIS_HOST = 'localhost';
+    process.env.REDIS_PORT = '6379';
+    delete process.env.REDIS_PASSWORD;
+  });
+
+  afterEach(() => {
+    process.env = { ...originalEnv };
+  });
+
+  it('builds redisUrl from host/port/password by default', () => {
+    process.env.REDIS_PASSWORD = 'pw';
+
+    expect(configuration().redisUrl).toBe('redis://:pw@localhost:6379');
+  });
+
+  it('prefers REDIS_URL when set', () => {
+    process.env.REDIS_URL = ' redis://10.0.0.3:6379 ';
+
+    const config = configuration();
+
+    expect(config.REDIS_URL).toBe('redis://10.0.0.3:6379');
+    expect(config.redisUrl).toBe('redis://10.0.0.3:6379');
+  });
+});

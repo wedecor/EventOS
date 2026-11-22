@@ -32,6 +32,17 @@ export const envSchema = z
     REDIS_HOST: z.string().min(1).default('localhost'),
     REDIS_PORT: z.coerce.number().int().positive().default(6379),
     REDIS_PASSWORD: z.string().optional(),
+    // M5-01 — optional full connection URL (e.g. `redis://10.0.0.3:6379` for
+    // Memorystore, `rediss://…` for TLS). Takes precedence over HOST/PORT/PASSWORD.
+    REDIS_URL: optionalTrimmedString.pipe(
+      z
+        .string()
+        .regex(
+          /^rediss?:\/\//,
+          'REDIS_URL must start with redis:// or rediss://',
+        )
+        .optional(),
+    ),
     // R1-04 (docs/16 §Environment Variables: "JWT_SECRET | All | JWT signing
     // key (min 256 bits)"; docs/22 §Troubleshooting: "must be >= 32 characters
     // if set") — mandatory in every environment, never optional. Missing,

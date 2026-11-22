@@ -388,3 +388,30 @@ describe('validateEnv — Enquiries feed (M5-01)', () => {
     expect(rotating.ENQUIRIES_FEED_SECRET_NEXT).toBe('n'.repeat(40));
   });
 });
+
+describe('validateEnv — REDIS_URL (M5-01)', () => {
+  const baseConfig = {
+    DATABASE_URL: 'postgresql://eventos:eventos@localhost:5432/eventos',
+    JWT_SECRET: 'a'.repeat(32),
+  };
+
+  it('is optional and trimmed', () => {
+    expect(validateEnv(baseConfig).REDIS_URL).toBeUndefined();
+    expect(
+      validateEnv({ ...baseConfig, REDIS_URL: '  redis://10.0.0.3:6379 ' })
+        .REDIS_URL,
+    ).toBe('redis://10.0.0.3:6379');
+    expect(
+      validateEnv({ ...baseConfig, REDIS_URL: '' }).REDIS_URL,
+    ).toBeUndefined();
+  });
+
+  it('accepts rediss:// and rejects other schemes', () => {
+    expect(
+      validateEnv({ ...baseConfig, REDIS_URL: 'rediss://host:6380' }).REDIS_URL,
+    ).toBe('rediss://host:6380');
+    expect(() =>
+      validateEnv({ ...baseConfig, REDIS_URL: 'http://host' }),
+    ).toThrow(/REDIS_URL/);
+  });
+});

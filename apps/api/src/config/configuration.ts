@@ -5,6 +5,7 @@ export default (): EnvConfig & { redisUrl: string } => {
   const redisHost = process.env.REDIS_HOST ?? 'localhost';
   const redisPort = process.env.REDIS_PORT ?? '6379';
   const redisAuth = redisPassword ? `:${redisPassword}@` : '';
+  const redisUrlOverride = process.env.REDIS_URL?.trim() || undefined;
 
   // R1-04 — `validate: validateEnv` (env.schema.ts) already runs before this
   // factory during ConfigModule.forRoot() and fails bootstrap first if
@@ -37,6 +38,7 @@ export default (): EnvConfig & { redisUrl: string } => {
     REDIS_HOST: redisHost,
     REDIS_PORT: Number(redisPort),
     REDIS_PASSWORD: redisPassword,
+    REDIS_URL: redisUrlOverride,
     JWT_SECRET: jwtSecret,
     SENTRY_DSN: process.env.SENTRY_DSN?.trim()
       ? process.env.SENTRY_DSN.trim()
@@ -110,6 +112,7 @@ export default (): EnvConfig & { redisUrl: string } => {
       process.env.ENQUIRIES_FEED_SECRET_NEXT?.trim() || undefined,
     ENQUIRIES_FEED_TENANT_ID:
       process.env.ENQUIRIES_FEED_TENANT_ID?.trim() || undefined,
-    redisUrl: `redis://${redisAuth}${redisHost}:${redisPort}`,
+    redisUrl:
+      redisUrlOverride ?? `redis://${redisAuth}${redisHost}:${redisPort}`,
   };
 };

@@ -9,7 +9,29 @@ import type { Options as PinoHttpOptions } from 'pino-http';
  * credentials, not request metadata, and must never appear in application
  * logs.
  */
-export const LOG_REDACT_CONFIG: { paths: string[]; censor: string } = {
+export const LOG_REDACT_CENSOR = '[Redacted]';
+
+/**
+ * M5-01 — phone numbers are PII: keep only the last four digits so a log line can
+ * still be correlated by a human without exposing the number.
+ */
+export function maskPhoneForLog(value: string): string {
+  return `${'*'.repeat(Math.max(value.length - 4, 0))}${value.slice(-4)}`;
+}
+
+/** pino censor: phone fields are masked (last 4 kept); everything else is fully redacted. */
+export function logCensor(value: unknown, path: string[]): string {
+  const key = path[path.length - 1] ?? '';
+  if (/phone/i.test(key) && typeof value === 'string' && value.length > 0) {
+    return maskPhoneForLog(value);
+  }
+  return LOG_REDACT_CENSOR;
+}
+
+export const LOG_REDACT_CONFIG: {
+  paths: string[];
+  censor: (value: unknown, path: string[]) => string;
+} = {
   paths: [
     'req.headers.authorization',
     'req.headers.cookie',
@@ -20,8 +42,17 @@ export const LOG_REDACT_CONFIG: { paths: string[]; censor: string } = {
     'req.body.refreshToken',
     'req.body.apiKey',
     'req.body.AI_API_KEY',
+    // M5-01 — Enquiries feed HMAC signature and Firebase exchange credentials.
+    'req.headers["x-eventos-signature"]',
+    'req.body.idToken',
+    // M5-01 — phone numbers: masked to the last four digits (see `logCensor`).
+    'req.body.phone',
+    'req.body.primaryPhone',
+    'req.body.phoneNormalized',
+    'req.body.customer.phone',
+    'req.body.phone.number',
   ],
-  censor: '[Redacted]',
+  censor: logCensor,
 };
 
 export const LOG_SERVICE_NAME = 'event-os-api';
