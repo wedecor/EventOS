@@ -362,25 +362,25 @@ QuotationApproved event →
 
 ### Calendar Module
 
-**Responsibility:** Unified calendar for events, site visits, meetings, and ops milestones.
+**Responsibility:** Unified **operations calendar / timeline** as a **read-only aggregation** over Booking, Staff scheduling, Procurement, Inventory, Reminders, and related operational facts (P2-10).
 
 | Aspect | Detail |
 |--------|--------|
-| **Owns** | `calendar_entries` |
-| **Depends on** | Staff (availability), Booking, Lead |
-| **Exposes** | `ICalendarService.createEntry()`, `.update()`, `.cancel()`, `.getByDateRange()`, `.checkConflicts()` |
-| **Events emitted** | `CalendarEntryCreated`, `CalendarEntryUpdated`, `CalendarConflictDetected` |
-| **Events consumed** | `BookingConfirmed`, `BookingCancelled`, `LeadStageChanged` (site visit) |
+| **Owns** | *Nothing persisted* — virtual read model (`CalendarEntryDto` projections only; no `calendar_entries` table) |
+| **Depends on** | Booking (Event), Staff (assignments / leave / availability), Vendor Procurement, Inventory, Communication (reminders), Finance documents (timeline overlay) |
+| **Exposes** | `GET /calendar`, `/calendar/events`, `/calendar/agenda`, `/calendar/timeline`, `/calendar/conflicts` (composition queries only) |
+| **Events emitted** | None (read-only; no calendar write aggregate) |
+| **Events consumed** | None required — queries sibling repositories / services at request time |
 
-#### Phase 1 coverage
+#### Phase 1 / Phase 2 coverage
 
 | | |
 |---|---|
-| **Phase** | **Phase 1** |
-| **Business capabilities** | Event dates with operations milestones |
+| **Phase** | **Phase 2 (P2-10)** — capability rooted in EP1-OPS-005 |
+| **Business capabilities** | Day/week/month/agenda/timeline views; display-only cross-module conflict overlay; planning dashboard counters; deep links into owning modules |
 | **EP1 IDs** | EP1-OPS-005 |
-| **Existing systems** | Reuse LM calendar view concept; extend with ops milestones |
-| **Deferred** | Staff conflict detection, multi-view enhancements (Phase 2) |
+| **Existing systems** | Reuse LM calendar *view* concept; extend with ops overlays |
+| **Deferred** | Provider calendar sync (Google/Outlook), background conflict jobs, persisted personal calendar entries (Phase 3+) |
 
 ---
 

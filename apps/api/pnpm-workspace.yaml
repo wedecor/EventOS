@@ -2,6 +2,7 @@ onlyBuiltDependencies:
   - '@prisma/engines'
   - '@scarf/scarf'
   - '@swc/core'
+  - bcrypt
   - esbuild
   - msgpackr-extract
   - prisma

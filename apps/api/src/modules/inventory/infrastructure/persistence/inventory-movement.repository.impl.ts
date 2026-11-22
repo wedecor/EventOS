@@ -2,11 +2,12 @@ import { Injectable } from '@nestjs/common';
 import type { InventoryMovement } from '@prisma/client';
 import { PrismaService } from '../../../../database/prisma.service';
 import { TenantScopedRepository } from '../../../../shared/database';
-import type {
-  CreateInventoryMovementData,
-  InventoryMovementRecord,
-  InventoryMovementRepository,
-  UpdateInventoryMovementData,
+import {
+  INVENTORY_MOVEMENT_RELEASED_STATUSES,
+  type CreateInventoryMovementData,
+  type InventoryMovementRecord,
+  type InventoryMovementRepository,
+  type UpdateInventoryMovementData,
 } from '../../domain/repositories/inventory-movement.repository';
 
 @Injectable()
@@ -29,6 +30,9 @@ export class InventoryMovementRepositoryImpl
         inventoryItemId: data.inventoryItemId,
         quantity: data.quantity,
         notes: data.notes ?? null,
+        ...(data.reservationId
+          ? { reservation: { connect: { id: data.reservationId } } }
+          : {}),
       },
     });
 
@@ -67,6 +71,22 @@ export class InventoryMovementRepositoryImpl
     return movements.map((movement) => this.mapRecord(movement));
   }
 
+  async findUnlinkedActiveByItemId(
+    tenantId: string,
+    inventoryItemId: string,
+  ): Promise<InventoryMovementRecord[]> {
+    const movements = await this.prisma.inventoryMovement.findMany({
+      where: {
+        tenantId,
+        inventoryItemId,
+        reservationId: null,
+        status: { notIn: INVENTORY_MOVEMENT_RELEASED_STATUSES },
+      },
+    });
+
+    return movements.map((movement) => this.mapRecord(movement));
+  }
+
   async update(
     tenantId: string,
     id: string,
@@ -79,6 +99,19 @@ export class InventoryMovementRepositoryImpl
         data: {
           status: data.status,
           notes: data.notes,
+          packedByUserId: data.packedByUserId,
+          packingStartedAt: data.packingStartedAt,
+          verificationNotes: data.verificationNotes,
+          verifiedAt: data.verifiedAt,
+          readyForDispatchAt: data.readyForDispatchAt,
+          vehicle: data.vehicle,
+          driverName: data.driverName,
+          dispatchedAt: data.dispatchedAt,
+          returnedQuantity: data.returnedQuantity,
+          missingQuantity: data.missingQuantity,
+          damagedQuantity: data.damagedQuantity,
+          returnVerificationNotes: data.returnVerificationNotes,
+          returnVerifiedAt: data.returnVerifiedAt,
           pickedAt: data.pickedAt,
           packedAt: data.packedAt,
           loadedAt: data.loadedAt,
@@ -101,9 +134,23 @@ export class InventoryMovementRepositoryImpl
       tenantId: movement.tenantId,
       bookingId: movement.bookingId,
       inventoryItemId: movement.inventoryItemId,
+      reservationId: movement.reservationId,
       quantity: movement.quantity,
       notes: movement.notes,
       status: movement.status,
+      packedByUserId: movement.packedByUserId,
+      packingStartedAt: movement.packingStartedAt,
+      verificationNotes: movement.verificationNotes,
+      verifiedAt: movement.verifiedAt,
+      readyForDispatchAt: movement.readyForDispatchAt,
+      vehicle: movement.vehicle,
+      driverName: movement.driverName,
+      dispatchedAt: movement.dispatchedAt,
+      returnedQuantity: movement.returnedQuantity,
+      missingQuantity: movement.missingQuantity,
+      damagedQuantity: movement.damagedQuantity,
+      returnVerificationNotes: movement.returnVerificationNotes,
+      returnVerifiedAt: movement.returnVerifiedAt,
       pickedAt: movement.pickedAt,
       packedAt: movement.packedAt,
       loadedAt: movement.loadedAt,

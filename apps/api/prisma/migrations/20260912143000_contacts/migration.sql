@@ -1,25 +1,10 @@
--- CreateTable
-CREATE TABLE "contacts" (
-    "id" UUID NOT NULL,
-    "tenant_id" UUID NOT NULL,
-    "customer_id" UUID NOT NULL,
-    "name" TEXT NOT NULL,
-    "role" TEXT,
-    "phone" TEXT,
-    "email" TEXT,
-    "is_primary" BOOLEAN NOT NULL DEFAULT false,
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" TIMESTAMP(3) NOT NULL,
-    "version" INTEGER NOT NULL DEFAULT 1,
-
-    CONSTRAINT "contacts_pkey" PRIMARY KEY ("id")
-);
-
--- CreateIndex
-CREATE INDEX "contacts_tenant_id_customer_id_idx" ON "contacts"("tenant_id", "customer_id");
-
--- AddForeignKey
-ALTER TABLE "contacts" ADD CONSTRAINT "contacts_tenant_id_fkey" FOREIGN KEY ("tenant_id") REFERENCES "tenants"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "contacts" ADD CONSTRAINT "contacts_customer_id_fkey" FOREIGN KEY ("customer_id") REFERENCES "customers"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+-- NO-OP on release/m0-m1-core-workflows lineage.
+-- Kept so migration history from origin/main (Sprint 1 UAT) is preserved.
+-- Equivalent schema was already introduced by earlier Phase 1 migrations
+-- (payments/line items/suggestions, contacts, sessions) on this branch.
+-- Do not delete this folder.
+--
+-- Databases that applied the original Sprint 1 UAT versions of migrations
+-- 20260912133000, 20260912143000, 20260912150000 must be reset; fresh
+-- databases are unaffected.
+SELECT 1;

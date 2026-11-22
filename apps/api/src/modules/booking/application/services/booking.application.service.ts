@@ -150,6 +150,50 @@ export class BookingApplicationService {
     }
   }
 
+  /** in_preparation → in_execution (required before completeBooking). */
+  async startExecution(
+    tenantId: string,
+    bookingId: string,
+    input: ActivateBookingInput,
+  ): Promise<Result<BookingDto>> {
+    const existing = await this.eventRepository.findById(tenantId, bookingId);
+    if (!existing) {
+      return failure('NOT_FOUND', 'Booking not found.');
+    }
+
+    if (existing.status !== 'in_preparation') {
+      return failure(
+        'INVALID_STATE',
+        'Only in-preparation bookings can start execution.',
+        { status: existing.status },
+      );
+    }
+
+    try {
+      const event = await this.eventRepository.update(
+        tenantId,
+        bookingId,
+        { status: 'in_execution' },
+        input.version,
+      );
+
+      this.eventPublisher.publish(
+        new BookingStatusChangedEvent(tenantId, event, existing.status),
+      );
+
+      return success(toBookingDto(event));
+    } catch (error: unknown) {
+      if (error instanceof ConcurrentModificationError) {
+        return failure(
+          'CONCURRENT_MODIFICATION',
+          'Booking was modified by another request. Reload and retry.',
+          { bookingId },
+        );
+      }
+      throw error;
+    }
+  }
+
   async retrieveBooking(
     tenantId: string,
     bookingId: string,
@@ -160,6 +204,33 @@ export class BookingApplicationService {
     }
 
     return success(toBookingDto(event));
+  }
+
+  async listBookingsPage(
+    tenantId: string,
+    options: {
+      page: number;
+      pageSize: number;
+      q?: string;
+      status?: string;
+      sort?: 'createdAt' | 'eventStartDate';
+      order?: 'asc' | 'desc';
+    },
+  ): Promise<
+    Result<{
+      items: BookingDto[];
+      total: number;
+      page: number;
+      pageSize: number;
+    }>
+  > {
+    const page = await this.eventRepository.findPage(tenantId, options);
+    return success({
+      items: page.items.map(toBookingDto),
+      total: page.total,
+      page: options.page,
+      pageSize: options.pageSize,
+    });
   }
 
   async cancelBooking(

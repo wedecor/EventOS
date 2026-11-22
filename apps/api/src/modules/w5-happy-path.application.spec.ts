@@ -1,5 +1,4 @@
 import { AdvancePaymentQuery } from '../shared/application/ports/advance-payment.query';
-import { LeadConversionQuery } from '../shared/application/ports/lead-conversion.query';
 import { DomainEventPublisher } from '../shared/events/domain-event.base';
 import { BookingApplicationService } from './booking/application/services/booking.application.service';
 import { CustomerApplicationService } from './customer/application/services/customer.application.service';
@@ -9,6 +8,7 @@ import { QuotationApplicationService } from './quotation/application/services/qu
 
 describe('W5 happy path (application)', () => {
   const tenantId = 'tenant-1';
+  const actorId = 'user-1';
 
   it('runs client → quotation → payment → send → approve → booking → lead approved', async () => {
     const publish = jest.fn();
@@ -16,16 +16,6 @@ describe('W5 happy path (application)', () => {
     const advancePaymentQuery = {
       hasConfirmedAdvance: jest.fn().mockResolvedValue(true),
     } as unknown as AdvancePaymentQuery;
-    const leadConversionQuery = {
-      validateForApproval: jest.fn().mockResolvedValue({
-        ok: true,
-        value: {
-          customerId: 'customer-1',
-          quotationId: 'quotation-1',
-          eventId: 'event-1',
-        },
-      }),
-    } as unknown as LeadConversionQuery;
 
     const leadRecord = {
       id: 'lead-1',
@@ -78,6 +68,7 @@ describe('W5 happy path (application)', () => {
       findById: jest.fn().mockResolvedValue(leadRecord),
       findByPhone: jest.fn(),
       findByStage: jest.fn(),
+      findAll: jest.fn(),
       listAll: jest.fn(),
       update: jest.fn(),
       changeStage: jest.fn().mockResolvedValue({
@@ -148,17 +139,16 @@ describe('W5 happy path (application)', () => {
     const lineItemRepository = {
       create: jest.fn(),
       findById: jest.fn(),
-      listActiveByQuotation: jest.fn().mockResolvedValue([
+      listByQuotationId: jest.fn().mockResolvedValue([
         {
           id: 'line-1',
           tenantId,
           quotationId: 'quotation-1',
           description: 'Decor',
-          packageId: null,
           quantity: 1,
-          unitPrice: 100000,
+          unitPriceAmount: 100000,
+          currency: 'INR',
           sortOrder: 0,
-          deletedAt: null,
           createdAt: new Date(),
           updatedAt: new Date(),
           version: 1,
@@ -166,33 +156,35 @@ describe('W5 happy path (application)', () => {
       ]),
       update: jest.fn(),
       softDelete: jest.fn(),
-      countActiveByQuotation: jest.fn().mockResolvedValue(1),
+      countByQuotationId: jest.fn().mockResolvedValue(1),
+    };
+
+    const createdEvent = {
+      id: 'event-1',
+      tenantId,
+      customerId: 'customer-1',
+      leadId: 'lead-1',
+      quotationId: 'quotation-1',
+      bookingNumber: 5001,
+      status: 'approved' as const,
+      eventType: 'wedding',
+      eventStartDate: new Date('2099-01-01'),
+      eventEndDate: new Date('2099-01-02'),
+      venueName: 'Bangalore',
+      guestCount: null,
+      requirementsNotes: null,
+      preparationStatus: 'pending' as const,
+      operationalMilestone: null,
+      executionOwnerId: null,
+      cancellationReason: null,
+      completedAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      version: 1,
     };
 
     const eventRepository = {
-      create: jest.fn().mockResolvedValue({
-        id: 'event-1',
-        tenantId,
-        customerId: 'customer-1',
-        leadId: 'lead-1',
-        quotationId: 'quotation-1',
-        bookingNumber: 5001,
-        status: 'approved' as const,
-        eventType: 'wedding',
-        eventStartDate: new Date('2099-01-01'),
-        eventEndDate: new Date('2099-01-02'),
-        venueName: 'Bangalore',
-        guestCount: null,
-        requirementsNotes: null,
-        preparationStatus: 'pending' as const,
-        operationalMilestone: null,
-        executionOwnerId: null,
-        cancellationReason: null,
-        completedAt: null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        version: 1,
-      }),
+      create: jest.fn().mockResolvedValue(createdEvent),
       findById: jest.fn(),
       findByQuotationId: jest.fn().mockResolvedValue(null),
       findMaxBookingNumber: jest.fn().mockResolvedValue(5000),
@@ -200,9 +192,47 @@ describe('W5 happy path (application)', () => {
       update: jest.fn(),
     };
 
+    const invoiceRepository = {
+      create: jest.fn(),
+      findById: jest.fn(),
+      findByBookingId: jest.fn(),
+      findByLeadId: jest.fn(),
+      findByQuotationId: jest.fn(),
+      findByCustomerId: jest.fn(),
+      findMaxInvoiceNumber: jest.fn(),
+      findAll: jest.fn(),
+      hasDraftInvoiceForBooking: jest.fn(),
+      update: jest.fn(),
+    };
+
     const paymentRepository = {
-      create: jest.fn().mockResolvedValue({ id: 'payment-1' }),
-      hasConfirmedAdvance: jest.fn().mockResolvedValue(true),
+      create: jest.fn().mockResolvedValue({
+        id: 'payment-1',
+        tenantId,
+        bookingId: null,
+        leadId: 'lead-1',
+        quotationId: null,
+        invoiceId: null,
+        amount: 50000,
+        currency: 'INR',
+        method: 'upi',
+        status: 'confirmed',
+        receivedAt: new Date(),
+        attachmentId: null,
+        missingProofReason: null,
+        notes: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        version: 1,
+      }),
+      findById: jest.fn(),
+      findByBookingId: jest.fn(),
+      findByLeadId: jest.fn(),
+      findByQuotationId: jest.fn(),
+      findAll: jest.fn(),
+      hasConfirmedAdvanceForLead: jest.fn().mockResolvedValue(true),
+      hasConfirmedAdvanceForQuotation: jest.fn().mockResolvedValue(true),
+      update: jest.fn(),
     };
 
     const followUpRepository = {
@@ -217,43 +247,39 @@ describe('W5 happy path (application)', () => {
       countByCustomer: jest.fn(),
     };
 
+    const auditLog = { record: jest.fn().mockResolvedValue(undefined) };
+
     const customerService = new CustomerApplicationService(
-      customerRepository,
-      contactRepository,
-      eventPublisher,
-    );
-    const quotationService = new QuotationApplicationService(
-      quotationRepository,
-      lineItemRepository,
-      {
-        findById: jest.fn().mockResolvedValue({
-          id: tenantId,
-          name: 'We Decor',
-          slug: 'we-decor',
-        }),
-      },
-      eventPublisher,
-    );
-    const paymentService = new PaymentApplicationService(
-      paymentRepository,
-      eventRepository,
-      leadRepository,
-      quotationRepository,
+      customerRepository as never,
+      contactRepository as never,
       eventPublisher,
     );
     const bookingService = new BookingApplicationService(
-      eventRepository,
-      quotationRepository,
+      eventRepository as never,
+      quotationRepository as never,
       advancePaymentQuery,
+      invoiceRepository as never,
       eventPublisher,
     );
-    const leadService = new LeadApplicationService(
-      leadRepository,
-      followUpRepository,
-      customerRepository,
-      advancePaymentQuery,
-      leadConversionQuery,
+    const quotationService = new QuotationApplicationService(
+      quotationRepository as never,
+      lineItemRepository as never,
       eventPublisher,
+      bookingService,
+      auditLog as never,
+    );
+    const paymentService = new PaymentApplicationService(
+      paymentRepository,
+      invoiceRepository as never,
+      eventPublisher,
+      auditLog as never,
+    );
+    const leadService = new LeadApplicationService(
+      leadRepository as never,
+      followUpRepository as never,
+      advancePaymentQuery,
+      eventPublisher,
+      auditLog as never,
     );
 
     expect(
@@ -276,12 +302,11 @@ describe('W5 happy path (application)', () => {
 
     expect(
       (
-        await paymentService.recordPayment(tenantId, {
+        await paymentService.recordPayment(actorId, tenantId, {
           leadId: 'lead-1',
           amount: 50000,
           method: 'upi',
           receivedAt: new Date(),
-          paymentType: 'advance',
         })
       ).ok,
     ).toBe(true);
@@ -290,18 +315,17 @@ describe('W5 happy path (application)', () => {
       (await quotationService.sendQuotation(tenantId, 'quotation-1', 1)).ok,
     ).toBe(true);
 
-    expect(
-      (await quotationService.approveQuotation(tenantId, 'quotation-1', 2)).ok,
-    ).toBe(true);
-
-    expect(
-      (
-        await bookingService.createEventFromApprovedQuotation(
-          tenantId,
-          'quotation-1',
-        )
-      ).ok,
-    ).toBe(true);
+    const approveResult = await quotationService.approveQuotation(
+      actorId,
+      tenantId,
+      'quotation-1',
+      2,
+    );
+    expect(approveResult.ok).toBe(true);
+    if (approveResult.ok) {
+      // Approve auto-creates the booking when advance is confirmed.
+      expect(approveResult.value.eventId).toBe('event-1');
+    }
 
     expect(
       (
@@ -311,5 +335,7 @@ describe('W5 happy path (application)', () => {
         })
       ).ok,
     ).toBe(true);
+
+    expect(publish).toHaveBeenCalled();
   });
 });

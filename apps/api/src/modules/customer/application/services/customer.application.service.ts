@@ -116,6 +116,32 @@ export class CustomerApplicationService {
     return success(toCustomerDto(customer));
   }
 
+  async listCustomersPage(
+    tenantId: string,
+    options: {
+      page: number;
+      pageSize: number;
+      q?: string;
+      sort?: 'createdAt' | 'name';
+      order?: 'asc' | 'desc';
+    },
+  ): Promise<
+    Result<{
+      items: CustomerDto[];
+      total: number;
+      page: number;
+      pageSize: number;
+    }>
+  > {
+    const page = await this.customerRepository.findPage(tenantId, options);
+    return success({
+      items: page.items.map(toCustomerDto),
+      total: page.total,
+      page: options.page,
+      pageSize: options.pageSize,
+    });
+  }
+
   async updateCustomer(
     tenantId: string,
     customerId: string,
@@ -217,10 +243,12 @@ export class CustomerApplicationService {
       );
     }
 
+    const role = input.role?.trim() || 'contact';
+
     const contact = await this.contactRepository.create(tenantId, {
       customerId,
       name: input.name.trim(),
-      role: input.role?.trim() ?? null,
+      role,
       phone,
       email,
     });
@@ -230,9 +258,7 @@ export class CustomerApplicationService {
       customerId,
     );
 
-    this.eventPublisher.publish(
-      new ContactAddedEvent(tenantId, contact, customerId),
-    );
+    this.eventPublisher.publish(new ContactAddedEvent(tenantId, contact));
 
     return success({ id: contact.id, contactsCount });
   }

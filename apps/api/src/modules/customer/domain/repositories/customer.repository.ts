@@ -53,6 +53,20 @@ export abstract class CustomerRepository {
     displayName: string,
   ): Promise<CustomerRecord | null>;
 
+  /** P2-12 — Tenant-wide customer list for retention analytics. */
+  abstract findAll(tenantId: string): Promise<CustomerRecord[]>;
+
+  abstract findPage(
+    tenantId: string,
+    options: {
+      page: number;
+      pageSize: number;
+      q?: string;
+      sort?: 'createdAt' | 'name';
+      order?: 'asc' | 'desc';
+    },
+  ): Promise<{ items: CustomerRecord[]; total: number }>;
+
   abstract update(
     tenantId: string,
     id: string,

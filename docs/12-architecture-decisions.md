@@ -28,6 +28,7 @@ This document records significant architectural and technical decisions for Even
 | ADR-016 | Phase 1 Single-Tenant Mode (We Decor) | Accepted | 2026-07-08 |
 | ADR-017 | Phase 1 Domain Event Handlers (Suggestion-Only) | Accepted | 2026-07-08 |
 | ADR-018 | Backend Technology Stack (NestJS) | Accepted | 2026-07-08 |
+| ADR-019 | Platform Consolidation: EventOS as the single backend, one phone-first Flutter app for everything | Proposed | 2026-11-23 |
 
 ---
 
@@ -160,7 +161,7 @@ Event OS starts with one tenant (We Decor) but must architect for thousands. Cho
 
 ### Decision
 
-Shared schema with `tenant_id` on all tenant-scoped tables. PostgreSQL RLS added in Phase 2 as defense-in-depth.
+Shared schema with `tenant_id` on all tenant-scoped tables. PostgreSQL RLS added in **Phase 6** (multi-tenant SaaS) as defense-in-depth — aligned with ADR-016.
 
 ### Rationale
 
@@ -168,7 +169,7 @@ Shared schema with `tenant_id` on all tenant-scoped tables. PostgreSQL RLS added
 - Schema-per-tenant: migration complexity multiplied by tenant count
 - Row-level: simple, proven pattern used by Linear, Notion, and most SaaS companies
 - `tenant_id` marginal cost is near zero; retrofit cost is months of engineering
-- Application-level enforcement in Phase 1; RLS in Phase 2 for defense-in-depth
+- Application-level enforcement in Phase 1; RLS in **Phase 6** for defense-in-depth (ADR-016)
 
 ### Consequences
 
@@ -291,6 +292,10 @@ React SPA with TypeScript, served as static assets. PWA capabilities for mobile.
 - **Positive:** Frontend deploys independently as static assets
 - **Negative:** Initial load time (mitigated by code splitting, lazy loading)
 - **Negative:** No SSR for admin pages (not needed)
+
+### Implementation note (R4-01 — does not change this ADR)
+
+Phase 1 Admin Portal is implemented as **Next.js App Router with `output: 'export'`** (static assets), client-first React UI, TanStack Query, and Axios against the frozen OpenAPI. This realizes ADR-007’s SPA / static-asset decision; it does not introduce SSR for admin pages.
 
 ---
 
@@ -879,6 +884,50 @@ This decision **does not modify** business rules, domain model, data model, API 
 | [`09-api-design.md`](./09-api-design.md) | REST API contract — NestJS controllers and application services |
 | [`10-implementation-specification.md`](./10-implementation-specification.md) | NestJS module structure and sprint playbook |
 | [`10-folder-structure.md`](./10-folder-structure.md) | Code organization |
+
+---
+
+## ADR-019: Platform Consolidation: EventOS as the single backend, one Flutter mobile app
+
+**Status:** Proposed (awaiting founder approval) · **Date:** 2026-11-23 · **Supersedes:** nothing; constrains ADR-016 (single-tenant is a Phase 1 *operating mode*, not a design limit)
+
+### Context
+- Three systems exist: the website (Next.js/Vercel), **We Decor Enquiries** (Flutter + Firebase, live, system of record for leads → quotes → approved bookings) and **EventOS** (NestJS + Postgres, not deployed, tenant-scoped schema, broad ops back office).
+- Leads, quotations and bookings are duplicated between Enquiries and EventOS.
+- Goals: run We Decor fully on EventOS, with gig-workforce dispatch (P3-01). Selling to other businesses is **deferred for 6 months** (founder decision 2026-11-23). Keep the design sale-ready at zero extra cost.
+- The Firebase app is single-business by design: one Firestore and hand-written rules for `admin`/`staff`. It cannot be sold to many tenants safely or economically.
+
+### Decision
+1. **EventOS (NestJS + Postgres) is the only backend and system of record** for every domain: leads, quotations, bookings, ops, staff, gig dispatch, finance. It is the product to be sold.
+2. **One Flutter app is the only EventOS client, phone-first, with all features.** It is built by evolving the existing Enquiries Flutter codebase (keep its UI, Maps, FCM and release pipeline), with the data layer moving to the EventOS REST API. It has role-based shells: **Team** (owner, sales, coordinator) and **Worker** (`gig_worker`). The API enforces access. Tenant branding loads after login. Heavy desktop-style screens are **redesigned for the phone** (scan/tick lists, quick entry + photo, cards instead of tables), not shrunk.
+3. **Desktop = the same Flutter app built for web** (already proven by the Enquiries web build). The existing **Next.js EventOS web is frozen:** no new features. It is kept as an admin fallback until the Flutter app reaches feature coverage, then retired.
+4. **Website stays separate** (marketing per business). The lead webhook moves from Firebase `websiteLead` to `POST /api/v1/public/leads` on EventOS, using a **per-tenant API key + HMAC**. This becomes a sellable "lead capture" feature for every tenant.
+5. **Firebase is retired** except **FCM**, which stays for push (sent from EventOS via `firebase-admin`).
+6. **Migrate step by step (strangler), not in one big switch.** The Enquiries app is live and large (≈62k lines of Dart, 63 files touching Firestore, 31 real-time streams, 36 Cloud Functions). A single cutover puts the business at risk. Instead:
+   - **Temporary login bridge:** EventOS accepts **Firebase ID tokens** (verified with `firebase-admin`) and maps them to EventOS users, so the team keeps one login while both backends run.
+   - **Temporary one-way feed:** enquiries reaching **Approved** in Firebase are pushed to EventOS (HMAC-signed, idempotent). There is no reverse sync and no shared writes.
+   - **New features are built on EventOS only:** ops screens, gig dispatch and Worker mode in the Flutter app call the EventOS API from day one.
+   - **Sales moves module by module:** leads, follow-ups, quotations, reminders, re-engagement. Each module ships with a data migration and reconciliation, then Firebase becomes read-only for that module. Real-time lists are replaced by **FCM data messages that trigger a refetch** (no WebSocket layer needed).
+   - **Finish:** switch the team's login to EventOS JWT, delete the bridge and the feed, and archive Firestore.
+   - Gig workers never get Firebase accounts; they use EventOS phone + PIN from the start.
+7. **SaaS-safe rules from now on:** `tenantId` on every table and query; no We Decor-specific literals (event types, skills, rates, statuses are tenant settings / Workforce Policy); Postgres RLS before the second tenant goes live; per-tenant FCM topics/tokens; per-tenant storage prefixes.
+
+### Sequence
+| Phase | Scope | Exit criteria |
+|------|-------|---------------|
+| 0 | Clean git; deploy EventOS API + Postgres + Redis on HTTPS (staging + prod); backups | Health checks green; restore drill passed |
+| 1 | **Bridge:** Firebase-token login on EventOS + Approved-booking feed; Flutter app gets an EventOS API client | Every approved enquiry appears in EventOS within 1 minute |
+| 2 | **Gig dispatch (P3-01)** + ops screens + Worker mode in the Flutter app, all on EventOS | First real event staffed through the app |
+| 3 | **Sales migration, module by module** (leads → follow-ups → quotations → reminders/re-engagement); website lead webhook → EventOS; login switched to EventOS JWT; bridge removed; Firestore archived | No Firebase writes for 30 days |
+| 4 | **SaaS: DEFERRED.** Founder decision 2026-11-23: no selling work for 6 months; focus on We Decor only. Review ~May 2027 based on demand (other decorators asking to use the app or borrow workers). Until then only the zero-cost readiness rules in point 7 apply | Review date reached |
+
+### Consequences
+- (+) One database, one API and one mobile app. The gig feature is built once, on the sellable platform.
+- (+) The existing Flutter UX and the team's habits are kept, so there's no retraining.
+- (+) Gig dispatch ships early (phase 2) without waiting for the full sales migration.
+- (−) Two backends run side by side for a few months. This is contained, because the bridge is one-way, read-only and deleted at the end of phase 3.
+- (−) Migration risk on a live business. Reduced to one module at a time, each with reconciliation and a Firebase read-only fallback.
+- The P3-01 prompt changes: §6c/§6d (Next.js PWA + Web Push) are replaced by the Flutter Worker shell + FCM device tokens. The public `/j?t=` link stays as the WhatsApp fallback.
 
 ---
 

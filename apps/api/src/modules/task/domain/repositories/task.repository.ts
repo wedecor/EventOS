@@ -1,4 +1,4 @@
-import type { TaskStatus } from '@prisma/client';
+import type { TaskCategory, TaskPriority, TaskStatus } from '@prisma/client';
 
 export type TaskRecord = {
   id: string;
@@ -6,10 +6,13 @@ export type TaskRecord = {
   bookingId: string;
   title: string;
   description: string | null;
+  category: TaskCategory;
+  priority: TaskPriority;
   assignedTo: string | null;
   dueAt: Date | null;
   status: TaskStatus;
   completedAt: Date | null;
+  completionNotes: string | null;
   createdAt: Date;
   updatedAt: Date;
   version: number;
@@ -19,6 +22,8 @@ export type CreateTaskData = {
   bookingId: string;
   title: string;
   description?: string | null;
+  category?: TaskCategory;
+  priority?: TaskPriority;
   assignedTo?: string | null;
   dueAt?: Date | null;
 };
@@ -26,10 +31,13 @@ export type CreateTaskData = {
 export type UpdateTaskData = {
   title?: string;
   description?: string | null;
+  category?: TaskCategory;
+  priority?: TaskPriority;
   assignedTo?: string | null;
   dueAt?: Date | null;
   status?: TaskStatus;
   completedAt?: Date | null;
+  completionNotes?: string | null;
 };
 
 export abstract class TaskRepository {

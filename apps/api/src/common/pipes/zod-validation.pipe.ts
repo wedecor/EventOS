@@ -2,8 +2,8 @@ import { BadRequestException, Injectable, PipeTransform } from '@nestjs/common';
 import type { ZodSchema } from 'zod';
 
 /**
- * Global validation placeholder for Zod schemas (ADR-013).
- * Apply per-route with `@Body(new ZodValidationPipe(schema))` when endpoints are added in Sprint 1+.
+ * Zod request validation pipe (ADR-013).
+ * Apply per-route with `@Body(new ZodValidationPipe(schema))` (and similarly for query/params).
  */
 @Injectable()
 export class ZodValidationPipe implements PipeTransform {

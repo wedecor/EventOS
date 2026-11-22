@@ -7,8 +7,16 @@ import {
   Patch,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Permissions } from '../../auth';
 import { ZodValidationPipe } from '../../../common/pipes/zod-validation.pipe';
 import { IfMatchVersion } from '../../../shared/presentation/if-match.decorator';
+import {
+  ApiDataResponse,
+  ApiIfMatchHeader,
+  ApiStandardErrors,
+  ApiUuidParam,
+  ApiZodBody,
+} from '../../../shared/presentation/openapi.helpers';
 import { resultToResponse } from '../../../shared/presentation/result-to-response.helper';
 import { TenantId } from '../../../shared/presentation/tenant-context.decorator';
 import { LeadApplicationService } from '../application/services/lead.application.service';
@@ -24,8 +32,14 @@ export class FollowUpController {
   constructor(private readonly leadService: LeadApplicationService) {}
 
   @Patch(':id')
+  @Permissions('leads:followups:write')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Update a follow-up' })
+  @ApiUuidParam('id')
+  @ApiIfMatchHeader()
+  @ApiZodBody(updateFollowUpSchema)
+  @ApiDataResponse(200, 'Follow-up updated')
+  @ApiStandardErrors()
   async updateFollowUp(
     @TenantId() tenantId: string,
     @Param('id') id: string,

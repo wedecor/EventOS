@@ -116,6 +116,7 @@ describe('FounderKpiQueryService', () => {
     leadRepository = {
       create: jest.fn(),
       findById: jest.fn(),
+      findByCustomerId: jest.fn(),
       findByPhone: jest.fn(),
       findAll: jest.fn().mockResolvedValue([]),
       findByStage: jest.fn(),
@@ -125,15 +126,19 @@ describe('FounderKpiQueryService', () => {
     eventRepository = {
       create: jest.fn(),
       findById: jest.fn(),
+      findByCustomerId: jest.fn(),
       findByQuotationId: jest.fn(),
       findMaxBookingNumber: jest.fn(),
       findByEventDate: jest.fn().mockResolvedValue([]),
+      findPage: jest.fn(),
       update: jest.fn(),
     };
     paymentRepository = {
       create: jest.fn(),
       findById: jest.fn(),
       findByBookingId: jest.fn(),
+      findByLeadId: jest.fn(),
+      findByQuotationId: jest.fn(),
       findAll: jest.fn().mockResolvedValue([]),
       hasConfirmedAdvanceForLead: jest.fn(),
       hasConfirmedAdvanceForQuotation: jest.fn(),
@@ -143,6 +148,8 @@ describe('FounderKpiQueryService', () => {
       create: jest.fn(),
       findById: jest.fn(),
       findByBookingId: jest.fn(),
+      findByLeadId: jest.fn(),
+      findByQuotationId: jest.fn(),
       findAll: jest.fn().mockResolvedValue([]),
       update: jest.fn(),
     };

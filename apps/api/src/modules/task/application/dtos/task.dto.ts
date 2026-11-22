@@ -11,10 +11,13 @@ export type TaskDto = {
   bookingId: string;
   title: string;
   description: string | null;
+  category: TaskRecord['category'];
+  priority: TaskRecord['priority'];
   assignedTo: string | null;
   dueAt: Date | null;
   status: TaskRecord['status'];
   completedAt: Date | null;
+  completionNotes: string | null;
   createdAt: Date;
   updatedAt: Date;
   version: number;

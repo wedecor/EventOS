@@ -76,6 +76,11 @@ export abstract class EventRepository {
 
   abstract findById(tenantId: string, id: string): Promise<EventRecord | null>;
 
+  abstract findByCustomerId(
+    tenantId: string,
+    customerId: string,
+  ): Promise<EventRecord[]>;
+
   abstract findByQuotationId(
     tenantId: string,
     quotationId: string,
@@ -92,6 +97,18 @@ export abstract class EventRepository {
     tenantId: string,
     filter: FindByEventDateFilter,
   ): Promise<EventRecord[]>;
+
+  abstract findPage(
+    tenantId: string,
+    options: {
+      page: number;
+      pageSize: number;
+      q?: string;
+      status?: string;
+      sort?: 'createdAt' | 'eventStartDate';
+      order?: 'asc' | 'desc';
+    },
+  ): Promise<{ items: EventRecord[]; total: number }>;
 
   abstract update(
     tenantId: string,

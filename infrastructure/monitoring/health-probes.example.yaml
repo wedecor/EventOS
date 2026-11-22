@@ -1,0 +1,40 @@
+# R2-08 — health probe definitions (repository template only).
+# Map into load balancer, uptime checker, or orchestrator probes.
+# Intervals match docs/16 (§Monitoring and Alerting → Health Checks).
+
+version: 1
+service: event-os-api
+interval: 30s
+
+probes:
+  - id: liveness
+    name: API liveness
+    method: GET
+    path: /health
+    timeout: 5s
+    expect:
+      http_status: 200
+      json_path: $.status
+      json_equals: ok
+    failure_contributes_to_alert: health-check-fail-2m
+
+  - id: readiness
+    name: API readiness (Postgres + Redis)
+    method: GET
+    path: /health/ready
+    timeout: 5s
+    expect:
+      # Prefer body inspection — apps/api currently returns HTTP 200 even when degraded.
+      http_status_any: [200]
+      json_path: $.status
+      json_equals: ok
+      also_check:
+        - path: $.checks.postgres.status
+          equals: up
+        - path: $.checks.redis.status
+          equals: up
+    failure_contributes_to_alert: health-check-fail-2m
+
+# Local compose reference (not staging):
+# infrastructure/docker/docker-compose.yml — api healthcheck hits /health only.
+# Staging should probe both liveness and readiness separately.

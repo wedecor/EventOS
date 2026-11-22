@@ -7,9 +7,9 @@
 | **Document Owner** | Founding Engineering |
 | **Primary Reviewer** | Ilyas + Zakir (We Decor Events) |
 | **Status** | Draft — founder review |
-| **Version** | 1.0 |
+| **Version** | 1.6 |
 | **Created Date** | 2026-07-08 |
-| **Last Updated** | 2026-07-08 |
+| **Last Updated** | 2026-07-29 |
 | **Next Review Date** | Not Defined |
 | **Document Purpose** | Define the **Phase 1 business domain model** that sits between the approved business requirements ([`docs/business/19-event-os-phase1-requirements.md`](../docs/business/19-event-os-phase1-requirements.md)) and database/API design. Authoritative reference for aggregates, entities, relationships, and business invariants before schema or API work begins. |
 
@@ -20,6 +20,12 @@
 | Version | Date | Author | Summary of Changes |
 |---------|------|--------|-------------------|
 | 1.0 | 2026-07-08 | Founding Engineering | Initial Phase 1 domain model derived from Doc `19`, Business Bible `01`–`18`, aligned architecture docs, ADR-016, ADR-017 |
+| 1.1 | 2026-07-13 | Founding Engineering | R4-01: thin Event Workspace HTTP realization; Payment/VendorExpense status `confirmed`\|`void` (no business-rule change). |
+| 1.2 | 2026-07-19 | Founding Engineering | P2-08: FinancialDocument (metadata-only proofs) near Finance/Attachment; verification + soft delete + audit events. |
+| 1.3 | 2026-07-19 | Founding Engineering | P2-09: CommunicationRecord, CommunicationTemplate, Reminder, CommunicationAttachment, NotificationPreference (Communication Center). |
+| 1.4 | 2026-07-19 | Founding Engineering | P2-10: Calendar re-scoped from a `CalendarEntry` write Aggregate Root to a **read model / projection** (`CalendarEntryDto`) over Event, StaffAssignment, StaffLeave, StaffAvailability, VendorProcurement, InventoryMovement/Reservation, Reminder, CommunicationRecord, FinancialDocument. No persisted `calendar_entries` table; no new write ownership. |
+| 1.5 | 2026-07-29 | Founding Engineering | P2-11: Customer 360° Timeline & Relationship Intelligence — **read-only aggregation** DTOs (`CustomerOverviewDto`, `CustomerTimelineItemDto`, `CustomerRelationshipDto`, `CustomerFinancialSummaryDto`, `CustomerCommunicationsSummaryDto`) over Customer, Lead/FollowUp, Quotation, Event, CommunicationRecord, Reminder, TimelineEntry, Invoice, Payment (via booking), FinancialDocument. No new tables; no write ownership; Workspace stays booking-centric. |
+| 1.6 | 2026-07-29 | Founding Engineering | P2-12: Business Intelligence KPI dashboards & analytics — **read-only aggregation** DTOs under Analytics (`AnalyticsDashboardDto`, sales/finance/staff/vendors/inventory/customers/operations/trends/export) over Lead, Quotation, Event, Customer, Payment, VendorExpense, Invoice, Staff, VendorProcurement, Inventory, Communication/Reminder. No new tables; no write ownership; Phase-1 `/dashboards/*` remains frozen; additive `/analytics/*` surface. |
 
 ---
 
@@ -126,18 +132,20 @@ Each context owns its aggregates. Cross-context references use aggregate root ID
 
 | Bounded context | Aggregates (Phase 1) | Primary EP1 areas |
 |-----------------|----------------------|-------------------|
-| **CRM / Customer** | Customer, TimelineEntry, IssueNote, ReviewRequest | EP1-CUS, EP1-SUP |
+| **CRM / Customer** | Customer, TimelineEntry, IssueNote, ReviewRequest; *Customer 360 DTOs (read models only — P2-11)* | EP1-CUS, EP1-SUP |
 | **Lead / Sales** | Lead, FollowUp | EP1-SAL |
 | **Quotation** | Quotation | EP1-FIN-001 |
 | **Event / Operations** | **Event**, EventWorkspace | EP1-OPS, EP1-AUT-002, EP1-AUT-006, EP1-BR-003 |
-| **Task** | Task, ChecklistTemplate | EP1-OPS-003, EP1-AUT-003 |
+| **Task** | Task, ChecklistItem | EP1-OPS-003 |
+| **Checklist** | ChecklistTemplate, EventChecklist | EP1-OPS-003, EP1-AUT-003 |
 | **Staff** | StaffMember, StaffAssignment | EP1-STF |
 | **Vendor** | Vendor, VendorProcurement, ProcurementLine | EP1-VEN |
-| **Inventory** | InventoryItem, InventoryMovement, PackingList | EP1-INV |
-| **Finance** | Invoice, Payment, VendorExpense, EventProfitabilityView | EP1-FIN, EP1-BR-001–002 |
-| **Calendar** | CalendarEntry | EP1-OPS-005 |
+| **Inventory** | InventoryItem, InventoryMovement, InventoryReservation, PackingList | EP1-INV |
+| **Finance** | Invoice, Payment, VendorExpense, FinancialDocument, EventProfitabilityView | EP1-FIN, EP1-BR-001–002 |
+| **Communication** | CommunicationRecord, CommunicationTemplate, Reminder, CommunicationAttachment, NotificationPreference | EP1-CUS-002 (ops log), P2-09 |
+| **Calendar** *(read model — no owned aggregate)* | `CalendarEntryDto` *(projection only; owns no persisted state)* | EP1-OPS-005, P2-10 |
 | **Platform** | Suggestion, Attachment (metadata), MovementPermission | EP1-AUT, EP1-STF-003 |
-| **BI** | FounderKpiSnapshot *(read model)* | EP1-KPI, EP1-MKT-001–002 |
+| **BI** *(read model — no owned aggregate)* | Phase-1 `FounderKpiSnapshot` *(frozen `/dashboards/*`)*; P2-12 Analytics DTOs *(additive `/analytics/*`)* | EP1-KPI, EP1-MKT-001–002, P2-12 |
 
 ```
 ┌─────────────┐     ┌─────────────┐     ┌──────────────┐
@@ -160,10 +168,16 @@ Each context owns its aggregates. Cross-context references use aggregate root ID
          ▼              ▼              ▼             ▼
     ┌─────────┐   ┌──────────┐   ┌──────────┐  ┌─────────┐
     │ Finance │   │ Calendar │   │  Vendor  │  │Inventory│
-    │Payment  │   │  Entry   │   │ (master) │  │ (master)│
-    │Expense  │   └──────────┘   └──────────┘  └─────────┘
-    └─────────┘
-```
+    │Payment  │   │(read     │   │ (master) │  │ (master)│
+    │Expense  │   │ model)   │   └──────────┘  └─────────┘
+    └─────────┘   └──────────┘
+    ```
+
+Calendar has no owned box of persisted data — it is drawn here only because it *reads across* Event, Staff, Vendor, Inventory, Communication, and Finance to render a unified view (P2-10).
+
+**Customer 360 (P2-11)** is likewise a **customer-centric read model** assembled by `CustomerIntelligenceApplicationService` — it owns no aggregate and writes nothing. It projects lifetime timeline, relationship health, booking history, financial rollups, and communication summaries from Customer, Lead/FollowUp, Quotation, Event, Communication, Reminder, TimelineEntry, Invoice, Payment (via bookings), and FinancialDocument. Workspace remains **booking-centric**; Customer 360 remains **customer-centric**.
+
+**Business Intelligence (P2-12)** is a **tenant-wide read model** assembled by `AnalyticsApplicationService` — it owns no aggregate and writes nothing. It projects founder/sales/finance/staff/vendor/inventory/customer/operations KPIs, historical trend buckets, and CSV/SpreadsheetML export from existing module repositories. Phase-1 founder routes under `/dashboards/*` remain **frozen**; P2-12 ships as the additive `/analytics/*` surface. **No AI / predictive / forecasting.**
 
 ---
 
@@ -194,6 +208,10 @@ erDiagram
     VendorProcurement ||--|{ ProcurementLine : "contains"
     Quotation ||--o{ ProcurementLine : "budget link"
     InventoryItem ||--o{ InventoryMovement : "tracked in"
+    InventoryItem ||--o{ InventoryReservation : "reserved for"
+    InventoryReservation ||--o{ InventoryMovement : "may link"
+    InventoryMovement ||--o{ InventoryVerification : "verified by"
+    InventoryMovement ||--o{ InventoryDamageReport : "damage reports"
     InventoryMovement ||--o| PackingList : "may include"
 
     Payment ||--o{ Attachment : "proof"
@@ -201,9 +219,28 @@ erDiagram
     VendorExpense ||--o{ Attachment : "proof"
     ProcurementLine ||--o{ Attachment : "proof"
 
-    Event ||--o| CalendarEntry : "scheduled on"
+    Event ||--o{ FinancialDocument : "owns evidence"
+    Payment ||--o{ FinancialDocument : "may link"
+    VendorExpense ||--o{ FinancialDocument : "may link"
+    VendorProcurement ||--o{ FinancialDocument : "may link"
+    Invoice ||--o{ FinancialDocument : "may link"
+    FinancialDocument ||--o{ FinancialDocumentAuditEvent : "audits"
+
+    Event ||--o{ CommunicationRecord : "may log"
+    Customer ||--o{ CommunicationRecord : "may link"
+    Vendor ||--o{ CommunicationRecord : "may link"
+    StaffMember ||--o{ CommunicationRecord : "may link"
+    CommunicationTemplate ||--o{ CommunicationRecord : "may seed"
+    CommunicationRecord ||--o{ CommunicationAttachment : "has metadata"
+    CommunicationRecord ||--o{ Reminder : "may spawn"
+    Event ||--o{ Reminder : "may schedule"
+    Customer ||--o{ Reminder : "may schedule"
+    Customer ||--o{ NotificationPreference : "prefers channels"
+
     Event ||--o{ Invoice : "billed via"
 ```
+
+Calendar is intentionally absent from this ER diagram: `CalendarEntryDto` (P2-10) is a read-time projection assembled by `CalendarApplicationService`, not a persisted table or aggregate with its own relationships.
 
 ---
 
@@ -291,6 +328,7 @@ created → active ⇄ inactive
 | ID | Capability |
 |----|------------|
 | EP1-CUS-001 | Unified customer profile |
+| EP1-CUS-002 | Communication / interaction timeline (CRM TimelineEntry + P2-09 CommunicationRecord; P2-11 Customer 360 aggregates both) |
 | EP1-SUP-* | Support view aliases customer capabilities |
 
 #### Workflow coverage
@@ -299,6 +337,21 @@ created → active ⇄ inactive
 |----------|------|
 | **W5** | Customer identity carries forward without duplicate entry |
 | **W1–W4** | Customer context on event record |
+
+#### Customer 360 read models (P2-11)
+
+Customer Intelligence is **not** a new aggregate. `CustomerIntelligenceApplicationService` assembles request-time DTOs only:
+
+| Read model | Purpose |
+|------------|---------|
+| `CustomerOverviewDto` | Profile snapshot, contacts, interaction window, active bookings, health, deep links |
+| `CustomerTimelineItemDto[]` | Chronological multi-source relationship timeline |
+| `CustomerBookingHistoryItemDto[]` | Booking history with workspace/calendar deep links |
+| `CustomerRelationshipDto` | Repeat flag, lifetime counts, preferred channel/event types, health + indicators |
+| `CustomerFinancialSummaryDto` | Quoted / invoiced / paid / outstanding rollup + document list |
+| `CustomerCommunicationsSummaryDto` | Channel usage, recent records, reminder counters |
+
+**Invariants:** no Prisma tables or migrations; no write ownership; permission reuse `clients:read`; Payment rollup is booking-scoped (`Payment` has no `customerId`); FollowUp list is lead-scoped via `findByLeadIds`; health is rule-based (no AI / predictive scoring).
 
 ---
 
@@ -519,7 +572,7 @@ Tracks operational progress **beyond** the sales pipeline (`EP1-OPS-004`):
 
 #### Purpose
 
-Operational hub activated at **Approved Event** (`EP1-OPS-001`). Aggregates cross-module **views and links** for one event — staff, vendors, inventory, tasks, finance visibility — without duplicating domain ownership of child aggregates.
+Operational hub activated at **Approved Event** (`EP1-OPS-001`). Domain intent is a cross-module ops hub. **Phase 1 HTTP realization** (`GET /api/v1/bookings/:id/workspace`) is a **thin status DTO** (workspace/preparation status + execution owner). Staff, vendors, inventory, tasks, and finance remain owned by their modules and are reached via booking-scoped APIs / Admin Portal deep-links — the workspace endpoint does **not** embed those collections.
 
 #### Structure
 
@@ -634,14 +687,16 @@ proposed → confirmed → released
 
 #### Purpose
 
-Staff master aligned to We Decor staffing model ([`06-staff-management.md`](../docs/business/06-staff-management.md) v1.0): 2 permanent decorators + trusted temporary pool.
+Staff master aligned to We Decor staffing model ([`06-staff-management.md`](../docs/business/06-staff-management.md) v1.0): 2 permanent decorators + trusted temporary pool. **Operational workforce identity** (P2-03 / P2-04). Authentication remains on `User`; optional `userId` links a StaffMember to a login account without duplicating auth.
 
 #### Structure
 
 | Kind | Name | Description |
 |------|------|-------------|
-| **AR** | StaffMember | Decorator profile |
-| **REF** | User | Optional auth link |
+| **AR** | StaffMember | Decorator / workforce profile |
+| **REF** | User | Optional auth link (`userId`) |
+
+**P2-04 fields:** `userId` (optional), `employmentType` (`permanent` \| `temporary`), `role` (operational role), `joinedAt`, `status` (`active` \| `inactive` \| `on_leave`). DTO also exposes `operationalRole` (alias of `role`) and `active` (derived from status).
 
 #### Lifecycle
 
@@ -654,11 +709,32 @@ active ⇄ inactive
 
 - Belongs to one tenant
 - Name and primary phone required
-- Inactive staff cannot receive new confirmed assignments
+- Inactive / on_leave staff cannot receive new confirmed assignments
+- `StaffAssignment.staffMemberId` references StaffMember (not User). Expand-contract retains `legacyUserId` until Phase 3 drop.
+
+#### Scheduling (P2-05)
+
+Owned by **StaffMember** (not User, not StaffAssignment):
+
+| Kind | Name | Description |
+|------|------|-------------|
+| **E** | StaffAvailability | Date-specific or recurring weekday window; kinds: available / unavailable / partial_day / holiday |
+| **E** | StaffLeave | Leave request; types casual/sick/vacation/emergency/other; status requested→approved\|rejected\|cancelled |
+
+- Approved leave blocks confirmation of overlapping assignments
+- Explicit unavailable / partial_day / holiday availability blocks confirmation
+- Confirmed assignment date overlap blocks double-booking
+- Workload metrics and rule-based recommendations are derived (not persisted)
 
 #### Related EP1 IDs
 
-EP1-STF-001, EP1-STF-003 (movement permissions via platform)
+EP1-STF-001, EP1-STF-002, EP1-STF-003 (movement permissions via platform)
+
+#### Related milestones
+
+P2-03 Staff Domain Architecture Review  
+P2-04 StaffMember Implementation  
+P2-05 Staff Scheduling & Availability
 
 ---
 
@@ -714,17 +790,31 @@ Per-event procurement tracking from requirement through completion and payment (
 | **AR** | VendorProcurement | Procurement header per event (or per event-vendor grouping) |
 | **E** | ProcurementLine | Line item: material/service, vendor, budget link, status |
 | **E** | ProcurementLineIssueNote | Line-level issue note |
-| **REF** | Event | `eventId` |
+| **E** | ProcurementQuote | Vendor quotation (P2-06; multiple allowed; one approved) |
+| **E** | PurchaseOrder | Formal PO record (PDF deferred) |
+| **E** | ProcurementTimelineEvent | Append-only lifecycle timeline |
+| **REF** | Event | `eventId` / `bookingId` |
 | **REF** | Vendor | `vendorId` |
 | **REF** | QuotationLineItem | Budget comparison (`07` procurement linkage) |
 | **REF** | VendorExpense | Payment linkage |
 
+#### Lifecycle — procurement header (P2-06)
+
+```
+draft → quotation_requested → quotation_received → approved
+  → purchase_ordered → vendor_confirmed → materials_delivered → completed
+  ↘ cancelled (from non-terminal states)
+```
+
+Legacy Phase 1 `status` on the header remains and is **synced** from `workflowStatus` for backward compatibility (`planned`/`requested`/`confirmed`/`delivered`/`completed`/`cancelled`).
+
 #### Lifecycle — procurement line
 
-Per Doc `19` and [`07-vendor-management.md`](../docs/business/07-vendor-management.md):
+Per Doc `19` and [`07-vendor-management.md`](../docs/business/07-vendor-management.md) (unchanged Phase 1 line FSM + cancelled):
 
 ```
 Planned → Requested → Confirmed → Delivered → Completed
+  ↘ Cancelled
 ```
 
 | State | Meaning | Source |
@@ -786,10 +876,43 @@ active → retired
 - Taxonomy classification required
 - `quantityAvailable` ≥ 0 at all times
 - Location quantity tracked at JP Nagar for Phase 1
+- **P2-07 availability:** `availableQuantity = quantityAtJpNagar − active reservations − unlinked active movements` (movements not linked to a reservation). Over-allocation returns `INSUFFICIENT_INVENTORY` (HTTP 409).
 
 #### Related EP1 IDs
 
 EP1-INV-001, EP1-INV-002
+
+---
+
+### Inventory Reservation
+
+**Bounded context:** Inventory  
+**Module:** Inventory
+
+#### Purpose
+
+Booking-scoped hold on stock before or alongside movement (`P2-07`). Preserves `InventoryItem` as master; does not replace movements.
+
+#### Structure
+
+| Kind | Name | Description |
+|------|------|-------------|
+| **AR** | InventoryReservation | Quantity reserved for one booking + item |
+| **REF** | Event | `bookingId` |
+| **REF** | InventoryItem | `inventoryItemId` |
+| **REF** | VendorProcurement | Optional `vendorProcurementId` (workflow `completed` or `materials_delivered` only) |
+
+#### Lifecycle
+
+```
+reserved → released | cancelled
+```
+
+#### Business invariants
+
+- Only active inventory items may be reserved
+- Quantity must fit current available quantity (formula above)
+- Optional procurement link must share the same booking and be in a terminal delivery workflow status
 
 ---
 
@@ -800,7 +923,7 @@ EP1-INV-001, EP1-INV-002
 
 #### Purpose
 
-Per-event stock movement through preparation and return (`EP1-INV-003`–`007`, W2).
+Per-event stock movement through preparation and return (`EP1-INV-003`–`007`, W2). P2-07 extends the FSM without removing the Phase 1 path.
 
 #### Structure
 
@@ -810,35 +933,53 @@ Per-event stock movement through preparation and return (`EP1-INV-003`–`007`, 
 | **E** | PackingList | Generated checklist of items to pack (`EP1-INV-004`) |
 | **E** | PackingListLine | Item + quantity on packing list |
 | **E** | DamageNote | Accountability for damage/loss (`EP1-INV-006`) |
-| **REF** | Event | `eventId` |
+| **E** | InventoryVerification | Expected vs actual quantity check (`P2-07`) |
+| **E** | InventoryDamageReport | Structured damage/loss report; photo **metadata only** (`P2-07`) |
+| **REF** | Event | `eventId` / `bookingId` |
 | **REF** | InventoryItem | `inventoryItemId` |
-| **REF** | Attachment | Movement photos (`EP1-INV-007`) |
+| **REF** | InventoryReservation | Optional `reservationId` |
+| **REF** | Attachment | Movement photos (`EP1-INV-007`; upload deferred) |
 
 #### Lifecycle — movement state machine
 
-Per Doc `19` and [`08-inventory-workflow.md`](../docs/business/08-inventory-workflow.md):
+Phase 1 path (still valid) per Doc `19` and [`08-inventory-workflow.md`](../docs/business/08-inventory-workflow.md):
 
 ```
 Planned → Picked → Packed → Loaded → At Venue → Returned → Cleaned/Ready
+```
+
+P2-07 additive statuses (optional branches; Phase 1 transitions remain reachable):
+
+```
+… → packing_started → … → verified → ready_for_dispatch → … → dispatched → …
+… → return_verified → …
+  ↘ cancelled (from non-terminal packing/dispatch states)
 ```
 
 | State | Meaning |
 |-------|---------|
 | **Planned** | Item identified for event |
 | **Picked** | Taken from storage |
+| **packing_started** | Packing in progress (P2-07) |
 | **Packed** | Prepared for transport |
+| **verified** | Pre-dispatch quantity check (P2-07) |
+| **ready_for_dispatch** | Cleared for load-out (P2-07) |
 | **Loaded** | Loaded for transport |
+| **dispatched** | En route / left warehouse (P2-07) |
 | **At Venue** | On site |
 | **Returned** | Back from venue |
+| **return_verified** | Return quantities reconciled (P2-07) |
 | **Cleaned/Ready** | Available for reuse |
+| **cancelled** | Movement voided (P2-07) |
 
 #### Business invariants
 
 - State transitions are **human-initiated** (movement permissions per EP1-STF-003)
-- Cannot allocate more than available quantity
+- Cannot allocate more than available quantity (`INSUFFICIENT_INVENTORY` → 409)
 - Packing list generation may produce **Suggestion** for human review (`EP1-AUT-003`, ADR-017)
 - Returns workflow required before item marked Cleaned/Ready
-- Damage/loss requires accountability note
+- Damage/loss requires accountability note and/or structured damage report
+- No barcode/QR scanning; no image binary storage in Phase 1 / P2-07
 
 #### Related EP1 IDs
 
@@ -865,10 +1006,12 @@ Event-linked execution checklists and operational tasks (`EP1-OPS-003`). Support
 
 | Kind | Name | Description |
 |------|------|-------------|
-| **AR** | Task | Unit of work with assignee and due date |
+| **AR** | Task | Unit of work with assignee, due date, category, priority |
 | **E** | ChecklistItem | Sub-item when task represents checklist row |
 | **REF** | Event | `eventId` |
 | **REF** | StaffMember | `assignedTo` |
+
+**P2-01 fields on Task:** `category` (`general` \| `pre_event` \| `dayheets` \| `vendor` \| `inventory` \| `venue` \| `wrap_up`), `priority` (`low` \| `medium` \| `high` \| `urgent`), `completionNotes`. Task checklist items remain supported for ad-hoc work. Reusable named checklists use the **Checklist** aggregate (P2-02).
 
 #### Lifecycle
 
@@ -881,7 +1024,7 @@ pending → in_progress → completed
 
 - `completedAt` set when status → completed
 - Tasks on cancelled events are cancelled
-- Checklist generation from template produces **Suggestion** until confirmed (ADR-017)
+- Checklist generation from template produces **Suggestion** until confirmed (ADR-017), then generates **EventChecklist** copies (P2-02)
 - Completion recorded in Event OS as source of truth (Z2)
 
 #### Related EP1 IDs
@@ -894,6 +1037,49 @@ EP1-OPS-003, EP1-AUT-003
 |----------|------|
 | **W1** | Execution checklists (Z2) |
 | **W2** | Packing/preparation tasks |
+
+---
+
+### Checklist (P2-02)
+
+**Bounded context:** Checklist  
+**Module:** Checklist
+
+#### Purpose
+
+Reusable checklist templates and event-specific checklist execution (`EP1-OPS-003`, `EP1-AUT-003`). Templates remain reusable; generated event checklists are independent copies so future template edits do not mutate in-flight events.
+
+#### Structure
+
+| Kind | Name | Description |
+|------|------|-------------|
+| **AR** | ChecklistTemplate | Reusable template (name, description, eventTypes, category, status, templateVersion, sortOrder) |
+| **E** | ChecklistTemplateItem | Ordered template row (title, required, defaultAssigneeRole, estimatedDuration) |
+| **AR** | EventChecklist | Event-scoped copy generated from a template (or matching active templates) |
+| **E** | EventChecklistItem | Execution row (complete/undo, notes, completedAt, completedBy) |
+| **REF** | Event | `bookingId` on EventChecklist |
+| **REF** | ChecklistTemplate | Optional `templateId` + snapshotted `templateVersion` |
+
+#### Lifecycle (template)
+
+```
+active ⇄ inactive → archived
+```
+
+Duplicate creates a new active version under the same `rootTemplateId` with incremented `templateVersion`. Hard delete is not supported when the template has generated event checklists; archive instead. Template item removal is blocked when the template has been used.
+
+#### Generation
+
+`POST /event-checklists/generate` (or suggestion accept `checklist.generate`) copies matching active templates into EventChecklist + EventChecklistItem rows. Already-generated template+booking pairs are skipped (idempotent).
+
+#### Related EP1 IDs
+
+EP1-OPS-003, EP1-AUT-003
+
+#### Related milestones
+
+P2-02 Checklist Templates & Checklist Management
+P2-01 Event Workspace Expansion (Task.category interim; preserved for Tasks)
 
 ---
 
@@ -928,10 +1114,168 @@ recorded → (immutable)
 - Append-oriented — edits are corrections with audit, not silent mutation
 - Must reference an Event in Phase 1
 - Does not auto-capture WhatsApp messages
+- Distinct from P2-09 `CommunicationRecord` (shared operational Communication Center); TimelineEntry remains the CRM adjunct interaction log
 
 #### Related EP1 IDs
 
 EP1-CUS-002, EP1-SUP-001
+
+---
+
+### CommunicationRecord (P2-09)
+
+**Bounded context:** Communication  
+**Module:** Communication
+
+#### Purpose
+
+Shared **operational communication log** for booking / customer / vendor / staff touchpoints (`P2-09`, supports `EP1-CUS-002` operational tracking). Manual status lifecycle only — **no** WhatsApp, email, or SMS provider integration; **no** background scheduler; **no** AI generation.
+
+#### Structure
+
+| Kind | Name | Description |
+|------|------|-------------|
+| **AR** | CommunicationRecord | Logged communication (channel, direction, status, subject/body) |
+| **E** | CommunicationAttachment | Metadata-only file pointer on a record (`fileName`, `mimeType`, `fileSizeBytes`, `storageKey`) |
+| **REF** | Event / Booking | Optional `bookingId` |
+| **REF** | Customer | Optional `customerId` |
+| **REF** | Vendor | Optional `vendorId` |
+| **REF** | StaffMember | Optional `staffMemberId` |
+| **REF** | CommunicationTemplate | Optional `templateId` |
+| **REF** | User | Optional `createdByUserId` |
+
+Channels: `whatsapp`, `email`, `sms`, `phone_call`, `internal_note`, `manual_meeting`.  
+Directions: `incoming`, `outgoing`.  
+Statuses: `draft`, `queued`, `sent`, `delivered`, `read`, `failed`, `cancelled`, `completed`.
+
+#### Lifecycle
+
+```
+draft → queued → sent → delivered → read
+  │        │       │         └→ failed
+  │        │       └→ failed | cancelled
+  │        └→ sent | cancelled | failed
+  ├→ cancelled | completed (manual channels only)
+  └→ (soft-delete via deletedAt)
+```
+
+Manual channels (`phone_call`, `internal_note`, `manual_meeting`) may be created or transitioned as `completed`. Soft delete sets `deletedAt` (no hard delete).
+
+#### Business invariants
+
+- Does **not** mutate Customer, StaffMember, Vendor, or Booking aggregates — optional FK links only
+- No outbound provider send; status transitions are human-recorded
+- Attachments are metadata-only (same pattern as FinancialDocument)
+- Distinct from CRM `TimelineEntry` and Booking `EventNote`
+
+#### Related EP1 IDs
+
+EP1-CUS-002 (operational communication tracking)
+
+---
+
+### CommunicationTemplate (P2-09)
+
+**Bounded context:** Communication  
+**Module:** Communication
+
+#### Purpose
+
+Reusable message templates (subject/body/category/channel) that may seed a `CommunicationRecord`. No AI drafting.
+
+#### Structure
+
+| Kind | Name | Description |
+|------|------|-------------|
+| **AR** | CommunicationTemplate | Named template with body and optional channel |
+| **VO** | Template status | `active` \| `archived` |
+
+#### Lifecycle
+
+```
+active → archived
+```
+
+#### Business invariants
+
+- Tenant-scoped; archive is soft lifecycle (status), not hard delete
+- Optional link from records; templates do not send messages
+
+---
+
+### Reminder (P2-09)
+
+**Bounded context:** Communication  
+**Module:** Communication
+
+#### Purpose
+
+Manual follow-up reminders linked optionally to booking / customer / vendor / staff / communication. **No background scheduler** in P2-09 — operators create, complete, or cancel explicitly.
+
+#### Structure
+
+| Kind | Name | Description |
+|------|------|-------------|
+| **AR** | Reminder | Due follow-up with category, title, notes |
+| **REF** | Event / Booking | Optional `bookingId` |
+| **REF** | Customer / Vendor / StaffMember | Optional party links |
+| **REF** | CommunicationRecord | Optional `communicationRecordId` |
+| **REF** | User | Optional `assignedToUserId` |
+
+Categories: `payment_follow_up`, `event_reminder`, `vendor_follow_up`, `customer_follow_up`, `staff_follow_up`, `other`.  
+Statuses: `pending` → `completed` \| `cancelled`.
+
+#### Business invariants
+
+- No automatic firing or notification delivery in P2-09
+- Does not mutate linked aggregates
+
+---
+
+### NotificationPreference (P2-09)
+
+**Bounded context:** Communication  
+**Module:** Communication
+
+#### Purpose
+
+Future-ready channel opt-in flags (WhatsApp / email / SMS) for a customer (or user). Stored only — **no delivery** in P2-09.
+
+#### Structure
+
+| Kind | Name | Description |
+|------|------|-------------|
+| **AR** | NotificationPreference | Boolean channel preferences |
+| **REF** | Customer | Optional `customerId` |
+| **REF** | User | Optional `userId` |
+
+#### Business invariants
+
+- Preference storage only; no provider integration
+- Does not alter Customer aggregate fields beyond the preference record FK
+
+---
+
+### EventNote (P2-01)
+
+**Bounded context:** Event / Operations  
+**Module:** Booking (workspace)
+
+#### Purpose
+
+Internal operational notes on an event — **not** customer-visible. Distinct from `TimelineEntry` (`client_interactions`).
+
+#### Structure
+
+| Kind | Name | Description |
+|------|------|-------------|
+| **E** | EventNote | Internal note body + author |
+| **REF** | Event | `bookingId` |
+| **REF** | User | `createdByUserId` |
+
+#### Related
+
+P2-01 Event Workspace Expansion
 
 ---
 
@@ -959,10 +1303,12 @@ Lightweight issue/complaint notes — **not** a ticketing system (`EP1-CUS-004`,
 open → resolved
 ```
 
+*Phase 1 API (R3-07): create-only with status default `open`. Resolve transition is domain-valid but **not** exposed via PATCH/resolve endpoints yet.*
+
 #### Business invariants
 
 - No SLA, routing, or escalation workflow in Phase 1
-- Resolution is manual status + optional note
+- Resolution is manual status + optional note (API deferred beyond create)
 - Vendor issues may exist at vendor level and procurement line level (`07`)
 
 #### Related EP1 IDs
@@ -994,6 +1340,8 @@ Track Google/Instagram/website review requests ported from Lead Management Appli
 pending → sent → (acknowledged | skipped)
 ```
 
+*Phase 1 API (R3-07): create-only with status default `pending`. Send/acknowledge endpoints are **not** shipped.*
+
 #### Business invariants
 
 - Sending review message requires human action (reuse LM pattern)
@@ -1019,16 +1367,19 @@ Customer advance and balance payment records with optional proof attachments (`E
 | Kind | Name | Description |
 |------|------|-------------|
 | **AR** | Payment | Money received from customer |
-| **REF** | Event | `eventId` |
+| **REF** | Event / Booking | Domain `eventId`; HTTP booking id |
 | **REF** | Invoice | `invoiceId` (when invoiced) |
-| **REF** | Attachment | Optional proof |
+| **REF** | Attachment | Optional proof (legacy UUID pointer) |
+| **REF** | FinancialDocument | Optional P2-08 evidence metadata linked via `paymentId` |
 | **VO** | Money, PaymentMethod | `cash`, `upi`, `bank_transfer`, `card`, `cheque`, `other` |
 
 #### Lifecycle
 
 ```
-recorded → (void)
+confirmed → (void)
 ```
+
+Persistence/API status enum: **`confirmed` | `void`** (older docs said `recorded` — treat as synonym for confirmed only in narrative; wire value is `confirmed`).
 
 #### Business invariants
 
@@ -1067,13 +1418,16 @@ Vendor and event expenses for profitability (`EP1-FIN-004`).
 | **REF** | Event | `eventId` |
 | **REF** | ProcurementLine | Optional link |
 | **REF** | Vendor | `vendorId` |
-| **REF** | Attachment | Bill / UPI proof |
+| **REF** | Attachment | Bill / UPI proof (legacy UUID pointer) |
+| **REF** | FinancialDocument | Optional P2-08 evidence metadata linked via `vendorExpenseId` |
 
 #### Lifecycle
 
 ```
-recorded → (void)
+confirmed → (void)
 ```
+
+Persistence/API status enum: **`confirmed` | `void`** (older docs said `recorded` — wire value is `confirmed`).
 
 #### Business invariants
 
@@ -1091,6 +1445,58 @@ EP1-FIN-004, EP1-FIN-005, EP1-VEN-004
 |----------|------|
 | **W3** | Vendor payment tracking |
 | **W4** | Expense side of profitability (Z5, I5) |
+
+---
+
+### FinancialDocument
+
+**Bounded context:** Finance  
+**Module:** Finance
+
+#### Purpose
+
+Booking-owned financial evidence **metadata** for payment proofs, expense receipts, and related finance artefacts (`P2-08`, supports `EP1-FIN-003`). Does **not** store binary files or generate PDFs — `storageKey` is a metadata pointer only.
+
+#### Structure
+
+| Kind | Name | Description |
+|------|------|-------------|
+| **AR** | FinancialDocument | Evidence metadata record |
+| **E** | FinancialDocumentAuditEvent | Append-only lifecycle audit (`uploaded`, `updated`, `verified`, `rejected`, `deleted`) |
+| **REF** | Event / Booking | **Required** `bookingId` |
+| **REF** | Payment | Optional `paymentId` |
+| **REF** | VendorExpense | Optional `vendorExpenseId` |
+| **REF** | VendorProcurement | Optional `vendorProcurementId` |
+| **REF** | Invoice | Optional `invoiceId` |
+| **VO** | Document metadata | `fileName`, `mimeType`, `fileSizeBytes`, `storageKey` |
+
+Document types: `payment_proof`, `expense_receipt`, `vendor_invoice`, `customer_invoice`, `credit_note`, `debit_note`, `other`.
+
+#### Lifecycle
+
+```
+pending → verified | rejected
+       ↘ soft-deleted (`deletedAt`)
+```
+
+Verification status starts at **`pending`**; verify/reject require `documents:verify`. Soft delete sets `deletedAt` (no hard delete).
+
+#### Business invariants
+
+- Booking is always required; Payment / VendorExpense / VendorProcurement / Invoice links are optional
+- No binary upload pipeline and no PDF generation in P2-08
+- Does not replace Payment, VendorExpense, Invoice, or profitability aggregates
+- Distinct from platform `Attachment` (Phase 1 polymorphic UUID pointer); FinancialDocument is the Finance-owned evidence aggregate
+
+#### Related EP1 IDs
+
+EP1-FIN-003 (proofs), EP1-FIN-004 (expense evidence)
+
+#### Workflow coverage
+
+| Workflow | Role |
+|----------|------|
+| **W4** | Payment/expense evidence for financial completion |
 
 ---
 
@@ -1192,7 +1598,7 @@ pending → accepted | dismissed | expired
 
 - Handlers create Suggestions — never execute business mutations directly (ADR-017)
 - Accept delegates to target module application service
-- Types include: `workspace.create`, `checklist.generate`, `staff.assign`, `calendar.milestone`
+- Types include: `workspace.create`, `checklist.generate`, `staff.assign` (Calendar, P2-10, does not participate in the suggestion workflow — it is a stateless read model with no write path to suggest into)
 
 #### Related EP1 IDs
 
@@ -1200,32 +1606,128 @@ EP1-AUT-001, EP1-AUT-002, EP1-AUT-003, EP1-AUT-004, EP1-AUT-005
 
 ---
 
-### CalendarEntry
+### Calendar (Read Model — P2-10)
 
 **Bounded context:** Calendar  
 **Module:** Calendar
 
 #### Purpose
 
-Event dates and operations milestones on unified calendar (`EP1-OPS-005`).
+Unified operations planning view — day/week/month calendar, agenda, chronological timeline, and cross-module conflict overlay (`EP1-OPS-005`). **Calendar owns no operational state.** It is a **read-only aggregation / composition layer** over facts already owned by other bounded contexts.
 
 #### Structure
 
 | Kind | Name | Description |
 |------|------|-------------|
-| **AR** | CalendarEntry | Scheduled block |
-| **REF** | Event | `eventId` |
-| **REF** | Lead | `leadId` (site visits) |
+| **Read model** | `CalendarEntryDto` | Projection — not an Aggregate Root, not persisted; assembled per request by `CalendarApplicationService` |
+| **Source** | Event | `eventStartDate`/`eventEndDate` → calendar block |
+| **Source** | StaffAssignment, StaffLeave, StaffAvailability | Staff lanes (owned by Staff module) |
+| **Source** | VendorProcurement | Procurement required-date milestones (owned by Vendor module) |
+| **Source** | InventoryMovement, InventoryReservation | Dispatch/return/ready milestones (owned by Inventory module) |
+| **Source** | Reminder | Pending/overdue reminder markers (owned by Communication module) |
+| **Source** | CommunicationRecord | Timeline-only communication events (owned by Communication module) |
+| **Source** | FinancialDocument | Timeline-only document upload events (owned by Finance module) |
+
+There is **no** `CalendarEntry` table, **no** `CalendarEntryRepository`, and **no** `CalendarEntryCreated` domain event. Calendar never writes to, or takes ownership of, any of the source aggregates above; each source module remains the sole writer of its own state.
 
 #### Lifecycle
 
-```
-scheduled → completed | cancelled
-```
+None — `CalendarEntryDto.status` mirrors the current status of the underlying source record (e.g. an `event` entry shows the `Event.status`; a `reminder` entry shows the `Reminder.status`). There is no independent calendar lifecycle to manage.
+
+#### Conflict overlay (display-only)
+
+`GET /calendar/conflicts` reuses existing module logic — `SchedulingApplicationService.detectConflictsForStaffOnBooking` (Staff) and `InventoryAvailabilityService` (Inventory) — to surface staff conflicts, inventory shortages, procurement delays, and pending reminders. No new validation rules are introduced; conflicts are computed for display only and do not block any write path.
 
 #### Related EP1 IDs
 
-EP1-OPS-005
+EP1-OPS-005, P2-10
+
+---
+
+### Customer Intelligence (Read Model — P2-11)
+
+**Bounded context:** CRM / Customer  
+**Module:** Customer (`apps/api/src/modules/customer/`)
+
+#### Purpose
+
+Customer 360° relationship intelligence — overview, unified timeline, booking history, relationship indicators, financial summary, and communications summary (`EP1-CUS-001`, `EP1-CUS-002`). **Customer Intelligence owns no operational state.** It is a **read-only aggregation / composition layer** over facts already owned by CRM, Lead, Quotation, Booking, Communication, and Finance.
+
+#### Structure
+
+| Kind | Name | Description |
+|------|------|-------------|
+| **Read model** | `CustomerOverviewDto` | Profile + contacts + interaction window + health |
+| **Read model** | `CustomerTimelineItemDto` | Single chronological timeline item (projection) |
+| **Read model** | `CustomerBookingHistoryItemDto` | Booking history row with deep links |
+| **Read model** | `CustomerRelationshipDto` | Repeat / preferred channel & event types / health |
+| **Read model** | `CustomerFinancialSummaryDto` | Quoted / invoiced / paid / outstanding |
+| **Read model** | `CustomerCommunicationsSummaryDto` | Channel usage + recent + reminders |
+| **Source** | Customer, Contact, TimelineEntry | CRM identity and CRM interaction log |
+| **Source** | Lead, FollowUp | Sales pipeline (FollowUp via `findByLeadIds`) |
+| **Source** | Quotation, Event | Commercial + operational bookings |
+| **Source** | CommunicationRecord, Reminder | Operational Communication Center |
+| **Source** | Invoice | Customer-scoped invoices |
+| **Source** | Payment | Confirmed payments via booking IDs (`Payment` has no `customerId`) |
+| **Source** | FinancialDocument | Booking-scoped document metadata |
+
+There is **no** new Customer Intelligence table, **no** intelligence repository, and **no** intelligence domain event. HTTP resource remains **`clients`** (`/clients/:customerId/...`); UI label remains Customers. Permission: reuse **`clients:read`** (no new intelligence permission).
+
+#### Health (rule-based)
+
+Priority: `follow_up_required` (failed communications or overdue pending reminders) → `active` (booking status in `approved` / `in_preparation` / `in_execution`) → `returning` (≥2 bookings, or single completed-path booking when no active) → `dormant` (≥180 days since last interaction) → else `active`. **No AI / predictive scoring.**
+
+#### Related EP1 IDs
+
+EP1-CUS-001, EP1-CUS-002, P2-11
+
+---
+
+### Analytics (Read Model — P2-12)
+
+**Bounded context:** BI  
+**Module:** Analytics (`apps/api/src/modules/analytics/`)
+
+#### Purpose
+
+Business Intelligence KPI dashboards and analytics — founder dashboard, sales, finance, staff, vendors, inventory, customers, operations, historical trends, and export (`EP1-KPI-001`–`007`, `EP1-MKT-001`–`002`). **Analytics owns no operational state.** It is a **read-only aggregation / composition layer** over facts already owned by Lead, Quotation, Booking, Customer, Finance, Staff, Vendor, Inventory, and Communication.
+
+#### Structure
+
+| Kind | Name | Description |
+|------|------|-------------|
+| **Read model** | `AnalyticsDashboardDto` | Founder KPI rollup (revenue, profit, utilisation rates, counts) |
+| **Read model** | `AnalyticsSalesDto` | Lead conversion, quote acceptance, revenue by type/month |
+| **Read model** | `AnalyticsFinanceDto` | Revenue / expenses / profit / receivables / collection trend |
+| **Read model** | `AnalyticsStaffDto` | Utilisation, leave summary, per-staff workload |
+| **Read model** | `AnalyticsVendorsDto` | Procurement completion, delivery, spend, quote win rate |
+| **Read model** | `AnalyticsInventoryDto` | Reservations, movements, damage, dispatch trends |
+| **Read model** | `AnalyticsCustomersDto` | Retention, event-type mix, health distribution |
+| **Read model** | `AnalyticsOperationsDto` | Today's / upcoming events, overdue tasks, pending ops |
+| **Read model** | `AnalyticsTrendsDto` | Historical period buckets only (no forecasting) |
+| **Read model** | `AnalyticsExportDto` | CSV text or base64 SpreadsheetML payload |
+| **Source** | Lead, Quotation, Event, Customer | Sales + booking + CRM masters |
+| **Source** | Payment, VendorExpense, Invoice, FinancialDocument | Finance (confirmed payments/expenses for P&L) |
+| **Source** | StaffMember, StaffAssignment, StaffLeave | Staff utilisation |
+| **Source** | Vendor, VendorProcurement | Procurement analytics |
+| **Source** | InventoryItem, InventoryMovement, InventoryReservation | Inventory ops |
+| **Source** | CommunicationRecord, Reminder | Customer health / ops counters |
+
+There is **no** new Analytics table, **no** analytics repository, and **no** analytics domain event. HTTP resource is **`analytics`** (`/analytics/...`). Permission: **`analytics:read`**. Phase-1 **`/dashboards/*`** (`dashboards:read`) remains frozen and unchanged.
+
+#### KPI basis (explicit)
+
+| Concern | Rule |
+|---------|------|
+| Revenue / expenses / profit | **Confirmed** payments and **confirmed** vendor expenses (same basis as `ProfitabilityApplicationService`) |
+| Lead conversion | Converted stages = `approved` \| `completed` |
+| Customer health distribution | Mirrors P2-11 relationship health priority ladder (no AI) |
+| Trends | Historical buckets only (`daily` / `weekly` / `monthly` / `yearly`) — **no forecasting** |
+| Export | `csv` = UTF-8 text; `xlsx` format param = Excel-compatible **SpreadsheetML** (`.xls`), not Office Open XML binary |
+
+#### Related EP1 IDs
+
+EP1-KPI-001–007, EP1-MKT-001–002, P2-12
 
 ---
 
@@ -1279,7 +1781,7 @@ Cross-module **domain events** notify other contexts of facts that already happe
 | `LeadStageChanged` | Lead | Pipeline analytics |
 | `LeadConverted` | Lead | Customer link verification |
 | `QuotationApproved` | Quotation | **Suggestion:** activate workspace, generate checklist draft |
-| `EventWorkspaceActivated` | Event | Calendar entry suggestion |
+| `EventWorkspaceActivated` | Event | No calendar side effect — Calendar (P2-10) is a stateless read model that reflects `Event.eventStartDate`/`eventEndDate` directly; no `calendar.milestone` suggestion or write is produced |
 | `StaffAssignmentConfirmed` | Staff | In-app alert (after human confirm) |
 | `ProcurementLineStatusChanged` | Vendor | Workspace status refresh |
 | `InventoryMovementStateChanged` | Inventory | Preparation status recalculation |
@@ -1329,19 +1831,19 @@ Greenfield aggregates (no adequate current-system model): **Event**, **EventWork
 | EP1-SAL-004 | Lead, StaffAssignment |
 | EP1-SAL-005 | Lead (`FollowUp`) |
 | EP1-SAL-006 | Lead, Suggestion (notification gates) |
-| EP1-CUS-001 | Customer |
-| EP1-CUS-002 | TimelineEntry |
+| EP1-CUS-001 | Customer; Customer 360 overview / relationship read models (P2-11) |
+| EP1-CUS-002 | TimelineEntry, CommunicationRecord (P2-09 operational log); Customer 360 timeline aggregation (P2-11) |
 | EP1-CUS-003 | ReviewRequest |
 | EP1-CUS-004 | IssueNote |
 | EP1-FIN-001 | Quotation |
 | EP1-FIN-002 | Invoice |
-| EP1-FIN-003 | Payment, Attachment |
-| EP1-FIN-004 | VendorExpense |
+| EP1-FIN-003 | Payment, Attachment, FinancialDocument |
+| EP1-FIN-004 | VendorExpense, FinancialDocument |
 | EP1-FIN-005 | EventProfitabilityView |
 | EP1-OPS-001 | EventWorkspace |
 | EP1-OPS-003 | Task |
 | EP1-OPS-004 | ExecutionProgress |
-| EP1-OPS-005 | CalendarEntry |
+| EP1-OPS-005 | `CalendarEntryDto` (read model / projection — no owned aggregate, P2-10) |
 | EP1-STF-001 | StaffMember |
 | EP1-STF-002 | StaffAssignment, Suggestion |
 | EP1-STF-003 | MovementPermissionPolicy |
@@ -1358,7 +1860,7 @@ Greenfield aggregates (no adequate current-system model): **Event**, **EventWork
 | EP1-INV-005 | InventoryMovement (Returned → Cleaned/Ready) |
 | EP1-INV-006 | DamageNote |
 | EP1-INV-007 | Attachment |
-| EP1-MKT-001–002 | FounderKpiSnapshot (read model) |
+| EP1-MKT-001–002 | FounderKpiSnapshot (Phase-1 `/dashboards/*`); Analytics sales/dashboard read models (P2-12 `/analytics/*`) |
 | EP1-MKT-003 | Attachment (event content library) |
 | EP1-MKT-004 | Lead |
 | EP1-AUT-001–005 | Suggestion, BusinessRuleEnforcement |
@@ -1366,7 +1868,7 @@ Greenfield aggregates (no adequate current-system model): **Event**, **EventWork
 | EP1-AUT-002 | EventWorkspace, Suggestion |
 | EP1-AUT-003 | PackingList, Suggestion |
 | EP1-AUT-004 | StaffAssignment, Suggestion |
-| EP1-KPI-001–007 | FounderKpiSnapshot |
+| EP1-KPI-001–007 | FounderKpiSnapshot (Phase-1 frozen); Analytics DTOs (P2-12) |
 | EP1-BR-001 | Payment, Lead, Event |
 | EP1-BR-002 | Event |
 | EP1-BR-003 | Event (`executionOwnerId`) |
@@ -1442,6 +1944,6 @@ The following are **explicitly outside** Phase 1 domain scope (Doc `19` Scope Fr
 
 ---
 
-*Last updated: 2026-07-08*  
+*Last updated: 2026-07-13 (R4-01)*  
 *Owner: Founding Engineering*  
-*Version: 1.0 — draft for founder review*
+*Version: 1.2 — draft for founder review*

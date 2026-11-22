@@ -75,6 +75,11 @@ export abstract class QuotationRepository {
     id: string,
   ): Promise<QuotationRecord | null>;
 
+  abstract findByCustomerId(
+    tenantId: string,
+    customerId: string,
+  ): Promise<QuotationRecord[]>;
+
   abstract findLatestRevision(
     tenantId: string,
     quotationNumber: number,
@@ -92,6 +97,23 @@ export abstract class QuotationRepository {
     tenantId: string,
     ids: string[],
   ): Promise<QuotationRecord[]>;
+
+  /** P2-12 — Tenant-wide quotation list for sales analytics. */
+  abstract findAll(tenantId: string): Promise<QuotationRecord[]>;
+
+  abstract findPage(
+    tenantId: string,
+    options: {
+      page: number;
+      pageSize: number;
+      q?: string;
+      status?: string;
+      customerId?: string;
+      leadId?: string;
+      sort?: 'createdAt' | 'quotationNumber';
+      order?: 'asc' | 'desc';
+    },
+  ): Promise<{ items: QuotationRecord[]; total: number }>;
 
   abstract update(
     tenantId: string,

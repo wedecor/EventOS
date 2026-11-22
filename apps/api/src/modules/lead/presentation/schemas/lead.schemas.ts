@@ -30,6 +30,27 @@ export const createLeadSchema = z.object({
   notes: z.string().nullish(),
 });
 
+export const updateLeadSchema = z.object({
+  customerId: z.string().uuid().nullish(),
+  sourceDetail: z.string().nullish(),
+  eventType: z.string().nullish(),
+  eventDate: z
+    .object({
+      start: z.string().date(),
+      end: z.string().date(),
+    })
+    .nullish(),
+  venue: z.string().nullish(),
+  estimatedBudget: z
+    .object({
+      amount: z.number().min(0),
+      currency: z.string().default('INR'),
+    })
+    .nullish(),
+  guestCount: z.number().int().min(0).nullish(),
+  notes: z.string().nullish(),
+});
+
 export const changeLeadStageSchema = z.object({
   stage: z.enum(['in_talks', 'approved', 'completed', 'lost', 'cancelled']),
   lostReason: z.string().nullish(),
@@ -52,6 +73,7 @@ export const updateFollowUpSchema = z.object({
 });
 
 export type CreateLeadBody = z.infer<typeof createLeadSchema>;
+export type UpdateLeadBody = z.infer<typeof updateLeadSchema>;
 export type ChangeLeadStageBody = z.infer<typeof changeLeadStageSchema>;
 export type AssignLeadBody = z.infer<typeof assignLeadSchema>;
 export type CreateFollowUpBody = z.infer<typeof createFollowUpSchema>;

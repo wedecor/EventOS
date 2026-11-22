@@ -36,6 +36,7 @@ describe('SalesDashboardQueryService', () => {
     leadRepository = {
       create: jest.fn(),
       findById: jest.fn(),
+      findByCustomerId: jest.fn(),
       findByPhone: jest.fn(),
       findAll: jest.fn().mockResolvedValue([]),
       findByStage: jest.fn(),

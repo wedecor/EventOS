@@ -1,135 +1,104 @@
-import { API_BASE } from './config';
+import axios, {
+  type AxiosError,
+  type AxiosInstance,
+  type InternalAxiosRequestConfig,
+} from 'axios';
+import { env } from '@/lib/env';
+import { ApiError, type ApiErrorBody } from '@/shared/types/api';
 
-export class ApiError extends Error {
-  constructor(
-    message: string,
-    readonly status: number,
-    readonly code?: string,
-  ) {
-    super(message);
-    this.name = 'ApiError';
-  }
+type TokenGetter = () => string | null;
+type UnauthorizedHandler = () => void | Promise<void>;
+
+let accessTokenGetter: TokenGetter = () => null;
+let onUnauthorized: UnauthorizedHandler = () => undefined;
+let refreshHandler: (() => Promise<string | null>) | null = null;
+let refreshPromise: Promise<string | null> | null = null;
+
+export function bindAuthTokenGetter(getter: TokenGetter): void {
+  accessTokenGetter = getter;
 }
 
-type ApiEnvelope<T> = { data: T };
+export function bindUnauthorizedHandler(handler: UnauthorizedHandler): void {
+  onUnauthorized = handler;
+}
 
-let accessToken: string | null =
-  typeof sessionStorage !== 'undefined'
-    ? sessionStorage.getItem('eventos.accessToken')
-    : null;
+export function bindRefreshHandler(handler: () => Promise<string | null>): void {
+  refreshHandler = handler;
+}
 
-export function setAccessToken(token: string | null): void {
-  accessToken = token;
+function isApiErrorBody(value: unknown): value is ApiErrorBody {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'code' in value &&
+    'message' in value &&
+    typeof (value as ApiErrorBody).code === 'string' &&
+    typeof (value as ApiErrorBody).message === 'string'
+  );
+}
+
+/**
+ * Shared Axios client for the frozen OpenAPI contract.
+ * - Sends cookies (`withCredentials`) so HTTP-only refresh tokens work (ADR-008).
+ * - Attaches Bearer access tokens from the auth store.
+ * - On 401, attempts a single refresh then retries; otherwise clears session.
+ */
+export const apiClient: AxiosInstance = axios.create({
+  baseURL: env.NEXT_PUBLIC_API_BASE_URL,
+  withCredentials: true,
+  headers: {
+    Accept: 'application/json',
+    'Content-Type': 'application/json',
+  },
+});
+
+apiClient.interceptors.request.use((config: InternalAxiosRequestConfig) => {
+  const token = accessTokenGetter();
   if (token) {
-    sessionStorage.setItem('eventos.accessToken', token);
-  } else {
-    sessionStorage.removeItem('eventos.accessToken');
+    config.headers.Authorization = `Bearer ${token}`;
   }
-}
+  return config;
+});
 
-export function getAccessToken(): string | null {
-  return accessToken;
-}
+apiClient.interceptors.response.use(
+  (response) => response,
+  async (error: AxiosError<unknown>) => {
+    const status = error.response?.status;
+    const original = error.config as (InternalAxiosRequestConfig & { _retry?: boolean }) | undefined;
+    const body = error.response?.data;
 
-async function parseJson<T>(response: Response): Promise<T> {
-  const text = await response.text();
-  if (!text) {
-    return {} as T;
-  }
-  return JSON.parse(text) as T;
-}
+    const requestUrl = original?.url ?? '';
+    const isAuthBootstrapRequest =
+      requestUrl.includes('/api/v1/auth/refresh') ||
+      requestUrl.includes('/api/v1/auth/login');
 
-export async function apiRequest<T>(
-  path: string,
-  init: RequestInit = {},
-): Promise<T> {
-  const headers = new Headers(init.headers);
-  if (!headers.has('Content-Type') && init.body) {
-    headers.set('Content-Type', 'application/json');
-  }
-  if (accessToken) {
-    headers.set('Authorization', `Bearer ${accessToken}`);
-  }
+    if (
+      status === 401 &&
+      original &&
+      !original._retry &&
+      refreshHandler &&
+      !isAuthBootstrapRequest
+    ) {
+      original._retry = true;
+      try {
+        refreshPromise ??= refreshHandler().finally(() => {
+          refreshPromise = null;
+        });
+        const nextToken = await refreshPromise;
+        if (nextToken) {
+          original.headers.Authorization = `Bearer ${nextToken}`;
+          return apiClient(original);
+        }
+      } catch {
+        // fall through to unauthorized handling
+      }
+      await onUnauthorized();
+    }
 
-  const response = await fetch(`${API_BASE}${path}`, {
-    ...init,
-    headers,
-    credentials: 'include',
-  });
+    if (isApiErrorBody(body) && status !== undefined) {
+      throw new ApiError(status, body);
+    }
 
-  if (!response.ok) {
-    type ErrorBody = {
-      message?: string;
-      code?: string;
-      error?: { message?: string; code?: string };
-    };
-    const body: ErrorBody =
-      (await parseJson<ErrorBody>(response).catch(() => null)) ?? {};
-    const message =
-      body.message ?? body.error?.message ?? response.statusText;
-    const code = body.code ?? body.error?.code;
-    throw new ApiError(message, response.status, code);
-  }
-
-  if (response.status === 204) {
-    return undefined as T;
-  }
-
-  const envelope = await parseJson<ApiEnvelope<T>>(response);
-  return envelope.data;
-}
-
-export async function login(email: string, password: string): Promise<void> {
-  const data = await apiRequest<{
-    accessToken: string;
-  }>('/auth/login', {
-    method: 'POST',
-    body: JSON.stringify({ email, password }),
-  });
-  setAccessToken(data.accessToken);
-}
-
-export async function refreshSession(): Promise<boolean> {
-  try {
-    const data = await apiRequest<{ accessToken: string }>('/auth/refresh', {
-      method: 'POST',
-    });
-    setAccessToken(data.accessToken);
-    return true;
-  } catch {
-    setAccessToken(null);
-    return false;
-  }
-}
-
-export async function logout(): Promise<void> {
-  try {
-    await apiRequest('/auth/logout', { method: 'POST' });
-  } finally {
-    setAccessToken(null);
-  }
-}
-
-export async function downloadFile(path: string, filename: string): Promise<void> {
-  const headers = new Headers();
-  if (accessToken) {
-    headers.set('Authorization', `Bearer ${accessToken}`);
-  }
-
-  const response = await fetch(`${API_BASE}${path}`, {
-    headers,
-    credentials: 'include',
-  });
-
-  if (!response.ok) {
-    throw new ApiError(response.statusText, response.status);
-  }
-
-  const blob = await response.blob();
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = filename;
-  anchor.click();
-  URL.revokeObjectURL(url);
-}
+    throw error;
+  },
+);

@@ -3,22 +3,18 @@ export type ContactRecord = {
   tenantId: string;
   customerId: string;
   name: string;
-  role: string | null;
+  role: string;
   phone: string | null;
   email: string | null;
-  isPrimary: boolean;
   createdAt: Date;
-  updatedAt: Date;
-  version: number;
 };
 
 export type CreateContactData = {
   customerId: string;
   name: string;
-  role?: string | null;
+  role: string;
   phone?: string | null;
   email?: string | null;
-  isPrimary?: boolean;
 };
 
 export abstract class ContactRepository {
@@ -27,6 +23,17 @@ export abstract class ContactRepository {
     data: CreateContactData,
   ): Promise<ContactRecord>;
 
+  abstract findByCustomerId(
+    tenantId: string,
+    customerId: string,
+  ): Promise<ContactRecord[]>;
+
+  abstract countByCustomerId(
+    tenantId: string,
+    customerId: string,
+  ): Promise<number>;
+
+  /** Alias used by Sprint 1 UAT customer flows — same as countByCustomerId. */
   abstract countByCustomer(
     tenantId: string,
     customerId: string,

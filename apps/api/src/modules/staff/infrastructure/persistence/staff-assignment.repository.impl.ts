@@ -27,6 +27,9 @@ export class StaffAssignmentRepositoryImpl
         tenant: { connect: { id: tenantId } },
         booking: { connect: { id: data.bookingId } },
         staffMember: { connect: { id: data.staffMemberId } },
+        ...(data.legacyUserId
+          ? { legacyUser: { connect: { id: data.legacyUserId } } }
+          : {}),
         role: data.role ?? null,
         isOnSiteLead: data.isOnSiteLead ?? false,
         reportingAt: data.reportingAt ?? null,
@@ -69,6 +72,17 @@ export class StaffAssignmentRepositoryImpl
     return assignments.map((assignment) => this.mapRecord(assignment));
   }
 
+  async findConfirmedByStaffMemberId(
+    tenantId: string,
+    staffMemberId: string,
+  ): Promise<StaffAssignmentRecord[]> {
+    const assignments = await this.prisma.staffAssignment.findMany({
+      where: { tenantId, staffMemberId, status: 'confirmed' },
+      orderBy: { createdAt: 'asc' },
+    });
+    return assignments.map((assignment) => this.mapRecord(assignment));
+  }
+
   async update(
     tenantId: string,
     id: string,
@@ -104,6 +118,7 @@ export class StaffAssignmentRepositoryImpl
       tenantId: assignment.tenantId,
       bookingId: assignment.bookingId,
       staffMemberId: assignment.staffMemberId,
+      legacyUserId: assignment.legacyUserId,
       role: assignment.role,
       isOnSiteLead: assignment.isOnSiteLead,
       reportingAt: assignment.reportingAt,

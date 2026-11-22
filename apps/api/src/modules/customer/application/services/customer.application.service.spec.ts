@@ -43,12 +43,16 @@ describe('CustomerApplicationService', () => {
       findById: jest.fn(),
       findByPhone: jest.fn(),
       findByDisplayName: jest.fn(),
+      findAll: jest.fn(),
+      findPage: jest.fn(),
       update: jest.fn(),
       listAll: jest.fn(),
     };
     eventPublisher = { publish };
     contactRepository = {
       create: jest.fn(),
+      findByCustomerId: jest.fn(),
+      countByCustomerId: jest.fn(),
       countByCustomer: jest.fn(),
     };
 
@@ -271,7 +275,6 @@ describe('CustomerApplicationService', () => {
       role: 'groom',
       phone: '+919876543210',
       email: null,
-      isPrimary: false,
       createdAt: new Date(),
       updatedAt: new Date(),
       version: 1,

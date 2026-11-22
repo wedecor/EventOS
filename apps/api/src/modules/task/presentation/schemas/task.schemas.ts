@@ -1,9 +1,23 @@
 import { z } from 'zod';
 
+export const taskCategorySchema = z.enum([
+  'general',
+  'pre_event',
+  'dayheets',
+  'vendor',
+  'inventory',
+  'venue',
+  'wrap_up',
+]);
+
+export const taskPrioritySchema = z.enum(['low', 'medium', 'high', 'urgent']);
+
 export const createTaskSchema = z.object({
   bookingId: z.string().uuid(),
   title: z.string().min(1, 'Title is required.'),
   description: z.string().optional(),
+  category: taskCategorySchema.optional(),
+  priority: taskPrioritySchema.optional(),
   assignedTo: z.string().uuid().optional(),
   dueAt: z.string().datetime().optional(),
 });
@@ -11,12 +25,15 @@ export const createTaskSchema = z.object({
 export const updateTaskSchema = z.object({
   title: z.string().min(1).optional(),
   description: z.string().optional(),
+  category: taskCategorySchema.optional(),
+  priority: taskPrioritySchema.optional(),
   assignedTo: z.string().uuid().optional(),
   dueAt: z.string().datetime().optional(),
 });
 
 export const updateTaskStatusSchema = z.object({
   status: z.enum(['pending', 'in_progress', 'completed', 'cancelled']),
+  completionNotes: z.string().optional(),
 });
 
 export const addChecklistItemSchema = z.object({

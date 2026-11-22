@@ -29,3 +29,20 @@ export type QuotationDto = {
 export function toQuotationDto(quotation: QuotationRecord): QuotationDto {
   return { ...quotation };
 }
+
+// EP1-AUT-006 — approve response includes the linked Approved Event id (per
+// docs/09-api-design.md endpoint `POST /api/v1/quotations/:id/approve`:
+// `{ "data": { "id": "uuid", "status": "approved", "eventId": "uuid|null" } }`).
+// `eventId` is `null` when the conversion chain has not created the Event yet
+// (e.g. EP1-BR-001 advance payment not yet confirmed) or when it already
+// exists for another reason — it is never a failure of the approval itself.
+export type ApproveQuotationResultDto = QuotationDto & {
+  eventId: string | null;
+};
+
+export function toApproveQuotationResultDto(
+  quotation: QuotationRecord,
+  eventId: string | null,
+): ApproveQuotationResultDto {
+  return { ...toQuotationDto(quotation), eventId };
+}

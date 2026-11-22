@@ -6,6 +6,7 @@ import { InvoiceRepository } from '../../../finance/domain/repositories/invoice.
 import { VendorExpenseRepository } from '../../../finance/domain/repositories/vendor-expense.repository';
 import { PaymentRepository } from '../../../payment/domain/repositories/payment.repository';
 import { QuotationRepository } from '../../../quotation/domain/repositories/quotation.repository';
+import { computeBookingCollectionGap } from '../../../../shared/finance/outstanding-balance.definitions';
 import type { FinanceSummaryDto } from '../dtos/finance-summary.dto';
 import type { MonthlyRevenueSummaryDto } from '../dtos/monthly-revenue-summary.dto';
 import type { PendingPaymentsDto } from '../dtos/pending-payments.dto';
@@ -137,7 +138,11 @@ export class FinanceDashboardQueryService {
         const quotation = quotationById.get(event.quotationId);
         const quotationTotal = quotation?.totalAmount ?? 0;
         const confirmedPaid = confirmedPaidByBooking.get(event.id) ?? 0;
-        const amountDue = quotationTotal - confirmedPaid;
+        // Metric: bookingCollectionGap (excludes advances without bookingId).
+        const amountDue = computeBookingCollectionGap({
+          quotationTotalAmount: quotationTotal,
+          confirmedBookingPaymentsAmount: confirmedPaid,
+        });
 
         return {
           bookingId: event.id,

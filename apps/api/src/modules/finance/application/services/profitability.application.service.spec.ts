@@ -102,15 +102,19 @@ describe('ProfitabilityApplicationService', () => {
     eventRepository = {
       create: jest.fn(),
       findById: jest.fn(),
+      findByCustomerId: jest.fn(),
       findByQuotationId: jest.fn(),
       findMaxBookingNumber: jest.fn(),
       findByEventDate: jest.fn(),
+      findPage: jest.fn(),
       update: jest.fn(),
     };
     paymentRepository = {
       create: jest.fn(),
       findById: jest.fn(),
       findByBookingId: jest.fn(),
+      findByLeadId: jest.fn(),
+      findByQuotationId: jest.fn(),
       findAll: jest.fn(),
       hasConfirmedAdvanceForLead: jest.fn(),
       hasConfirmedAdvanceForQuotation: jest.fn(),
@@ -120,6 +124,8 @@ describe('ProfitabilityApplicationService', () => {
       create: jest.fn(),
       findById: jest.fn(),
       findByBookingId: jest.fn(),
+      findByLeadId: jest.fn(),
+      findByQuotationId: jest.fn(),
       findAll: jest.fn(),
       update: jest.fn(),
     };

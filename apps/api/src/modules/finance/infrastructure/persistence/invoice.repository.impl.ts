@@ -1,9 +1,14 @@
 import { Injectable } from '@nestjs/common';
-import type { Invoice } from '@prisma/client';
+import type { Invoice, InvoiceLineItem } from '@prisma/client';
 import { PrismaService } from '../../../../database/prisma.service';
 import { TenantScopedRepository } from '../../../../shared/database';
 import type {
+  CreateInvoiceLineItemData,
+  InvoiceLineItemRecord,
+} from '../../domain/repositories/invoice-line-item.repository';
+import type {
   CreateInvoiceData,
+  CreateInvoiceWithLineItemsResult,
   InvoiceRecord,
   InvoiceRepository,
   UpdateInvoiceData,
@@ -39,6 +44,49 @@ export class InvoiceRepositoryImpl
     return this.mapInvoice(invoice);
   }
 
+  async createWithLineItems(
+    tenantId: string,
+    data: CreateInvoiceData,
+    lineItems: CreateInvoiceLineItemData[],
+  ): Promise<CreateInvoiceWithLineItemsResult> {
+    return this.prisma.$transaction(async (tx) => {
+      const invoice = await tx.invoice.create({
+        data: {
+          tenantId,
+          bookingId: data.bookingId,
+          customerId: data.customerId,
+          invoiceNumber: data.invoiceNumber,
+          subtotalAmount: data.subtotalAmount,
+          taxAmount: data.taxAmount ?? 0,
+          totalAmount: data.totalAmount,
+          currency: data.currency ?? 'INR',
+          notes: data.notes ?? null,
+        },
+      });
+
+      const createdLines: InvoiceLineItemRecord[] = [];
+      for (const [index, lineItem] of lineItems.entries()) {
+        const row = await tx.invoiceLineItem.create({
+          data: {
+            tenantId,
+            invoiceId: invoice.id,
+            description: lineItem.description,
+            quantity: lineItem.quantity ?? 1,
+            unitPriceAmount: lineItem.unitPriceAmount,
+            currency: lineItem.currency ?? 'INR',
+            sortOrder: lineItem.sortOrder ?? index,
+          },
+        });
+        createdLines.push(this.mapLineItem(row));
+      }
+
+      return {
+        invoice: this.mapInvoice(invoice),
+        lineItems: createdLines,
+      };
+    });
+  }
+
   async findById(tenantId: string, id: string): Promise<InvoiceRecord | null> {
     const invoice = await this.prisma.invoice.findFirst({
       where: { id, tenantId },
@@ -53,6 +101,18 @@ export class InvoiceRepositoryImpl
   ): Promise<InvoiceRecord[]> {
     const invoices = await this.prisma.invoice.findMany({
       where: { tenantId, bookingId },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return invoices.map((invoice) => this.mapInvoice(invoice));
+  }
+
+  async findByCustomerId(
+    tenantId: string,
+    customerId: string,
+  ): Promise<InvoiceRecord[]> {
+    const invoices = await this.prisma.invoice.findMany({
+      where: { tenantId, customerId },
       orderBy: { createdAt: 'desc' },
     });
 
@@ -129,6 +189,22 @@ export class InvoiceRepositoryImpl
       createdAt: invoice.createdAt,
       updatedAt: invoice.updatedAt,
       version: invoice.version,
+    };
+  }
+
+  private mapLineItem(row: InvoiceLineItem): InvoiceLineItemRecord {
+    return {
+      id: row.id,
+      tenantId: row.tenantId,
+      invoiceId: row.invoiceId,
+      description: row.description,
+      quantity: row.quantity,
+      unitPriceAmount: this.toNumber(row.unitPriceAmount) ?? 0,
+      currency: row.currency,
+      sortOrder: row.sortOrder,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+      version: row.version,
     };
   }
 }

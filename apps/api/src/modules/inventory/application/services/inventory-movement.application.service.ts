@@ -12,12 +12,14 @@ import {
   InventoryMovementStateChangedEvent,
 } from '../../../../shared/events/sprint3-domain.events';
 import { EventRepository } from '../../../booking/domain/repositories/event.repository';
+import { InventoryItemRepository } from '../../domain/repositories/inventory-item.repository';
 import { InventoryMovementDamageNoteRepository } from '../../domain/repositories/inventory-movement-damage-note.repository';
 import {
   InventoryMovementRepository,
   type InventoryMovementRecord,
   type UpdateInventoryMovementData,
 } from '../../domain/repositories/inventory-movement.repository';
+import { InventoryReservationRepository } from '../../domain/repositories/inventory-reservation.repository';
 import {
   toInventoryMovementDamageNoteDto,
   type InventoryMovementDamageNoteDto,
@@ -26,18 +28,28 @@ import {
   toInventoryMovementDto,
   type InventoryMovementDto,
 } from '../dtos/inventory-movement.dto';
+import { InventoryAvailabilityService } from './inventory-availability.service';
 
 export type CreateInventoryMovementInput = {
   bookingId: string;
   inventoryItemId: string;
   quantity: number;
   notes?: string | null;
+  reservationId?: string | null;
 };
 
 export type TransitionInventoryMovementInput = {
   toStatus: InventoryMovementRecord['status'];
   occurredAt?: Date | null;
   notes?: string | null;
+  packedByUserId?: string | null;
+  verificationNotes?: string | null;
+  vehicle?: string | null;
+  driverName?: string | null;
+  returnedQuantity?: number | null;
+  missingQuantity?: number | null;
+  damagedQuantity?: number | null;
+  returnVerificationNotes?: string | null;
 };
 
 export type AddDamageNoteInput = {
@@ -48,57 +60,98 @@ export type AddDamageNoteInput = {
 
 type MovementStatus = InventoryMovementRecord['status'];
 
-// EP1-INV-003, EP1-INV-005 — Movement Workflow (Phase 1 Requirement), `docs/business/08-inventory-workflow.md`
-// §11: Planned → Picked → Packed → Loaded → At Venue → Returned → Cleaned/Ready (linear; no shortcuts).
+// Phase 1 linear path preserved; P2-07 adds packing/dispatch/return-verify branches.
 const ALLOWED_TRANSITIONS: Record<MovementStatus, MovementStatus[]> = {
-  planned: ['picked'],
-  picked: ['packed'],
-  packed: ['loaded'],
-  loaded: ['at_venue'],
+  planned: ['picked', 'cancelled'],
+  picked: ['packing_started', 'packed', 'cancelled'],
+  packing_started: ['packed', 'cancelled'],
+  packed: ['verified', 'loaded', 'cancelled'],
+  verified: ['ready_for_dispatch', 'cancelled'],
+  ready_for_dispatch: ['loaded', 'cancelled'],
+  loaded: ['dispatched', 'at_venue', 'cancelled'],
+  dispatched: ['at_venue'],
   at_venue: ['returned'],
-  returned: ['cleaned_ready'],
+  returned: ['return_verified', 'cleaned_ready'],
+  return_verified: ['cleaned_ready'],
   cleaned_ready: [],
+  cancelled: [],
 };
 
 function timestampUpdateFor(
   toStatus: MovementStatus,
   occurredAt: Date,
-): Pick<
-  UpdateInventoryMovementData,
-  | 'pickedAt'
-  | 'packedAt'
-  | 'loadedAt'
-  | 'atVenueAt'
-  | 'returnedAt'
-  | 'cleanedReadyAt'
-> {
+  input: TransitionInventoryMovementInput,
+): UpdateInventoryMovementData {
+  const base: UpdateInventoryMovementData = {};
+
   switch (toStatus) {
     case 'picked':
-      return { pickedAt: occurredAt };
+      return { ...base, pickedAt: occurredAt };
+    case 'packing_started':
+      return { ...base, packingStartedAt: occurredAt };
     case 'packed':
-      return { packedAt: occurredAt };
+      return {
+        ...base,
+        packedAt: occurredAt,
+        packedByUserId: input.packedByUserId ?? undefined,
+      };
+    case 'verified':
+      return {
+        ...base,
+        verifiedAt: occurredAt,
+        verificationNotes: input.verificationNotes ?? undefined,
+      };
+    case 'ready_for_dispatch':
+      return { ...base, readyForDispatchAt: occurredAt };
     case 'loaded':
-      return { loadedAt: occurredAt };
+      return {
+        ...base,
+        loadedAt: occurredAt,
+        vehicle: input.vehicle ?? undefined,
+        driverName: input.driverName ?? undefined,
+      };
+    case 'dispatched':
+      return {
+        ...base,
+        dispatchedAt: occurredAt,
+        vehicle: input.vehicle ?? undefined,
+        driverName: input.driverName ?? undefined,
+      };
     case 'at_venue':
-      return { atVenueAt: occurredAt };
+      return { ...base, atVenueAt: occurredAt };
     case 'returned':
-      return { returnedAt: occurredAt };
+      return {
+        ...base,
+        returnedAt: occurredAt,
+        returnedQuantity: input.returnedQuantity ?? undefined,
+        missingQuantity: input.missingQuantity ?? undefined,
+        damagedQuantity: input.damagedQuantity ?? undefined,
+        returnVerificationNotes: input.returnVerificationNotes ?? undefined,
+      };
+    case 'return_verified':
+      return {
+        ...base,
+        returnVerifiedAt: occurredAt,
+        returnedQuantity: input.returnedQuantity ?? undefined,
+        missingQuantity: input.missingQuantity ?? undefined,
+        damagedQuantity: input.damagedQuantity ?? undefined,
+        returnVerificationNotes: input.returnVerificationNotes ?? undefined,
+      };
     case 'cleaned_ready':
-      return { cleanedReadyAt: occurredAt };
+      return { ...base, cleanedReadyAt: occurredAt };
     default:
-      return {};
+      return base;
   }
 }
 
-// EP1-INV-003, EP1-INV-005, EP1-INV-006 — Event-linked inventory movement; state transitions are
-// human-initiated direct commands (ADR-017), consistent with `WorkspaceService.activateWorkspace()`
-// and `StaffAssignmentApplicationService` precedent. `InventoryItem` master (EP1-INV-001/002) and
-// `PackingList` generation (EP1-INV-004, Suggestion-gated) are out of scope for Sprint 3.
 @Injectable()
 export class InventoryMovementApplicationService {
   constructor(
     private readonly inventoryMovementRepository: InventoryMovementRepository,
     private readonly damageNoteRepository: InventoryMovementDamageNoteRepository,
+    private readonly reservationRepository: InventoryReservationRepository,
+    private readonly inventoryItemRepository: InventoryItemRepository,
+    private readonly availabilityService: InventoryAvailabilityService,
     private readonly eventRepository: EventRepository,
     private readonly eventPublisher: DomainEventPublisher,
   ) {}
@@ -127,11 +180,75 @@ export class InventoryMovementApplicationService {
       return failure('VALIDATION_ERROR', 'Quantity must be greater than zero.');
     }
 
+    const item = await this.inventoryItemRepository.findById(
+      tenantId,
+      input.inventoryItemId,
+    );
+    if (!item) {
+      return failure('NOT_FOUND', 'Inventory item not found.');
+    }
+
+    if (input.reservationId) {
+      const reservation = await this.reservationRepository.findById(
+        tenantId,
+        input.reservationId,
+      );
+      if (!reservation) {
+        return failure('NOT_FOUND', 'Inventory reservation not found.');
+      }
+      if (reservation.status !== 'reserved') {
+        return failure(
+          'INVALID_STATE',
+          'Can only create movements from active reservations.',
+          { status: reservation.status },
+        );
+      }
+      if (reservation.bookingId !== input.bookingId) {
+        return failure(
+          'VALIDATION_ERROR',
+          'Reservation booking must match movement booking.',
+        );
+      }
+      if (reservation.inventoryItemId !== input.inventoryItemId) {
+        return failure(
+          'VALIDATION_ERROR',
+          'Reservation inventory item must match movement item.',
+        );
+      }
+      if (input.quantity > reservation.quantity) {
+        return failure(
+          'VALIDATION_ERROR',
+          'Movement quantity cannot exceed reservation quantity.',
+          {
+            requested: input.quantity,
+            reserved: reservation.quantity,
+          },
+        );
+      }
+    } else {
+      const availability = await this.availabilityService.getAvailability(
+        tenantId,
+        input.inventoryItemId,
+      );
+      if (!availability || availability.availableQuantity < input.quantity) {
+        return failure(
+          'INSUFFICIENT_INVENTORY',
+          'Not enough inventory available to plan this movement.',
+          {
+            inventoryItemId: input.inventoryItemId,
+            requested: input.quantity,
+            available: availability?.availableQuantity ?? 0,
+          },
+        );
+      }
+    }
+
     const movement = await this.inventoryMovementRepository.create(tenantId, {
       bookingId: input.bookingId,
       inventoryItemId: input.inventoryItemId,
       quantity: input.quantity,
       notes: input.notes,
+      reservationId: input.reservationId,
     });
 
     this.eventPublisher.publish(
@@ -156,7 +273,6 @@ export class InventoryMovementApplicationService {
     return success(toInventoryMovementDto(movement));
   }
 
-  // EP1-INV-003 — Inventory movement visibility for a booking (Event Workspace integration)
   async listMovementsForBooking(
     tenantId: string,
     bookingId: string,
@@ -169,7 +285,13 @@ export class InventoryMovementApplicationService {
     return success(movements.map(toInventoryMovementDto));
   }
 
-  // EP1-INV-003, EP1-INV-005 — Human-initiated state transition (no auto-progression)
+  async listAllMovements(
+    tenantId: string,
+  ): Promise<Result<InventoryMovementDto[]>> {
+    const movements = await this.inventoryMovementRepository.findAll(tenantId);
+    return success(movements.map(toInventoryMovementDto));
+  }
+
   async transitionMovement(
     tenantId: string,
     movementId: string,
@@ -198,7 +320,7 @@ export class InventoryMovementApplicationService {
         {
           status: input.toStatus,
           notes: input.notes,
-          ...timestampUpdateFor(input.toStatus, occurredAt),
+          ...timestampUpdateFor(input.toStatus, occurredAt, input),
         },
         version,
       );
@@ -217,7 +339,6 @@ export class InventoryMovementApplicationService {
     }
   }
 
-  // EP1-INV-006 — Damage/loss accountability note
   async addDamageNote(
     tenantId: string,
     movementId: string,
@@ -250,7 +371,7 @@ export class InventoryMovementApplicationService {
     from: MovementStatus,
     to: MovementStatus,
   ): Result<InventoryMovementDto> | null {
-    const allowed = ALLOWED_TRANSITIONS[from];
+    const allowed = ALLOWED_TRANSITIONS[from] ?? [];
     if (!allowed.includes(to)) {
       return failure(
         'INVALID_TRANSITION',

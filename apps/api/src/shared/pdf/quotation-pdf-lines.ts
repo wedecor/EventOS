@@ -36,10 +36,10 @@ export function buildQuotationPdfLines(input: {
   lines.push('', 'Line items', '----------------------------------------');
 
   for (const item of lineItems) {
-    const lineTotal = item.quantity * item.unitPrice;
+    const lineTotal = item.quantity * item.unitPriceAmount;
     lines.push(
       `${item.description}`,
-      `  Qty ${item.quantity} x ${formatMoney(item.unitPrice)} = ${formatMoney(lineTotal)}`,
+      `  Qty ${item.quantity} x ${formatMoney(item.unitPriceAmount)} = ${formatMoney(lineTotal)}`,
     );
   }
 

@@ -6,6 +6,7 @@ import type {
   CreateLineItemData,
   QuotationLineItemRecord,
   QuotationLineItemRepository,
+  QuotationTotalsUpdate,
   UpdateLineItemData,
 } from '../../domain/repositories/quotation-line-item.repository';
 
@@ -35,6 +36,52 @@ export class QuotationLineItemRepositoryImpl
     });
 
     return this.mapLineItem(lineItem);
+  }
+
+  async createWithQuotationTotals(
+    tenantId: string,
+    data: CreateLineItemData,
+    quotationTotals: QuotationTotalsUpdate,
+    quotationVersion: number,
+  ): Promise<QuotationLineItemRecord> {
+    try {
+      const [lineItem] = await this.prisma.$transaction(async (tx) => {
+        const createdLineItem = await tx.quotationLineItem.create({
+          data: {
+            tenantId,
+            quotationId: data.quotationId,
+            description: data.description,
+            quantity: data.quantity ?? 1,
+            unitPriceAmount: data.unitPriceAmount,
+            currency: data.currency ?? 'INR',
+            sortOrder: data.sortOrder ?? 0,
+          },
+        });
+
+        await tx.quotation.update({
+          where: {
+            id: data.quotationId,
+            tenantId,
+            version: quotationVersion,
+          },
+          data: {
+            subtotalAmount: quotationTotals.subtotalAmount,
+            totalAmount: quotationTotals.totalAmount,
+            version: { increment: 1 },
+          },
+        });
+
+        return [createdLineItem];
+      });
+
+      return this.mapLineItem(lineItem);
+    } catch (error: unknown) {
+      return this.toConcurrentModification(
+        'Quotation',
+        data.quotationId,
+        error,
+      );
+    }
   }
 
   async findById(
@@ -84,10 +131,80 @@ export class QuotationLineItemRepositoryImpl
     }
   }
 
+  async updateWithQuotationTotals(
+    tenantId: string,
+    id: string,
+    data: UpdateLineItemData,
+    lineItemVersion: number,
+    quotationTotals: QuotationTotalsUpdate,
+    quotationVersion: number,
+  ): Promise<QuotationLineItemRecord> {
+    try {
+      const [lineItem] = await this.prisma.$transaction(async (tx) => {
+        const updatedLineItem = await tx.quotationLineItem.update({
+          where: { id, tenantId, version: lineItemVersion },
+          data: {
+            description: data.description,
+            quantity: data.quantity,
+            unitPriceAmount: data.unitPriceAmount,
+            sortOrder: data.sortOrder,
+            version: { increment: 1 },
+          },
+        });
+
+        await tx.quotation.update({
+          where: {
+            id: updatedLineItem.quotationId,
+            tenantId,
+            version: quotationVersion,
+          },
+          data: {
+            subtotalAmount: quotationTotals.subtotalAmount,
+            totalAmount: quotationTotals.totalAmount,
+            version: { increment: 1 },
+          },
+        });
+
+        return [updatedLineItem];
+      });
+
+      return this.mapLineItem(lineItem);
+    } catch (error: unknown) {
+      return this.toConcurrentModification('QuotationLineItem', id, error);
+    }
+  }
+
   async remove(tenantId: string, id: string): Promise<void> {
     await this.prisma.quotationLineItem.deleteMany({
       where: { id, tenantId },
     });
+  }
+
+  async removeWithQuotationTotals(
+    tenantId: string,
+    id: string,
+    quotationId: string,
+    quotationTotals: QuotationTotalsUpdate,
+    quotationVersion: number,
+  ): Promise<void> {
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        await tx.quotationLineItem.deleteMany({
+          where: { id, tenantId },
+        });
+
+        await tx.quotation.update({
+          where: { id: quotationId, tenantId, version: quotationVersion },
+          data: {
+            subtotalAmount: quotationTotals.subtotalAmount,
+            totalAmount: quotationTotals.totalAmount,
+            version: { increment: 1 },
+          },
+        });
+      });
+    } catch (error: unknown) {
+      this.toConcurrentModification('Quotation', quotationId, error);
+    }
   }
 
   async countByQuotationId(

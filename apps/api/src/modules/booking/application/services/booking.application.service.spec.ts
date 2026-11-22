@@ -90,17 +90,23 @@ describe('BookingApplicationService', () => {
     eventRepository = {
       create: jest.fn(),
       findById: jest.fn(),
+      findByCustomerId: jest.fn(),
       findByQuotationId: jest.fn(),
       findMaxBookingNumber: jest.fn(),
       findByEventDate: jest.fn(),
+      findPage: jest.fn(),
+      findPage: jest.fn(),
       update: jest.fn(),
     };
     quotationRepository = {
       create: jest.fn(),
       findById: jest.fn(),
+      findByCustomerId: jest.fn(),
       findLatestRevision: jest.fn(),
       findMaxQuotationNumber: jest.fn(),
       findByIds: jest.fn(),
+      findAll: jest.fn(),
+      findPage: jest.fn(),
       update: jest.fn(),
     };
     advancePaymentQuery = {
@@ -110,6 +116,7 @@ describe('BookingApplicationService', () => {
       create: jest.fn(),
       findById: jest.fn(),
       findByBookingId: jest.fn(),
+      findByCustomerId: jest.fn(),
       findMaxInvoiceNumber: jest.fn(),
       findAll: jest.fn(),
       hasDraftInvoiceForBooking: jest.fn().mockResolvedValue(false),
@@ -187,6 +194,28 @@ describe('BookingApplicationService', () => {
 
     expect(result.ok).toBe(true);
     expect(publish).toHaveBeenCalledWith(expect.any(EventCreatedEvent));
+  });
+
+  // EP1-BR-003 — no execution owner is assigned at booking creation; assignment is a
+  // separate, explicit command (ExecutionProgressService.assignExecutionOwner).
+  it('creates an event without an execution owner (assigned later via a separate command)', async () => {
+    quotationRepository.findById.mockResolvedValue(approvedQuotation);
+    advancePaymentQuery.hasConfirmedAdvance.mockResolvedValue(true);
+    eventRepository.findByQuotationId.mockResolvedValue(null);
+    eventRepository.findMaxBookingNumber.mockResolvedValue(5000);
+    eventRepository.create.mockResolvedValue(baseEvent);
+
+    const result = await service.createEventFromApprovedQuotation(
+      tenantId,
+      quotationId,
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.executionOwnerId).toBeNull();
+    }
+    const createArgs = eventRepository.create.mock.calls[0]?.[1];
+    expect(createArgs).not.toHaveProperty('executionOwnerId');
   });
 
   it('enforces EP1-BR-001 when creating an event', async () => {
@@ -278,6 +307,62 @@ describe('BookingApplicationService', () => {
     );
 
     const result = await service.activateBooking(tenantId, bookingId, {
+      version: 1,
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('CONCURRENT_MODIFICATION');
+    }
+  });
+
+  // --- startExecution ---
+
+  it('starts execution from in_preparation', async () => {
+    eventRepository.findById.mockResolvedValue({
+      ...baseEvent,
+      status: 'in_preparation',
+    });
+    eventRepository.update.mockResolvedValue({
+      ...baseEvent,
+      status: 'in_execution',
+      version: 2,
+    });
+
+    const result = await service.startExecution(tenantId, bookingId, {
+      version: 1,
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.status).toBe('in_execution');
+    }
+    expect(publish).toHaveBeenCalledWith(expect.any(BookingStatusChangedEvent));
+  });
+
+  it('rejects startExecution when booking is not in_preparation', async () => {
+    eventRepository.findById.mockResolvedValue(baseEvent);
+
+    const result = await service.startExecution(tenantId, bookingId, {
+      version: 1,
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('INVALID_STATE');
+    }
+  });
+
+  it('maps concurrent modification failures on startExecution', async () => {
+    eventRepository.findById.mockResolvedValue({
+      ...baseEvent,
+      status: 'in_preparation',
+    });
+    eventRepository.update.mockRejectedValue(
+      new ConcurrentModificationError('Event', bookingId),
+    );
+
+    const result = await service.startExecution(tenantId, bookingId, {
       version: 1,
     });
 

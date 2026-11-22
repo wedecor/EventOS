@@ -1,3 +1,8 @@
+import type {
+  CreateInvoiceLineItemData,
+  InvoiceLineItemRecord,
+} from './invoice-line-item.repository';
+
 export type InvoiceRecord = {
   id: string;
   tenantId: string;
@@ -34,11 +39,26 @@ export type UpdateInvoiceData = {
   voidedAt?: Date | null;
 };
 
+export type CreateInvoiceWithLineItemsResult = {
+  invoice: InvoiceRecord;
+  lineItems: InvoiceLineItemRecord[];
+};
+
 export abstract class InvoiceRepository {
   abstract create(
     tenantId: string,
     data: CreateInvoiceData,
   ): Promise<InvoiceRecord>;
+
+  /**
+   * Atomically create a draft invoice and its line items (R3-14 production
+   * integrity — avoids orphan invoices if a line insert fails mid-flight).
+   */
+  abstract createWithLineItems(
+    tenantId: string,
+    data: CreateInvoiceData,
+    lineItems: CreateInvoiceLineItemData[],
+  ): Promise<CreateInvoiceWithLineItemsResult>;
 
   abstract findById(
     tenantId: string,
@@ -48,6 +68,11 @@ export abstract class InvoiceRepository {
   abstract findByBookingId(
     tenantId: string,
     bookingId: string,
+  ): Promise<InvoiceRecord[]>;
+
+  abstract findByCustomerId(
+    tenantId: string,
+    customerId: string,
   ): Promise<InvoiceRecord[]>;
 
   abstract findMaxInvoiceNumber(tenantId: string): Promise<number>;

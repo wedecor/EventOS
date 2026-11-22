@@ -7,9 +7,17 @@ import {
   Post,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Permissions } from '../../auth';
 import { ZodValidationPipe } from '../../../common/pipes/zod-validation.pipe';
 import { failure } from '../../../shared/application/result';
 import { IfMatchVersion } from '../../../shared/presentation/if-match.decorator';
+import {
+  ApiDataResponse,
+  ApiIfMatchHeader,
+  ApiStandardErrors,
+  ApiUuidParam,
+  ApiZodBody,
+} from '../../../shared/presentation/openapi.helpers';
 import { resultToResponse } from '../../../shared/presentation/result-to-response.helper';
 import { TenantId } from '../../../shared/presentation/tenant-context.decorator';
 import { ProcurementLineApplicationService } from '../application/services/procurement-line.application.service';
@@ -32,8 +40,14 @@ export class ProcurementLineController {
 
   // EP1-VEN-003, EP1-VEN-005 — Transition a procurement line (with optional cost variance recording)
   @Post(':lineId/transition')
+  @Permissions('procurement:transition')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Transition a procurement line to a new state' })
+  @ApiUuidParam('lineId')
+  @ApiIfMatchHeader(true)
+  @ApiZodBody(transitionProcurementLineSchema)
+  @ApiDataResponse(200, 'Procurement line transitioned')
+  @ApiStandardErrors()
   async transitionLine(
     @TenantId() tenantId: string,
     @Param('lineId') lineId: string,
@@ -68,8 +82,13 @@ export class ProcurementLineController {
 
   // EP1-VEN-006 — Procurement-line-level issue/feedback note
   @Post(':lineId/issue-notes')
+  @Permissions('procurement:notes:write')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Add an issue note to a procurement line' })
+  @ApiUuidParam('lineId')
+  @ApiZodBody(addProcurementLineIssueNoteSchema)
+  @ApiDataResponse(201, 'Procurement line issue note added')
+  @ApiStandardErrors()
   async addIssueNote(
     @TenantId() tenantId: string,
     @Param('lineId') lineId: string,

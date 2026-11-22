@@ -90,6 +90,22 @@ describe('LeadRepositoryImpl', () => {
     });
   });
 
+  it('findById with a different tenant id cannot override scope via id alone', async () => {
+    prisma.lead.findFirst.mockResolvedValue(null);
+    const otherTenant = '11111111-1111-1111-1111-111111111111';
+
+    const result = await repository.findById(otherTenant, leadId);
+
+    expect(result).toBeNull();
+    expect(prisma.lead.findFirst).toHaveBeenCalledWith({
+      where: { id: leadId, tenantId: otherTenant },
+    });
+    // Caller must pass tenantId; there is no path that queries by id only.
+    expect(prisma.lead.findFirst).not.toHaveBeenCalledWith({
+      where: { id: leadId },
+    });
+  });
+
   it('findByPhone scopes by tenant and customer phone', async () => {
     prisma.lead.findMany.mockResolvedValue([prismaLead]);
 

@@ -1,15 +1,21 @@
 import { Injectable } from '@nestjs/common';
 import type { Contact } from '@prisma/client';
 import { PrismaService } from '../../../../database/prisma.service';
-import {
+import { TenantScopedRepository } from '../../../../shared/database';
+import type {
+  ContactRecord,
   ContactRepository,
-  type CreateContactData,
-  type ContactRecord,
+  CreateContactData,
 } from '../../domain/repositories/contact.repository';
 
 @Injectable()
-export class ContactRepositoryImpl implements ContactRepository {
-  constructor(private readonly prisma: PrismaService) {}
+export class ContactRepositoryImpl
+  extends TenantScopedRepository
+  implements ContactRepository
+{
+  constructor(prisma: PrismaService) {
+    super(prisma);
+  }
 
   async create(
     tenantId: string,
@@ -20,23 +26,41 @@ export class ContactRepositoryImpl implements ContactRepository {
         tenantId,
         customerId: data.customerId,
         name: data.name,
-        role: data.role ?? null,
+        role: data.role,
         phone: data.phone ?? null,
         email: data.email ?? null,
-        isPrimary: data.isPrimary ?? false,
       },
     });
 
-    return this.map(contact);
+    return this.mapRecord(contact);
   }
 
-  async countByCustomer(tenantId: string, customerId: string): Promise<number> {
+  async findByCustomerId(
+    tenantId: string,
+    customerId: string,
+  ): Promise<ContactRecord[]> {
+    const contacts = await this.prisma.contact.findMany({
+      where: { tenantId, customerId },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return contacts.map((contact) => this.mapRecord(contact));
+  }
+
+  async countByCustomerId(
+    tenantId: string,
+    customerId: string,
+  ): Promise<number> {
     return this.prisma.contact.count({
       where: { tenantId, customerId },
     });
   }
 
-  private map(contact: Contact): ContactRecord {
+  async countByCustomer(tenantId: string, customerId: string): Promise<number> {
+    return this.countByCustomerId(tenantId, customerId);
+  }
+
+  private mapRecord(contact: Contact): ContactRecord {
     return {
       id: contact.id,
       tenantId: contact.tenantId,
@@ -45,10 +69,7 @@ export class ContactRepositoryImpl implements ContactRepository {
       role: contact.role,
       phone: contact.phone,
       email: contact.email,
-      isPrimary: contact.isPrimary,
       createdAt: contact.createdAt,
-      updatedAt: contact.updatedAt,
-      version: contact.version,
     };
   }
 }

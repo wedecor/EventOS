@@ -14,6 +14,9 @@ export type VendorRecord = {
   paymentTerms: string | null;
   taxDetails: string | null;
   notes: string | null;
+  procurementCount: number;
+  onTimeDeliveryCount: number;
+  completedProcurementCount: number;
   createdAt: Date;
   updatedAt: Date;
   version: number;
@@ -71,4 +74,14 @@ export abstract class VendorRepository {
     data: UpdateVendorData,
     version: number,
   ): Promise<VendorRecord>;
+
+  abstract incrementPerformance(
+    tenantId: string,
+    id: string,
+    deltas: {
+      procurementCount?: number;
+      onTimeDeliveryCount?: number;
+      completedProcurementCount?: number;
+    },
+  ): Promise<void>;
 }
