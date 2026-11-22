@@ -325,9 +325,36 @@ gcloud run services update "eventos-api-${ENV}" --region="$REGION" --remove-secr
 rotation before deploying again.) Rotate `JWT_SECRET` by adding a secret version and
 redeploying; it invalidates active sessions.
 
+### 5b. Object storage (GCS — durable uploads)
+
+Native GCS (`STORAGE_PROVIDER=gcs`) with Application Default Credentials on each
+runtime SA — **no HMAC keys**. Prefer this over the S3-compatible XML API so
+Cloud Run never needs long-lived access keys in Secret Manager.
+
+```bash
+for ENV in staging prod; do
+  BUCKET="eventos-${ENV}-files"
+  SA=$([ "$ENV" = prod ] && echo "$RUNTIME_SA_PROD" || echo "$RUNTIME_SA_STAGING")
+  gcloud storage buckets create "gs://${BUCKET}" \
+    --project="$PROJECT_ID" --location="$REGION" \
+    --uniform-bucket-level-access \
+    --public-access-prevention
+  gcloud storage buckets update "gs://${BUCKET}" --versioning
+  # Delete noncurrent object versions after 30 days.
+  cat >"/tmp/${BUCKET}-lifecycle.json" <<'JSON'
+{"rule":[{"action":{"type":"Delete"},"condition":{"isLive":false,"age":30}}]}
+JSON
+  gcloud storage buckets update "gs://${BUCKET}" \
+    --lifecycle-file="/tmp/${BUCKET}-lifecycle.json"
+  gcloud storage buckets add-iam-policy-binding "gs://${BUCKET}" \
+    --member="serviceAccount:${SA}" --role="roles/storage.objectAdmin"
+done
+```
+
+Cloud Run YAML already sets `STORAGE_PROVIDER=gcs` and `STORAGE_BUCKET=eventos-<env>-files`.
+Env validation refuses `STORAGE_PROVIDER=local` in staging/production.
+
 ## Known limitations
 
-- **Uploads are not durable yet** on the base M5-01 YAML (`STORAGE_PROVIDER=local` →
-  `/tmp`). Durable GCS is added in the storage follow-up on this branch.
 - Email and AI providers are `none` in these definitions; enable them via the YAML when
   provisioned.

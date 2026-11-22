@@ -47,11 +47,13 @@ spec:
             # Tenant for the Enquiries feed (config, never the request body). Public id.
             - name: ENQUIRIES_FEED_TENANT_ID
               value: "00000000-0000-0000-0000-000000000001"
-            # Replaced by durable GCS in the follow-up storage commit.
+            # Durable uploads: native GCS via ADC on eventos-api-prod@.
             - name: STORAGE_PROVIDER
-              value: local
-            - name: STORAGE_LOCAL_ROOT
-              value: /tmp/eventos-uploads
+              value: gcs
+            - name: STORAGE_BUCKET
+              value: eventos-prod-files
+            - name: STORAGE_REGION
+              value: asia-south1
             - name: MAIL_PROVIDER
               value: none
             - name: AI_PROVIDER

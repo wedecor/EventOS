@@ -90,9 +90,10 @@ modular monolith is unchanged).
 | Migrations | Cloud Run Job `eventos-migrate-<env>` using the Dockerfile `migrator` target, executed before each deploy |
 | Production seed | One-off Cloud Run Job `eventos-seed-prod`: tenant "We Decor Events" + owner user only |
 | Secrets | Secret Manager per env (`JWT_SECRET`, `DATABASE_URL`, `REDIS_URL`, `ENQUIRIES_FEED_SECRET`, `SENTRY_DSN`); feed secrets are `eventos-staging-enquiries-feed-secret` / `eventos-prod-enquiries-feed-secret` |
+| Object storage | GCS buckets `eventos-staging-files` / `eventos-prod-files` (asia-south1, UBLA, public-access prevention, versioning, noncurrent delete after 30 days); `STORAGE_PROVIDER=gcs` via ADC |
 | Registry | Artifact Registry `asia-south1-docker.pkg.dev/wedecorenquries/eventos` |
 | DNS | Cloudflare, DNS-only: `api.wedecorevents.com` → prod and `api-staging.wedecorevents.com` → staging via Cloud Run domain mappings |
-| Identity | Runtime SAs `eventos-api-staging@…` and `eventos-api-prod@…` (Cloud SQL Client, Firebase Auth Viewer, secret accessor only on that env’s secrets); CI via Workload Identity Federation |
+| Identity | Runtime SAs `eventos-api-staging@…` and `eventos-api-prod@…` (Cloud SQL Client, Firebase Auth Viewer, secret accessor + objectAdmin only on that env’s secrets/bucket); CI via Workload Identity Federation |
 
 Trusted proxy: the API trusts exactly **one** proxy hop (Cloud Run's front end) for
 client-IP resolution (per-IP throttling). Do not enable the Cloudflare proxy without raising

@@ -75,6 +75,9 @@ describe('ConfigModule bootstrap — JWT_SECRET (R1-04)', () => {
       process.env.ENQUIRIES_FEED_SECRET = 'f'.repeat(32);
       process.env.ENQUIRIES_FEED_TENANT_ID =
         '00000000-0000-0000-0000-000000000001';
+      // M5-01 — durable storage required in staging/production.
+      process.env.STORAGE_PROVIDER = 'gcs';
+      process.env.STORAGE_BUCKET = 'eventos-prod-files';
 
       await expect(forRoot()).resolves.toBeDefined();
     },
@@ -98,6 +101,8 @@ describe('ConfigModule bootstrap — CORS_ORIGIN (R1-06)', () => {
     process.env.ENQUIRIES_FEED_SECRET = 'f'.repeat(32);
     process.env.ENQUIRIES_FEED_TENANT_ID =
       '00000000-0000-0000-0000-000000000001';
+    process.env.STORAGE_PROVIDER = 'gcs';
+    process.env.STORAGE_BUCKET = 'eventos-prod-files';
   });
 
   afterEach(() => {

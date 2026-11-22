@@ -63,8 +63,9 @@ export const envSchema = z
         const trimmed = value?.trim();
         return trimmed && trimmed.length > 0 ? trimmed : undefined;
       }),
-    // M3 — storage / mail (optional; defaults keep local/test adapters).
-    STORAGE_PROVIDER: z.enum(['local', 's3', 'none']).default('local'),
+    // M3 / M5-01 — storage / mail. `local` is for development/test only;
+    // staging/production must use durable `gcs` (ADC) or `s3` (HMAC).
+    STORAGE_PROVIDER: z.enum(['local', 'gcs', 's3', 'none']).default('local'),
     STORAGE_LOCAL_ROOT: z.string().optional(),
     STORAGE_ENDPOINT: z.string().optional(),
     STORAGE_ACCESS_KEY: z.string().optional(),
@@ -169,6 +170,37 @@ export const envSchema = z
             path: [key],
             message: `${key} is required in NODE_ENV=${config.NODE_ENV} (Enquiries feed, M5-01).`,
           });
+        }
+      }
+
+      // Cloud Run filesystem is ephemeral — refuse local disk uploads in deploy tiers.
+      if (config.STORAGE_PROVIDER === 'local') {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['STORAGE_PROVIDER'],
+          message: `STORAGE_PROVIDER=local is not allowed in NODE_ENV=${config.NODE_ENV}; use gcs (ADC) or s3.`,
+        });
+      }
+      if (config.STORAGE_PROVIDER === 'gcs' && !config.STORAGE_BUCKET?.trim()) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['STORAGE_BUCKET'],
+          message: `STORAGE_PROVIDER=gcs requires STORAGE_BUCKET in NODE_ENV=${config.NODE_ENV}.`,
+        });
+      }
+      if (config.STORAGE_PROVIDER === 's3') {
+        for (const key of [
+          'STORAGE_ACCESS_KEY',
+          'STORAGE_SECRET_KEY',
+          'STORAGE_BUCKET',
+        ] as const) {
+          if (!config[key]?.trim()) {
+            ctx.addIssue({
+              code: 'custom',
+              path: [key],
+              message: `STORAGE_PROVIDER=s3 requires ${key} in NODE_ENV=${config.NODE_ENV}.`,
+            });
+          }
         }
       }
     }

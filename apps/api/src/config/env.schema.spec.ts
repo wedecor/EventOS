@@ -7,11 +7,17 @@ import { validateEnv } from './env.schema';
  * invokes during bootstrap (see `configuration.spec.ts` / `bootstrap.spec.ts`
  * for the layers that consume its result).
  */
-// M5-01 — staging/production additionally require the Enquiries feed secret + tenant.
+// M5-01 — staging/production additionally require the Enquiries feed secret + tenant
+// and durable storage (GCS with a bucket; local is rejected).
 const feedConfig = {
   ENQUIRIES_FEED_SECRET: 'f'.repeat(32),
   ENQUIRIES_FEED_TENANT_ID: '00000000-0000-0000-0000-000000000001',
 };
+const durableStorageConfig = {
+  STORAGE_PROVIDER: 'gcs' as const,
+  STORAGE_BUCKET: 'eventos-prod-files',
+};
+const deployedConfig = { ...feedConfig, ...durableStorageConfig };
 
 describe('validateEnv — JWT_SECRET (R1-04)', () => {
   const baseConfig = {
@@ -84,7 +90,7 @@ describe('validateEnv — JWT_SECRET (R1-04)', () => {
         // R1-06 — production requires an explicit CORS_ORIGIN; irrelevant to
         // this JWT_SECRET-focused assertion, so it's supplied unconditionally.
         CORS_ORIGIN: 'https://app.wedecor.com',
-        ...feedConfig,
+        ...deployedConfig,
       });
       expect(result.JWT_SECRET).toBe(validSecret);
     }
@@ -170,7 +176,7 @@ describe('validateEnv — CORS_ORIGIN (R1-06)', () => {
       ...baseConfig,
       NODE_ENV: 'production',
       CORS_ORIGIN: 'https://app.wedecor.com',
-      ...feedConfig,
+      ...deployedConfig,
     });
 
     expect(result.CORS_ORIGIN).toBe('https://app.wedecor.com');
@@ -213,7 +219,8 @@ describe('validateEnv — CORS_ORIGIN (R1-06)', () => {
       ...baseConfig,
       NODE_ENV: 'staging',
       CORS_ORIGIN: 'https://staging.wedecor.com',
-      ...feedConfig,
+      ...deployedConfig,
+      STORAGE_BUCKET: 'eventos-staging-files',
     });
 
     expect(result.CORS_ORIGIN).toBe('https://staging.wedecor.com');
@@ -308,6 +315,7 @@ describe('validateEnv — Firebase bridge (M5-01)', () => {
           ...baseConfig,
           NODE_ENV: nodeEnv,
           CORS_ORIGIN: 'https://app.example.com',
+          ...deployedConfig,
           FIREBASE_AUTH_PROVIDER: 'test',
         }),
       ).toThrow(/FIREBASE_AUTH_PROVIDER/);
@@ -338,13 +346,18 @@ describe('validateEnv — Enquiries feed (M5-01)', () => {
   it.each(['staging', 'production'])(
     'requires ENQUIRIES_FEED_SECRET and ENQUIRIES_FEED_TENANT_ID in %s',
     (nodeEnv) => {
-      expect(() => validateEnv({ ...baseConfig, NODE_ENV: nodeEnv })).toThrow(
-        /ENQUIRIES_FEED_SECRET.*required/s,
-      );
       expect(() =>
         validateEnv({
           ...baseConfig,
           NODE_ENV: nodeEnv,
+          ...durableStorageConfig,
+        }),
+      ).toThrow(/ENQUIRIES_FEED_SECRET.*required/s);
+      expect(() =>
+        validateEnv({
+          ...baseConfig,
+          NODE_ENV: nodeEnv,
+          ...durableStorageConfig,
           ENQUIRIES_FEED_SECRET: feedConfig.ENQUIRIES_FEED_SECRET,
         }),
       ).toThrow(/ENQUIRIES_FEED_TENANT_ID.*required/s);
@@ -352,6 +365,7 @@ describe('validateEnv — Enquiries feed (M5-01)', () => {
         validateEnv({
           ...baseConfig,
           NODE_ENV: nodeEnv,
+          ...durableStorageConfig,
           ENQUIRIES_FEED_TENANT_ID: feedConfig.ENQUIRIES_FEED_TENANT_ID,
         }),
       ).toThrow(/ENQUIRIES_FEED_SECRET.*required/s);
@@ -382,10 +396,63 @@ describe('validateEnv — Enquiries feed (M5-01)', () => {
     const rotating = validateEnv({
       ...baseConfig,
       NODE_ENV: 'production',
-      ...feedConfig,
+      ...deployedConfig,
       ENQUIRIES_FEED_SECRET_NEXT: 'n'.repeat(40),
     });
     expect(rotating.ENQUIRIES_FEED_SECRET_NEXT).toBe('n'.repeat(40));
+  });
+});
+
+describe('validateEnv — STORAGE_PROVIDER (M5-01 durable uploads)', () => {
+  const baseConfig = {
+    DATABASE_URL: 'postgresql://eventos:eventos@localhost:5432/eventos',
+    JWT_SECRET: 'a'.repeat(32),
+    CORS_ORIGIN: 'https://app.wedecor.com',
+    ...feedConfig,
+  };
+
+  it('allows local storage in development and test', () => {
+    for (const nodeEnv of ['development', 'test']) {
+      const result = validateEnv({
+        ...baseConfig,
+        NODE_ENV: nodeEnv,
+        STORAGE_PROVIDER: 'local',
+      });
+      expect(result.STORAGE_PROVIDER).toBe('local');
+    }
+  });
+
+  it.each(['staging', 'production'])(
+    'rejects STORAGE_PROVIDER=local in %s',
+    (nodeEnv) => {
+      expect(() =>
+        validateEnv({
+          ...baseConfig,
+          NODE_ENV: nodeEnv,
+          STORAGE_PROVIDER: 'local',
+        }),
+      ).toThrow(/STORAGE_PROVIDER=local is not allowed/);
+    },
+  );
+
+  it('requires STORAGE_BUCKET when STORAGE_PROVIDER=gcs in production', () => {
+    expect(() =>
+      validateEnv({
+        ...baseConfig,
+        NODE_ENV: 'production',
+        STORAGE_PROVIDER: 'gcs',
+      }),
+    ).toThrow(/STORAGE_BUCKET/);
+  });
+
+  it('accepts gcs with a bucket in production', () => {
+    const result = validateEnv({
+      ...baseConfig,
+      NODE_ENV: 'production',
+      ...durableStorageConfig,
+    });
+    expect(result.STORAGE_PROVIDER).toBe('gcs');
+    expect(result.STORAGE_BUCKET).toBe('eventos-prod-files');
   });
 });
 

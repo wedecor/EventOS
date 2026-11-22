@@ -57,7 +57,11 @@ The migration was produced by `prisma migrate diff` and applied only to a scratc
 6. A cancelled booking is never revived by a later approval (kept deliberately conservative).
 7. `assigneeName` is stored only in the link payload (no EventOS user mapping).
 8. Throttling runs after the JWT guard (per-user limits need the identity).
-9. `STORAGE_PROVIDER=local` on Cloud Run writes to ephemeral `/tmp`: **uploads are not durable** until S3-compatible storage is configured (documented in the YAML and README).
+9. **Durable uploads** use a native GCS adapter (`STORAGE_PROVIDER=gcs`) with ADC on
+   `eventos-api-<env>@` (no HMAC keys). Chosen over the S3 XML API so Cloud Run never
+   stores long-lived access keys. Buckets `eventos-staging-files` /
+   `eventos-prod-files` (asia-south1, UBLA, public-access prevention, versioning,
+   noncurrent delete after 30 days). Env validation rejects `local` in staging/prod.
 10. Email/AI providers are `none` in the service definitions.
 11. Cloudflare must stay DNS-only: the API trusts exactly one proxy hop.
 12. The prod seed (`prisma/seed-prod.ts`) takes the owner from required env (`SEED_OWNER_EMAIL`), never hardcoded.
@@ -78,7 +82,7 @@ The migration was produced by `prisma migrate diff` and applied only to a scratc
 | Secrets | No secrets in the YAML, scripts or CI; Secret Manager references with **per-environment** `secretAccessor` (staging SA cannot read prod secrets and vice versa); separate feed secrets per env; GitHub → GCP via Workload Identity Federation (no JSON keys), provider restricted to the repository by an attribute condition. |
 | Deploy blast radius | Deployer SA has `run.admin` + `artifactregistry.writer` at project level (broad within Cloud Run); production job is gated by GitHub Environment reviewers. Consider restricting the WIF condition to `refs/heads/main` and `refs/tags/v*`. |
 | Public invoker | `allUsers` on `roles/run.invoker` — intended (the API authenticates callers); blocked by a domain-restricted-sharing org policy, in which case use a load balancer. |
-| Residual risks | Uploads on ephemeral disk (until GCS follow-up); single Redis (Basic tier, no failover) – degrades throttling/ledger only; Cloud SQL is a single zonal instance (RTO bounded by clone-from-PITR). |
+| Residual risks | Single Redis (Basic tier, no failover) – degrades throttling/ledger only; Cloud SQL is a single zonal instance (RTO bounded by clone-from-PITR). |
 
 ## 5. Operator runbook
 
@@ -86,7 +90,7 @@ Order matters. Detailed commands: `infrastructure/gcp/README.md`.
 
 ### A. One-time (human with project owner rights)
 
-1. Run README steps 0–7: APIs, Artifact Registry, **two** runtime SAs, Cloud SQL (+ grants), Memorystore + VPC connector, Secret Manager (+ per-env secret accessor including separate feed secrets), WIF + deployer SA (act-as both runtime SAs).
+1. Run README steps 0–7 (+ **5b GCS buckets**): APIs, Artifact Registry, **two** runtime SAs, Cloud SQL (+ grants), Memorystore + VPC connector, GCS buckets with objectAdmin per env SA, Secret Manager (+ per-env secret accessor including separate feed secrets), WIF + deployer SA (act-as both runtime SAs).
 2. Create GitHub Environments `staging` and `production` (required reviewers on production); set variables `GCP_WORKLOAD_IDENTITY_PROVIDER`, `GCP_DEPLOYER_SERVICE_ACCOUNT`, `CORS_ORIGIN` on each. Replace the `REPLACE_OWNER/REPLACE_REPO` placeholder with the real repository.
 3. First deploy: push to `main` (staging) and verify `https://<service-url>/health/ready`; for production tag `v1.0.0` (or run `deploy.sh prod` manually) and approve.
 4. Run the production seed job (README step 9) with the owner's email.
