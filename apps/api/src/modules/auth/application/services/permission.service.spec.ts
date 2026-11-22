@@ -106,4 +106,12 @@ describe('PermissionService', () => {
       expect(ROLE_PERMISSIONS[role]).toBeDefined();
     }
   });
+
+  it('grants users:write only to owner and admin (M5-01 identity linking)', () => {
+    for (const role of PHASE1_ROLES) {
+      expect(service.hasPermission(role, 'users:write')).toBe(
+        role === 'owner' || role === 'admin',
+      );
+    }
+  });
 });

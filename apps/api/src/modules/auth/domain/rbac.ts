@@ -122,6 +122,8 @@ export const PERMISSIONS = [
   'suggestions:dismiss',
   'settings:read',
   'settings:write',
+  // M5-01 — identity administration (external identity linking); owner/admin only.
+  'users:write',
   // M4-AI — invoke AI features (compose with domain read perms, e.g. leads:read)
   'ai:use',
 ] as const;

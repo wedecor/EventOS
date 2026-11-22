@@ -8,6 +8,7 @@ import { AuditModule } from '../../shared/audit';
 import { BreachedPasswordChecker } from './application/ports/breached-password.checker';
 import { FirebaseAuthPort } from './application/ports/firebase-auth.port';
 import { AuthApplicationService } from './application/services/auth.application.service';
+import { ExternalIdentityApplicationService } from './application/services/external-identity.application.service';
 import { FirebaseExchangeApplicationService } from './application/services/firebase-exchange.application.service';
 import { LoginThrottleService } from './application/services/login-throttle.service';
 import { PasswordChangeService } from './application/services/password-change.service';
@@ -33,6 +34,7 @@ import {
   TestFirebaseAuthAdapter,
 } from './infrastructure/test-firebase-auth.adapter';
 import { AuthController } from './presentation/auth.controller';
+import { ExternalIdentityController } from './presentation/external-identity.controller';
 
 /**
  * Auth Module (docs/10 §Auth Module) — ADR-008 email/password login with JWT
@@ -52,7 +54,7 @@ import { AuthController } from './presentation/auth.controller';
       }),
     }),
   ],
-  controllers: [AuthController],
+  controllers: [AuthController, ExternalIdentityController],
   providers: [
     { provide: UserRepository, useClass: UserRepositoryImpl },
     { provide: SessionRepository, useClass: SessionRepositoryImpl },
@@ -91,6 +93,7 @@ import { AuthController } from './presentation/auth.controller';
       },
     },
     FirebaseExchangeApplicationService,
+    ExternalIdentityApplicationService,
     PasswordService,
     TokenService,
     LoginThrottleService,

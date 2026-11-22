@@ -47,6 +47,12 @@ const CODE_TO_STATUS: Record<
       message: error.message,
       details: error.details ?? [],
     }),
+  DUPLICATE_IDENTITY: (error) =>
+    new ConflictException({
+      code: error.code,
+      message: error.message,
+      details: error.details ?? [],
+    }),
   SOURCE_OWNED: (error) =>
     new ConflictException({
       code: error.code,
