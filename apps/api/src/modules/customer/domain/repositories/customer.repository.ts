@@ -8,6 +8,10 @@ export type CustomerRecord = {
   status: CustomerStatus;
   primaryPhone: string | null;
   primaryEmail: string | null;
+  /** M5-01 — strict E.164 form used for feed matching; null when not normalisable. */
+  phoneNormalized: string | null;
+  /** M5-01 — true while created by an external feed and never edited in EventOS. */
+  externalManaged: boolean;
   notes: string | null;
   createdAt: Date;
   updatedAt: Date;
@@ -20,6 +24,8 @@ export type CreateCustomerData = {
   status?: CustomerStatus;
   primaryPhone?: string | null;
   primaryEmail?: string | null;
+  phoneNormalized?: string | null;
+  externalManaged?: boolean;
   notes?: string | null;
 };
 
@@ -29,6 +35,8 @@ export type UpdateCustomerData = {
   status?: CustomerStatus;
   primaryPhone?: string | null;
   primaryEmail?: string | null;
+  phoneNormalized?: string | null;
+  externalManaged?: boolean;
   notes?: string | null;
 };
 
@@ -47,6 +55,18 @@ export abstract class CustomerRepository {
     tenantId: string,
     phone: string,
   ): Promise<CustomerRecord[]>;
+
+  /** M5-01 — exact (E.164) match; at most one per tenant (unique index). */
+  abstract findByPhoneNormalized(
+    tenantId: string,
+    phoneNormalized: string,
+  ): Promise<CustomerRecord | null>;
+
+  /** M5-01 — case-insensitive exact email match. */
+  abstract findByEmail(
+    tenantId: string,
+    email: string,
+  ): Promise<CustomerRecord | null>;
 
   abstract findByDisplayName(
     tenantId: string,

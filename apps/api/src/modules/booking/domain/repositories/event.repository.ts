@@ -9,7 +9,7 @@ export type EventRecord = {
   tenantId: string;
   customerId: string;
   leadId: string | null;
-  quotationId: string;
+  quotationId: string | null;
   bookingNumber: number;
   status: EventStatus;
   eventType: string | null;
@@ -24,6 +24,9 @@ export type EventRecord = {
   executionOwnerId: string | null;
   cancellationReason: string | null;
   completedAt: Date | null;
+  /** M5-01 — origin system ('eventos' or e.g. 'wedecor-enquiries'). */
+  source: string;
+  externalRef: string | null;
   createdAt: Date;
   updatedAt: Date;
   version: number;
@@ -31,7 +34,8 @@ export type EventRecord = {
 
 export type CreateEventData = {
   customerId: string;
-  quotationId: string;
+  /** Null for events synced from an external source (M5-01). */
+  quotationId: string | null;
   leadId?: string | null;
   bookingNumber: number;
   status?: EventStatus;
@@ -45,6 +49,8 @@ export type CreateEventData = {
   preparationStatus?: PreparationStatus;
   operationalMilestone?: string | null;
   executionOwnerId?: string | null;
+  source?: string;
+  externalRef?: string | null;
 };
 
 export type UpdateEventData = {

@@ -64,7 +64,7 @@ export type CustomerBookingHistoryItemDto = {
   eventEndDate: string | null;
   status: string;
   venueName: string | null;
-  quotationId: string;
+  quotationId: string | null;
   /** Quotation total for this booking's quotation, if available */
   value: number | null;
   currency: string | null;

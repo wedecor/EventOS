@@ -455,7 +455,9 @@ export class CustomerIntelligenceApplicationService {
     const quotationById = new Map(quotations.map((q) => [q.id, q]));
 
     const items: CustomerBookingHistoryItemDto[] = events.map((event) => {
-      const quotation = quotationById.get(event.quotationId);
+      const quotation = event.quotationId
+        ? quotationById.get(event.quotationId)
+        : undefined;
       let outcome = 'in_progress';
       if (event.status === 'completed') outcome = 'completed';
       else if (event.status === 'cancelled') outcome = 'cancelled';

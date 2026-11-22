@@ -8,6 +8,8 @@ export type CustomerDto = {
   status: CustomerRecord['status'];
   primaryPhone: string | null;
   primaryEmail: string | null;
+  phoneNormalized: string | null;
+  externalManaged: boolean;
   notes: string | null;
   createdAt: Date;
   updatedAt: Date;

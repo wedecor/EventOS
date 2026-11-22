@@ -20,6 +20,10 @@ const ERROR_CODE_TO_STATUS: Record<string, HttpStatus> = {
   DUPLICATE_CUSTOMER: HttpStatus.CONFLICT,
   DUPLICATE_EVENT: HttpStatus.CONFLICT,
   DUPLICATE_REVIEW_REQUEST: HttpStatus.CONFLICT,
+  // M5-01 — synced field edited in EventOS while owned by the source system.
+  SOURCE_OWNED: HttpStatus.CONFLICT,
+  // M5-01 — Firebase identity verified but not linked to an EventOS user.
+  IDENTITY_NOT_LINKED: HttpStatus.FORBIDDEN,
   'EP1-BR-001': HttpStatus.UNPROCESSABLE_ENTITY,
   'EP1-BR-002': HttpStatus.UNPROCESSABLE_ENTITY,
   'EP1-BR-003': HttpStatus.UNPROCESSABLE_ENTITY,

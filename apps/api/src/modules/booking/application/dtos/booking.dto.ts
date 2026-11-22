@@ -5,7 +5,7 @@ export type BookingDto = {
   tenantId: string;
   customerId: string;
   leadId: string | null;
-  quotationId: string;
+  quotationId: string | null;
   bookingNumber: number;
   status: EventRecord['status'];
   eventType: string | null;
@@ -20,6 +20,8 @@ export type BookingDto = {
   executionOwnerId: string | null;
   cancellationReason: string | null;
   completedAt: Date | null;
+  source: string;
+  externalRef: string | null;
   createdAt: Date;
   updatedAt: Date;
   version: number;

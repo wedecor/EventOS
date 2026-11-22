@@ -4,6 +4,7 @@ import {
   success,
   type Result,
 } from '../../../../shared/application/result';
+import { normalizePhoneE164 } from '../../../../shared/application/phone-normalization';
 import { ConcurrentModificationError } from '../../../../shared/database';
 import { DomainEventPublisher } from '../../../../shared/events/domain-event.base';
 import {
@@ -24,9 +25,11 @@ import { toCustomerDto, type CustomerDto } from '../dtos/customer.dto';
 export type CreateCustomerInput = CreateCustomerData;
 export type UpdateCustomerInput = UpdateCustomerData;
 
+// M5-01 — display name is no longer an identity key (two customers may share a
+// name); duplicates are detected on phone (raw or E.164) and email only.
 export type FindExistingCustomerInput = {
   phone?: string;
-  displayName?: string;
+  email?: string;
 };
 
 export type AddContactInput = Omit<CreateContactData, 'customerId'> & {
@@ -85,7 +88,7 @@ export class CustomerApplicationService {
 
     const existing = await this.findExistingCustomer(tenantId, {
       phone: input.primaryPhone ?? undefined,
-      displayName: input.displayName,
+      email: input.primaryEmail ?? undefined,
     });
     if (existing.ok && existing.value) {
       return failure(
@@ -95,7 +98,10 @@ export class CustomerApplicationService {
       );
     }
 
-    const customer = await this.customerRepository.create(tenantId, input);
+    const customer = await this.customerRepository.create(tenantId, {
+      ...input,
+      phoneNormalized: normalizePhoneE164(input.primaryPhone),
+    });
     this.eventPublisher.publish(new CustomerCreatedEvent(tenantId, customer));
 
     return success(toCustomerDto(customer));
@@ -169,11 +175,39 @@ export class CustomerApplicationService {
       );
     }
 
+    // M5-01 — customers created by an external feed own their identity fields.
+    if (existing.externalManaged && changesIdentityFields(existing, input)) {
+      return failure(
+        'SOURCE_OWNED',
+        'This customer is managed by the Enquiries app. Edit this in the Enquiries app.',
+        { customerId },
+      );
+    }
+
+    const data: UpdateCustomerData = { ...input };
+    if (input.primaryPhone !== undefined) {
+      const phoneNormalized = normalizePhoneE164(input.primaryPhone);
+      if (phoneNormalized && phoneNormalized !== existing.phoneNormalized) {
+        const clash = await this.customerRepository.findByPhoneNormalized(
+          tenantId,
+          phoneNormalized,
+        );
+        if (clash && clash.id !== customerId) {
+          return failure(
+            'DUPLICATE_CUSTOMER',
+            'Another customer already uses this phone number.',
+            { customerId: clash.id },
+          );
+        }
+      }
+      data.phoneNormalized = phoneNormalized;
+    }
+
     try {
       const customer = await this.customerRepository.update(
         tenantId,
         customerId,
-        input,
+        data,
         version,
       );
       return success(toCustomerDto(customer));
@@ -194,6 +228,18 @@ export class CustomerApplicationService {
     input: FindExistingCustomerInput,
   ): Promise<Result<CustomerDto | null>> {
     if (input.phone?.trim()) {
+      const normalized = normalizePhoneE164(input.phone);
+      if (normalized) {
+        const byNormalized =
+          await this.customerRepository.findByPhoneNormalized(
+            tenantId,
+            normalized,
+          );
+        if (byNormalized) {
+          return success(toCustomerDto(byNormalized));
+        }
+      }
+
       const matches = await this.customerRepository.findByPhone(
         tenantId,
         input.phone.trim(),
@@ -203,13 +249,13 @@ export class CustomerApplicationService {
       }
     }
 
-    if (input.displayName?.trim()) {
-      const match = await this.customerRepository.findByDisplayName(
+    if (input.email?.trim()) {
+      const byEmail = await this.customerRepository.findByEmail(
         tenantId,
-        input.displayName.trim(),
+        input.email.trim(),
       );
-      if (match) {
-        return success(toCustomerDto(match));
+      if (byEmail) {
+        return success(toCustomerDto(byEmail));
       }
     }
 
@@ -262,6 +308,24 @@ export class CustomerApplicationService {
 
     return success({ id: contact.id, contactsCount });
   }
+}
+
+function changesIdentityFields(
+  existing: {
+    displayName: string;
+    primaryPhone: string | null;
+    primaryEmail: string | null;
+  },
+  input: UpdateCustomerInput,
+): boolean {
+  return (
+    (input.displayName !== undefined &&
+      input.displayName !== existing.displayName) ||
+    (input.primaryPhone !== undefined &&
+      input.primaryPhone !== existing.primaryPhone) ||
+    (input.primaryEmail !== undefined &&
+      input.primaryEmail !== existing.primaryEmail)
+  );
 }
 
 function normalizeContactPhone(phone: AddContactInput['phone']): string | null {

@@ -30,6 +30,8 @@ export class CustomerRepositoryImpl
         status: data.status ?? 'active',
         primaryPhone: data.primaryPhone ?? null,
         primaryEmail: data.primaryEmail ?? null,
+        phoneNormalized: data.phoneNormalized ?? null,
+        externalManaged: data.externalManaged ?? false,
         notes: data.notes ?? null,
       },
     });
@@ -55,6 +57,32 @@ export class CustomerRepositoryImpl
     });
 
     return customers.map((customer) => this.mapCustomer(customer));
+  }
+
+  async findByPhoneNormalized(
+    tenantId: string,
+    phoneNormalized: string,
+  ): Promise<CustomerRecord | null> {
+    const customer = await this.prisma.customer.findFirst({
+      where: { tenantId, phoneNormalized },
+    });
+
+    return customer ? this.mapCustomer(customer) : null;
+  }
+
+  async findByEmail(
+    tenantId: string,
+    email: string,
+  ): Promise<CustomerRecord | null> {
+    const customer = await this.prisma.customer.findFirst({
+      where: {
+        tenantId,
+        primaryEmail: { equals: email, mode: 'insensitive' },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    return customer ? this.mapCustomer(customer) : null;
   }
 
   async findByDisplayName(
@@ -158,6 +186,8 @@ export class CustomerRepositoryImpl
       status: data.status,
       primaryPhone: data.primaryPhone,
       primaryEmail: data.primaryEmail,
+      phoneNormalized: data.phoneNormalized,
+      externalManaged: data.externalManaged,
       notes: data.notes,
     };
   }
@@ -171,6 +201,8 @@ export class CustomerRepositoryImpl
       status: customer.status,
       primaryPhone: customer.primaryPhone,
       primaryEmail: customer.primaryEmail,
+      phoneNormalized: customer.phoneNormalized,
+      externalManaged: customer.externalManaged,
       notes: customer.notes,
       createdAt: customer.createdAt,
       updatedAt: customer.updatedAt,

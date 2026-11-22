@@ -62,6 +62,9 @@ model Tenant {
   eventChecklists    EventChecklist[]
   storedDocuments    StoredDocument[]
   integrationSettings IntegrationSettings?
+  externalIdentities  ExternalIdentity[]
+  externalRecordLinks ExternalRecordLink[]
+  eventFunctions      EventFunction[]
 
   @@map("tenants")
 }
@@ -93,12 +96,16 @@ model User {
   name         String
   role         String   @default("admin")
   passwordHash String?  @map("password_hash")
+  /// M5-01 — soft-disable flag; a disabled user cannot obtain or refresh a session.
+  disabledAt   DateTime? @map("disabled_at")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
   version      Int      @default(1)
 
   tenant              Tenant              @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   sessions            Session[]
+  externalIdentities  ExternalIdentity[]  @relation("ExternalIdentityUser")
+  linkedExternalIdentities ExternalIdentity[] @relation("ExternalIdentityLinkedBy")
   passwordHistory     PasswordHistory[]
   assignedLeads       Lead[]              @relation("LeadAssignee")
   leadStageChanges    LeadStageHistory[]  @relation("LeadStageChangedBy")
@@ -352,6 +359,10 @@ model Customer {
   status       CustomerStatus @default(active)
   primaryPhone String?        @map("primary_phone")
   primaryEmail String?        @map("primary_email")
+  /// M5-01 — E.164-normalised phone used for feed matching (unique per tenant when set).
+  phoneNormalized String?     @map("phone_normalized")
+  /// M5-01 — true only while created by an external feed and never edited in EventOS.
+  externalManaged Boolean     @default(false) @map("external_managed")
   notes        String?
   createdAt    DateTime       @default(now()) @map("created_at")
   updatedAt    DateTime       @updatedAt @map("updated_at")
@@ -371,7 +382,8 @@ model Customer {
   notificationPreferences NotificationPreference[]
   storedDocuments StoredDocument[]
 
-  @@unique([tenantId, displayName])
+  @@unique([tenantId, phoneNormalized])
+  @@index([tenantId, displayName])
   @@index([tenantId, status])
   @@map("customers")
 }
@@ -582,7 +594,8 @@ model Event {
   tenantId            String            @map("tenant_id") @db.Uuid
   customerId          String            @map("customer_id") @db.Uuid
   leadId              String?           @unique @map("lead_id") @db.Uuid
-  quotationId         String            @unique @map("quotation_id") @db.Uuid
+  /// M5-01 — nullable: feed-synced events have no EventOS quotation (still unique when set).
+  quotationId         String?           @unique @map("quotation_id") @db.Uuid
   bookingNumber       Int               @map("booking_number")
   status              EventStatus       @default(approved)
   eventType           String?           @map("event_type")
@@ -597,13 +610,17 @@ model Event {
   executionOwnerId    String?           @map("execution_owner_id") @db.Uuid
   cancellationReason  String?           @map("cancellation_reason")
   completedAt         DateTime?         @map("completed_at")
+  /// M5-01 — origin system: 'eventos' (native) or e.g. 'wedecor-enquiries' (synced, source-owned fields).
+  source              String            @default("eventos")
+  externalRef         String?           @map("external_ref")
   createdAt           DateTime          @default(now()) @map("created_at")
   updatedAt           DateTime          @updatedAt @map("updated_at")
   version             Int               @default(1)
 
   tenant         Tenant    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   customer       Customer  @relation(fields: [customerId], references: [id], onDelete: Restrict)
-  quotation      Quotation @relation(fields: [quotationId], references: [id], onDelete: Restrict)
+  quotation      Quotation? @relation(fields: [quotationId], references: [id], onDelete: Restrict)
+  functions      EventFunction[]
   lead           Lead?     @relation(fields: [leadId], references: [id], onDelete: Restrict)
   executionOwner User?     @relation("EventExecutionOwner", fields: [executionOwnerId], references: [id], onDelete: SetNull)
   payments       Payment[]
@@ -633,6 +650,86 @@ model Event {
   @@index([tenantId, executionOwnerId])
   @@index([tenantId, customerId])
   @@map("events")
+}
+
+/// M5-01 — Individual function (haldi, sangeet, ...) of an event; synced from Enquiries.
+/// Future gig shifts attach here (P3-01).
+model EventFunction {
+  id                 String   @id @default(uuid()) @db.Uuid
+  tenantId           String   @map("tenant_id") @db.Uuid
+  bookingId          String   @map("booking_id") @db.Uuid
+  externalFunctionId String?  @map("external_function_id")
+  eventType          String   @map("event_type")
+  eventTypeLabel     String?  @map("event_type_label")
+  /// IST calendar date, stored without timezone shifting.
+  date               DateTime @db.Date
+  /// HH:mm wall-clock time (Asia/Kolkata).
+  time               String?
+  venueName          String?  @map("venue_name")
+  venueArea          String?  @map("venue_area")
+  venueAddress       String?  @map("venue_address")
+  placeId            String?  @map("place_id")
+  lat                Decimal? @db.Decimal(9, 6)
+  lng                Decimal? @db.Decimal(9, 6)
+  notes              String?
+  sortOrder          Int      @default(0) @map("sort_order")
+  /// active | cancelled
+  status             String   @default("active")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+  version            Int      @default(1)
+
+  tenant  Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  booking Event  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, bookingId])
+  @@index([tenantId, date])
+  @@map("event_functions")
+}
+
+/// M5-01 — Link from an external identity provider subject (Firebase uid) to a User.
+/// Temporary bridge (ADR-019): removed when the Enquiries app is fully migrated.
+model ExternalIdentity {
+  id             String    @id @default(uuid()) @db.Uuid
+  tenantId       String    @map("tenant_id") @db.Uuid
+  userId         String    @map("user_id") @db.Uuid
+  provider       String
+  subject        String
+  email          String?
+  linkedAt       DateTime  @default(now()) @map("linked_at")
+  linkedByUserId String    @map("linked_by_user_id") @db.Uuid
+  lastUsedAt     DateTime? @map("last_used_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  user     User   @relation("ExternalIdentityUser", fields: [userId], references: [id], onDelete: Cascade)
+  linkedBy User   @relation("ExternalIdentityLinkedBy", fields: [linkedByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([provider, subject])
+  @@index([tenantId, userId])
+  @@map("external_identities")
+}
+
+/// M5-01 — Idempotency/ordering record for entities synced from an external system.
+model ExternalRecordLink {
+  id                  String   @id @default(uuid()) @db.Uuid
+  tenantId            String   @map("tenant_id") @db.Uuid
+  source              String
+  externalId          String   @map("external_id")
+  entityType          String   @map("entity_type")
+  entityId            String   @map("entity_id")
+  lastSourceUpdatedAt DateTime @map("last_source_updated_at")
+  lastPayload         Json     @map("last_payload")
+  lastDeliveryId      String   @map("last_delivery_id")
+  syncedAt            DateTime @map("synced_at")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, source, externalId])
+  @@index([tenantId, entityType, entityId])
+  @@map("external_record_links")
 }
 
 // ---------------------------------------------------------------------------
