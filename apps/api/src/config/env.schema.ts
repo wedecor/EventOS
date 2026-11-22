@@ -12,6 +12,14 @@ const STRICT_CORS_NODE_ENVS: ReadonlySet<string> = new Set([
   'production',
 ]);
 
+const optionalTrimmedString = z
+  .string()
+  .optional()
+  .transform((value) => {
+    const trimmed = value?.trim();
+    return trimmed && trimmed.length > 0 ? trimmed : undefined;
+  });
+
 export const envSchema = z
   .object({
     NODE_ENV: z.enum(NODE_ENVS).default('development'),
@@ -111,8 +119,48 @@ export const envSchema = z
     FIREBASE_AUTH_PROVIDER: z
       .enum(['firebase', 'test', 'none'])
       .default('firebase'),
+    // M5-01 — Enquiries → EventOS booking feed (HMAC-signed, temporary bridge).
+    // `ENQUIRIES_FEED_SECRET` signs `${timestamp}.${rawBody}`; `_NEXT` is the second
+    // active secret during rotation. The tenant is always resolved from config,
+    // never from the request body. Both are required in staging/production.
+    ENQUIRIES_FEED_SECRET: optionalTrimmedString.pipe(
+      z
+        .string()
+        .min(32, 'ENQUIRIES_FEED_SECRET must be at least 32 characters.')
+        .optional(),
+    ),
+    ENQUIRIES_FEED_SECRET_NEXT: optionalTrimmedString.pipe(
+      z
+        .string()
+        .min(32, 'ENQUIRIES_FEED_SECRET_NEXT must be at least 32 characters.')
+        .optional(),
+    ),
+    ENQUIRIES_FEED_TENANT_ID: optionalTrimmedString.pipe(
+      z
+        .string()
+        // Permissive UUID shape: the Phase 1 tenant id (ADR-016) is not RFC-4122 versioned.
+        .regex(
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+          'ENQUIRIES_FEED_TENANT_ID must be a UUID.',
+        )
+        .optional(),
+    ),
   })
   .superRefine((config, ctx) => {
+    if (STRICT_CORS_NODE_ENVS.has(config.NODE_ENV)) {
+      for (const key of [
+        'ENQUIRIES_FEED_SECRET',
+        'ENQUIRIES_FEED_TENANT_ID',
+      ] as const) {
+        if (!config[key]) {
+          ctx.addIssue({
+            code: 'custom',
+            path: [key],
+            message: `${key} is required in NODE_ENV=${config.NODE_ENV} (Enquiries feed, M5-01).`,
+          });
+        }
+      }
+    }
     if (
       config.FIREBASE_AUTH_PROVIDER === 'test' &&
       STRICT_CORS_NODE_ENVS.has(config.NODE_ENV)

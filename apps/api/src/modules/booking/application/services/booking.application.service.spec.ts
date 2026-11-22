@@ -563,4 +563,106 @@ describe('BookingApplicationService', () => {
       expect(result.error.code).toBe('CONCURRENT_MODIFICATION');
     }
   });
+
+  describe('updateBookingDetails (M5-01 source ownership)', () => {
+    const nativeEvent = { ...baseEvent, source: 'eventos', externalRef: null };
+    const syncedEvent = {
+      ...baseEvent,
+      quotationId: null,
+      source: 'wedecor-enquiries',
+      externalRef: 'enq-1',
+    };
+
+    it('updates details of a native booking', async () => {
+      eventRepository.findById.mockResolvedValue(nativeEvent);
+      eventRepository.update.mockResolvedValue({
+        ...nativeEvent,
+        guestCount: 250,
+        version: 2,
+      });
+
+      const result = await service.updateBookingDetails(tenantId, bookingId, {
+        guestCount: 250,
+        version: 1,
+      });
+
+      expect(result.ok).toBe(true);
+      expect(eventRepository.update).toHaveBeenCalledWith(
+        tenantId,
+        bookingId,
+        { guestCount: 250 },
+        1,
+      );
+    });
+
+    it('rejects edits to synced fields on a synced booking with 409 SOURCE_OWNED', async () => {
+      eventRepository.findById.mockResolvedValue(syncedEvent);
+
+      const result = await service.updateBookingDetails(tenantId, bookingId, {
+        venueName: 'Somewhere else',
+        eventStartDate: new Date('2026-09-09'),
+        version: 1,
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('SOURCE_OWNED');
+        expect(result.error.details).toEqual(
+          expect.objectContaining({
+            fields: ['eventStartDate', 'venueName'],
+          }),
+        );
+      }
+      expect(eventRepository.update).not.toHaveBeenCalled();
+    });
+
+    it('treats an unchanged resubmission on a synced booking as a no-op', async () => {
+      eventRepository.findById.mockResolvedValue(syncedEvent);
+
+      const result = await service.updateBookingDetails(tenantId, bookingId, {
+        venueName: syncedEvent.venueName,
+        eventStartDate: new Date(syncedEvent.eventStartDate as Date),
+        version: 1,
+      });
+
+      expect(result.ok).toBe(true);
+      expect(eventRepository.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects edits to cancelled or completed bookings', async () => {
+      eventRepository.findById.mockResolvedValue({
+        ...nativeEvent,
+        status: 'cancelled',
+      });
+
+      const result = await service.updateBookingDetails(tenantId, bookingId, {
+        guestCount: 1,
+        version: 1,
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.error.code).toBe('INVALID_STATE');
+    });
+
+    it('returns NOT_FOUND and maps concurrent modification', async () => {
+      eventRepository.findById.mockResolvedValueOnce(null);
+      const missing = await service.updateBookingDetails(tenantId, 'x', {
+        guestCount: 1,
+        version: 1,
+      });
+      expect(!missing.ok && missing.error.code).toBe('NOT_FOUND');
+
+      eventRepository.findById.mockResolvedValueOnce(nativeEvent);
+      eventRepository.update.mockRejectedValueOnce(
+        new ConcurrentModificationError('Event', bookingId),
+      );
+      const conflict = await service.updateBookingDetails(tenantId, bookingId, {
+        guestCount: 1,
+        version: 1,
+      });
+      expect(!conflict.ok && conflict.error.code).toBe(
+        'CONCURRENT_MODIFICATION',
+      );
+    });
+  });
 });

@@ -21,6 +21,9 @@ import {
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule, {
     bufferLogs: true,
+    // M5-01 — the Enquiries feed verifies its HMAC over the exact raw bytes
+    // (`req.rawBody`). Only the Buffer is retained; parsing is unchanged.
+    rawBody: true,
   });
 
   const logger = app.get(Logger);

@@ -55,4 +55,5 @@ export const AUDIT_ENTITY_TYPES = {
   LEAD: 'Lead',
   EXTERNAL_IDENTITY: 'ExternalIdentity',
   EVENT: 'Event',
+  EXTERNAL_RECORD: 'ExternalRecord',
 } as const;

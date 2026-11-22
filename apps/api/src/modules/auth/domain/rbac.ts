@@ -124,6 +124,12 @@ export const PERMISSIONS = [
   'settings:write',
   // M5-01 — identity administration (external identity linking); owner/admin only.
   'users:write',
+  // M5-01 — Enquiries feed administration (status, backfill reconciliation); owner/admin only.
+  'integrations:enquiries:manage',
+  // M5-01 — read synced external financials (Enquiries `money`); finance + owner/admin.
+  'integrations:financials:read',
+  // M5-01 — edit EventOS-owned booking fields (synced fields return 409 SOURCE_OWNED).
+  'bookings:update',
   // M4-AI — invoke AI features (compose with domain read perms, e.g. leads:read)
   'ai:use',
 ] as const;
@@ -190,6 +196,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'issues:write',
     'quotations:approve',
     'bookings:read',
+    'bookings:update',
     'bookings:status:update',
     'bookings:cancel',
     'bookings:complete',
@@ -268,6 +275,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   ],
 
   finance: [
+    'integrations:financials:read',
     'leads:read',
     'bookings:read',
     'bookings:status:update',

@@ -64,3 +64,44 @@ describe('configuration() — SENTRY_DSN (R2-06)', () => {
     );
   });
 });
+
+describe('configuration() — Enquiries feed (M5-01)', () => {
+  const originalEnv = { ...process.env };
+
+  beforeEach(() => {
+    process.env.JWT_SECRET = 'a'.repeat(32);
+    process.env.DATABASE_URL =
+      'postgresql://eventos:eventos@localhost:5432/eventos';
+  });
+
+  afterEach(() => {
+    process.env = { ...originalEnv };
+  });
+
+  it('exposes the feed secrets and tenant, trimming whitespace', () => {
+    process.env.ENQUIRIES_FEED_SECRET = `  ${'s'.repeat(32)}  `;
+    process.env.ENQUIRIES_FEED_SECRET_NEXT = 'n'.repeat(32);
+    process.env.ENQUIRIES_FEED_TENANT_ID =
+      '00000000-0000-0000-0000-000000000009';
+
+    const config = configuration();
+
+    expect(config.ENQUIRIES_FEED_SECRET).toBe('s'.repeat(32));
+    expect(config.ENQUIRIES_FEED_SECRET_NEXT).toBe('n'.repeat(32));
+    expect(config.ENQUIRIES_FEED_TENANT_ID).toBe(
+      '00000000-0000-0000-0000-000000000009',
+    );
+  });
+
+  it('leaves unset values undefined', () => {
+    delete process.env.ENQUIRIES_FEED_SECRET;
+    delete process.env.ENQUIRIES_FEED_SECRET_NEXT;
+    delete process.env.ENQUIRIES_FEED_TENANT_ID;
+
+    const config = configuration();
+
+    expect(config.ENQUIRIES_FEED_SECRET).toBeUndefined();
+    expect(config.ENQUIRIES_FEED_SECRET_NEXT).toBeUndefined();
+    expect(config.ENQUIRIES_FEED_TENANT_ID).toBeUndefined();
+  });
+});

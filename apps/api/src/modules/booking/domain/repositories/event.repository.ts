@@ -49,6 +49,7 @@ export type CreateEventData = {
   preparationStatus?: PreparationStatus;
   operationalMilestone?: string | null;
   executionOwnerId?: string | null;
+  completedAt?: Date | null;
   source?: string;
   externalRef?: string | null;
 };

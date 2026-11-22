@@ -196,6 +196,7 @@ export class EventRepositoryImpl
       executionOwner: data.executionOwnerId
         ? { connect: { id: data.executionOwnerId } }
         : undefined,
+      completedAt: data.completedAt ?? null,
       source: data.source ?? 'eventos',
       externalRef: data.externalRef ?? null,
     };

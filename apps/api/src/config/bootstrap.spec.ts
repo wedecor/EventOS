@@ -71,6 +71,10 @@ describe('ConfigModule bootstrap — JWT_SECRET (R1-04)', () => {
       // R1-06 — production requires an explicit CORS_ORIGIN; irrelevant to
       // this JWT_SECRET-focused assertion, so it's supplied unconditionally.
       process.env.CORS_ORIGIN = 'https://app.wedecor.com';
+      // M5-01 — the Enquiries feed settings are required in production.
+      process.env.ENQUIRIES_FEED_SECRET = 'f'.repeat(32);
+      process.env.ENQUIRIES_FEED_TENANT_ID =
+        '00000000-0000-0000-0000-000000000001';
 
       await expect(forRoot()).resolves.toBeDefined();
     },
@@ -90,6 +94,10 @@ describe('ConfigModule bootstrap — CORS_ORIGIN (R1-06)', () => {
     process.env.DATABASE_URL =
       'postgresql://eventos:eventos@localhost:5432/eventos';
     process.env.JWT_SECRET = validSecret;
+    // M5-01 — required in staging/production.
+    process.env.ENQUIRIES_FEED_SECRET = 'f'.repeat(32);
+    process.env.ENQUIRIES_FEED_TENANT_ID =
+      '00000000-0000-0000-0000-000000000001';
   });
 
   afterEach(() => {

@@ -104,6 +104,12 @@ export default (): EnvConfig & { redisUrl: string } => {
       (process.env
         .FIREBASE_AUTH_PROVIDER as EnvConfig['FIREBASE_AUTH_PROVIDER']) ??
       'firebase',
+    ENQUIRIES_FEED_SECRET:
+      process.env.ENQUIRIES_FEED_SECRET?.trim() || undefined,
+    ENQUIRIES_FEED_SECRET_NEXT:
+      process.env.ENQUIRIES_FEED_SECRET_NEXT?.trim() || undefined,
+    ENQUIRIES_FEED_TENANT_ID:
+      process.env.ENQUIRIES_FEED_TENANT_ID?.trim() || undefined,
     redisUrl: `redis://${redisAuth}${redisHost}:${redisPort}`,
   };
 };

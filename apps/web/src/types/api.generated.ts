@@ -615,6 +615,27 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
+        /**
+         * Update booking details
+         * @description Edits type, dates, venue, guest count and requirements. On bookings synced from the Enquiries app these fields are source-owned: a real change returns `409 SOURCE_OWNED` ("Edit this in the Enquiries app"). Workspace, tasks, staff, inventory and notes are unaffected.
+         */
+        patch: operations["BookingController_updateBookingDetails"];
+        trace?: never;
+    };
+    "/api/v1/bookings/{id}/functions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the functions (ceremonies) of a booking */
+        get: operations["BookingController_listFunctionsForBooking"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
         patch?: never;
         trace?: never;
     };
@@ -2377,6 +2398,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/integrations/enquiries/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Receive a booking delivery from the Enquiries app (HMAC-signed)
+         * @description Machine-to-machine endpoint (no user JWT). Authenticated by `X-EventOS-Signature: v1=<hex HMAC-SHA256(secret, timestamp + "." + rawBody)>` with `X-EventOS-Timestamp` (unix seconds, ±300 s) and `X-EventOS-Delivery-Id` (UUID, replay-protected for 24 h). The tenant comes from server config. Responds `200 { ok: true, eventId }`, `{ ok: true, ignored: "stale" | "not_approved_never_synced" }` or `{ ok: true, duplicate: true }`; 5xx means the sender should retry. Rate limited to 120/min.
+         */
+        post: operations["EnquiriesFeedController_sync"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integrations/enquiries/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Enquiries feed status (owner/admin)
+         * @description Last delivery time, delivery counts for the last 24 h (processed / stale / ignored / failed) and the last 20 errors. Backed by Redis: counts reset if Redis is flushed.
+         */
+        get: operations["EnquiriesFeedController_status"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integrations/enquiries/backfill-check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reconcile a backfill list against synced enquiries (owner/admin)
+         * @description Accepts up to 1000 `{ enquiryId, sourceUpdatedAt }` pairs and returns which enquiries are `missing` from EventOS or `stale` (EventOS holds an older `sourceUpdatedAt`).
+         */
+        post: operations["EnquiriesFeedController_backfillCheck"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integrations/enquiries/bookings/{bookingId}/financials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Synced financial summary of an Enquiries booking (finance/owner)
+         * @description The `money` block received from Enquiries. Never part of the booking DTO; only roles holding `integrations:financials:read` (finance, owner, admin) can read it.
+         */
+        get: operations["EnquiriesFeedController_financials"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/communications": {
         parameters: {
             query?: never;
@@ -3141,6 +3242,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/firebase/exchange": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Exchange a Firebase ID token for an EventOS session (temporary bridge)
+         * @description Verifies the Firebase ID token (signature, expiry, revocation, audience, iat ≤ 5 min) and issues the standard EventOS session for the linked user. 403 `IDENTITY_NOT_LINKED` when the Firebase uid has not been linked by an administrator. With `client: "mobile"` the refresh token is also returned in the response body (the cookie is always set). Rate limited to 10/min per IP.
+         */
+        post: operations["AuthController_firebaseExchange"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/refresh": {
         parameters: {
             query?: never;
@@ -3190,6 +3311,40 @@ export interface paths {
         /** Change the authenticated user’s password */
         post: operations["AuthController_changePassword"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/external-identities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Link an external (Firebase) identity to an EventOS user */
+        post: operations["ExternalIdentityController_link"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/external-identities/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Unlink an external identity */
+        delete: operations["ExternalIdentityController_unlink"];
         options?: never;
         head?: never;
         patch?: never;
@@ -9972,6 +10127,312 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Booking retrieved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+            /** @description Validation error (`VALIDATION_ERROR`) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example VALIDATION_ERROR */
+                        code: string;
+                        message: string;
+                        /** @description Optional structured details (validation issues, etc.) */
+                        details?: unknown;
+                    };
+                };
+            };
+            /** @description Unauthenticated (`INVALID_CREDENTIALS` / `UNAUTHENTICATED`) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example VALIDATION_ERROR */
+                        code: string;
+                        message: string;
+                        /** @description Optional structured details (validation issues, etc.) */
+                        details?: unknown;
+                    };
+                };
+            };
+            /** @description Forbidden (`FORBIDDEN`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example VALIDATION_ERROR */
+                        code: string;
+                        message: string;
+                        /** @description Optional structured details (validation issues, etc.) */
+                        details?: unknown;
+                    };
+                };
+            };
+            /** @description Not found (`NOT_FOUND`) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example VALIDATION_ERROR */
+                        code: string;
+                        message: string;
+                        /** @description Optional structured details (validation issues, etc.) */
+                        details?: unknown;
+                    };
+                };
+            };
+            /** @description Conflict (`CONCURRENT_MODIFICATION`, `INVALID_STATE`, `DUPLICATE_*`, …) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example VALIDATION_ERROR */
+                        code: string;
+                        message: string;
+                        /** @description Optional structured details (validation issues, etc.) */
+                        details?: unknown;
+                    };
+                };
+            };
+            /** @description Business rule violation (`EP1-BR-001` / `002` / `003`) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example VALIDATION_ERROR */
+                        code: string;
+                        message: string;
+                        /** @description Optional structured details (validation issues, etc.) */
+                        details?: unknown;
+                    };
+                };
+            };
+            /** @description Rate limited (`RATE_LIMITED`) */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example VALIDATION_ERROR */
+                        code: string;
+                        message: string;
+                        /** @description Optional structured details (validation issues, etc.) */
+                        details?: unknown;
+                    };
+                };
+            };
+            /** @description Not implemented (`NOT_IMPLEMENTED`) */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example VALIDATION_ERROR */
+                        code: string;
+                        message: string;
+                        /** @description Optional structured details (validation issues, etc.) */
+                        details?: unknown;
+                    };
+                };
+            };
+        };
+    };
+    BookingController_updateBookingDetails: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Resource version for optimistic concurrency (quoted integer, e.g. `"1"`). */
+                "If-Match": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    eventType?: string | null;
+                    eventStartDate?: string | null;
+                    eventEndDate?: string | null;
+                    venueName?: string | null;
+                    guestCount?: number | null;
+                    requirementsNotes?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Booking updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+            /** @description Validation error (`VALIDATION_ERROR`) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example VALIDATION_ERROR */
+                        code: string;
+                        message: string;
+                        /** @description Optional structured details (validation issues, etc.) */
+                        details?: unknown;
+                    };
+                };
+            };
+            /** @description Unauthenticated (`INVALID_CREDENTIALS` / `UNAUTHENTICATED`) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example VALIDATION_ERROR */
+                        code: string;
+                        message: string;
+                        /** @description Optional structured details (validation issues, etc.) */
+                        details?: unknown;
+                    };
+                };
+            };
+            /** @description Forbidden (`FORBIDDEN`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example VALIDATION_ERROR */
+                        code: string;
+                        message: string;
+                        /** @description Optional structured details (validation issues, etc.) */
+                        details?: unknown;
+                    };
+                };
+            };
+            /** @description Not found (`NOT_FOUND`) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example VALIDATION_ERROR */
+                        code: string;
+                        message: string;
+                        /** @description Optional structured details (validation issues, etc.) */
+                        details?: unknown;
+                    };
+                };
+            };
+            /** @description Conflict (`CONCURRENT_MODIFICATION`, `INVALID_STATE`, `DUPLICATE_*`, …) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example VALIDATION_ERROR */
+                        code: string;
+                        message: string;
+                        /** @description Optional structured details (validation issues, etc.) */
+                        details?: unknown;
+                    };
+                };
+            };
+            /** @description Business rule violation (`EP1-BR-001` / `002` / `003`) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example VALIDATION_ERROR */
+                        code: string;
+                        message: string;
+                        /** @description Optional structured details (validation issues, etc.) */
+                        details?: unknown;
+                    };
+                };
+            };
+            /** @description Rate limited (`RATE_LIMITED`) */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example VALIDATION_ERROR */
+                        code: string;
+                        message: string;
+                        /** @description Optional structured details (validation issues, etc.) */
+                        details?: unknown;
+                    };
+                };
+            };
+            /** @description Not implemented (`NOT_IMPLEMENTED`) */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example VALIDATION_ERROR */
+                        code: string;
+                        message: string;
+                        /** @description Optional structured details (validation issues, etc.) */
+                        details?: unknown;
+                    };
+                };
+            };
+        };
+    };
+    BookingController_listFunctionsForBooking: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Functions listed */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -29414,6 +29875,584 @@ export interface operations {
             };
         };
     };
+    EnquiriesFeedController_sync: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description UUID; a repeated id returns `{ ok: true, duplicate: true }`. */
+                "X-EventOS-Delivery-Id": string;
+                /** @description `v1=<hex HMAC-SHA256(secret, timestamp + "." + rawBody)>` */
+                "X-EventOS-Signature": string;
+                /** @description Unix seconds; deliveries more than 300 s from server time are rejected. */
+                "X-EventOS-Timestamp": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @constant */
+                    schemaVersion: 1;
+                    /** @constant */
+                    source: "wedecor-enquiries";
+                    enquiryId: string;
+                    /** Format: date-time */
+                    sourceUpdatedAt: string;
+                    status: string;
+                    customer: {
+                        name: string;
+                        phone?: string | null;
+                        email?: string | null;
+                    };
+                    event: {
+                        eventType: string;
+                        eventTypeLabel?: string | null;
+                        startDate: string;
+                        endDate: string;
+                        guestCount?: number | null;
+                        notes?: string | null;
+                        assigneeName?: string | null;
+                    };
+                    functions: {
+                        functionId: string;
+                        eventType: string;
+                        eventTypeLabel?: string | null;
+                        date: string;
+                        time?: string | null;
+                        location?: string | null;
+                        locationArea?: string | null;
+                        locationAddress?: string | null;
+                        locationPlaceId?: string | null;
+                        lat?: number | null;
+                        lng?: number | null;
+                        notes?: string | null;
+                    }[];
+                    money?: {
+                        totalCost: number;
+                        advancePaid: number;
+                        currency: string;
+                    } | null;
+                    raw?: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Delivery accepted */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example true */
+                        ok: boolean;
+                        /** Format: uuid */
+                        eventId: string;
+                    } | {
+                        /** @example true */
+                        ok: boolean;
+                        /** @enum {string} */
+                        ignored: "stale" | "not_approved_never_synced";
+                    } | {
+                        /** @example true */
+                        ok: boolean;
+                        /** @example true */
+                        duplicate: boolean;
+                    };
+                };
+            };
+            /** @description Payload or delivery id failed validation (`VALIDATION_ERROR`) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example VALIDATION_ERROR */
+                        code: string;
+                        message: string;
+                        /** @description Optional structured details (validation issues, etc.) */
+                        details?: unknown;
+                    };
+                };
+            };
+            /** @description Missing, expired, or invalid signature (`INVALID_SIGNATURE`) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example VALIDATION_ERROR */
+                        code: string;
+                        message: string;
+                        /** @description Optional structured details (validation issues, etc.) */
+                        details?: unknown;
+                    };
+                };
+            };
+            /** @description Rate limited (`RATE_LIMITED`) */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example VALIDATION_ERROR */
+                        code: string;
+                        message: string;
+                        /** @description Optional structured details (validation issues, etc.) */
+                        details?: unknown;
+                    };
+                };
+            };
+        };
+    };
+    EnquiriesFeedController_status: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Feed status retrieved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+            /** @description Validation error (`VALIDATION_ERROR`) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example VALIDATION_ERROR */
+                        code: string;
+                        message: string;
+                        /** @description Optional structured details (validation issues, etc.) */
+                        details?: unknown;
+                    };
+                };
+            };
+            /** @description Unauthenticated (`INVALID_CREDENTIALS` / `UNAUTHENTICATED`) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example VALIDATION_ERROR */
+                        code: string;
+                        message: string;
+                        /** @description Optional structured details (validation issues, etc.) */
+                        details?: unknown;
+                    };
+                };
+            };
+            /** @description Forbidden (`FORBIDDEN`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example VALIDATION_ERROR */
+                        code: string;
+                        message: string;
+                        /** @description Optional structured details (validation issues, etc.) */
+                        details?: unknown;
+                    };
+                };
+            };
+            /** @description Not found (`NOT_FOUND`) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example VALIDATION_ERROR */
+                        code: string;
+                        message: string;
+                        /** @description Optional structured details (validation issues, etc.) */
+                        details?: unknown;
+                    };
+                };
+            };
+            /** @description Conflict (`CONCURRENT_MODIFICATION`, `INVALID_STATE`, `DUPLICATE_*`, …) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example VALIDATION_ERROR */
+                        code: string;
+                        message: string;
+                        /** @description Optional structured details (validation issues, etc.) */
+                        details?: unknown;
+                    };
+                };
+            };
+            /** @description Business rule violation (`EP1-BR-001` / `002` / `003`) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example VALIDATION_ERROR */
+                        code: string;
+                        message: string;
+                        /** @description Optional structured details (validation issues, etc.) */
+                        details?: unknown;
+                    };
+                };
+            };
+            /** @description Rate limited (`RATE_LIMITED`) */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example VALIDATION_ERROR */
+                        code: string;
+                        message: string;
+                        /** @description Optional structured details (validation issues, etc.) */
+                        details?: unknown;
+                    };
+                };
+            };
+            /** @description Not implemented (`NOT_IMPLEMENTED`) */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example VALIDATION_ERROR */
+                        code: string;
+                        message: string;
+                        /** @description Optional structured details (validation issues, etc.) */
+                        details?: unknown;
+                    };
+                };
+            };
+        };
+    };
+    EnquiriesFeedController_backfillCheck: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    items: {
+                        enquiryId: string;
+                        /** Format: date-time */
+                        sourceUpdatedAt: string;
+                    }[];
+                };
+            };
+        };
+        responses: {
+            /** @description Backfill check completed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+            /** @description Validation error (`VALIDATION_ERROR`) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example VALIDATION_ERROR */
+                        code: string;
+                        message: string;
+                        /** @description Optional structured details (validation issues, etc.) */
+                        details?: unknown;
+                    };
+                };
+            };
+            /** @description Unauthenticated (`INVALID_CREDENTIALS` / `UNAUTHENTICATED`) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example VALIDATION_ERROR */
+                        code: string;
+                        message: string;
+                        /** @description Optional structured details (validation issues, etc.) */
+                        details?: unknown;
+                    };
+                };
+            };
+            /** @description Forbidden (`FORBIDDEN`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example VALIDATION_ERROR */
+                        code: string;
+                        message: string;
+                        /** @description Optional structured details (validation issues, etc.) */
+                        details?: unknown;
+                    };
+                };
+            };
+            /** @description Not found (`NOT_FOUND`) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example VALIDATION_ERROR */
+                        code: string;
+                        message: string;
+                        /** @description Optional structured details (validation issues, etc.) */
+                        details?: unknown;
+                    };
+                };
+            };
+            /** @description Conflict (`CONCURRENT_MODIFICATION`, `INVALID_STATE`, `DUPLICATE_*`, …) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example VALIDATION_ERROR */
+                        code: string;
+                        message: string;
+                        /** @description Optional structured details (validation issues, etc.) */
+                        details?: unknown;
+                    };
+                };
+            };
+            /** @description Business rule violation (`EP1-BR-001` / `002` / `003`) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example VALIDATION_ERROR */
+                        code: string;
+                        message: string;
+                        /** @description Optional structured details (validation issues, etc.) */
+                        details?: unknown;
+                    };
+                };
+            };
+            /** @description Rate limited (`RATE_LIMITED`) */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example VALIDATION_ERROR */
+                        code: string;
+                        message: string;
+                        /** @description Optional structured details (validation issues, etc.) */
+                        details?: unknown;
+                    };
+                };
+            };
+            /** @description Not implemented (`NOT_IMPLEMENTED`) */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example VALIDATION_ERROR */
+                        code: string;
+                        message: string;
+                        /** @description Optional structured details (validation issues, etc.) */
+                        details?: unknown;
+                    };
+                };
+            };
+        };
+    };
+    EnquiriesFeedController_financials: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                bookingId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Synced financials retrieved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+            /** @description Validation error (`VALIDATION_ERROR`) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example VALIDATION_ERROR */
+                        code: string;
+                        message: string;
+                        /** @description Optional structured details (validation issues, etc.) */
+                        details?: unknown;
+                    };
+                };
+            };
+            /** @description Unauthenticated (`INVALID_CREDENTIALS` / `UNAUTHENTICATED`) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example VALIDATION_ERROR */
+                        code: string;
+                        message: string;
+                        /** @description Optional structured details (validation issues, etc.) */
+                        details?: unknown;
+                    };
+                };
+            };
+            /** @description Forbidden (`FORBIDDEN`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example VALIDATION_ERROR */
+                        code: string;
+                        message: string;
+                        /** @description Optional structured details (validation issues, etc.) */
+                        details?: unknown;
+                    };
+                };
+            };
+            /** @description Not found (`NOT_FOUND`) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example VALIDATION_ERROR */
+                        code: string;
+                        message: string;
+                        /** @description Optional structured details (validation issues, etc.) */
+                        details?: unknown;
+                    };
+                };
+            };
+            /** @description Conflict (`CONCURRENT_MODIFICATION`, `INVALID_STATE`, `DUPLICATE_*`, …) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example VALIDATION_ERROR */
+                        code: string;
+                        message: string;
+                        /** @description Optional structured details (validation issues, etc.) */
+                        details?: unknown;
+                    };
+                };
+            };
+            /** @description Business rule violation (`EP1-BR-001` / `002` / `003`) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example VALIDATION_ERROR */
+                        code: string;
+                        message: string;
+                        /** @description Optional structured details (validation issues, etc.) */
+                        details?: unknown;
+                    };
+                };
+            };
+            /** @description Rate limited (`RATE_LIMITED`) */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example VALIDATION_ERROR */
+                        code: string;
+                        message: string;
+                        /** @description Optional structured details (validation issues, etc.) */
+                        details?: unknown;
+                    };
+                };
+            };
+            /** @description Not implemented (`NOT_IMPLEMENTED`) */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example VALIDATION_ERROR */
+                        code: string;
+                        message: string;
+                        /** @description Optional structured details (validation issues, etc.) */
+                        details?: unknown;
+                    };
+                };
+            };
+        };
+    };
     CommunicationController_listAll: {
         parameters: {
             query?: never;
@@ -36999,6 +38038,158 @@ export interface operations {
             };
         };
     };
+    AuthController_firebaseExchange: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    idToken: string;
+                    /** @enum {string} */
+                    client?: "mobile" | "web";
+                };
+            };
+        };
+        responses: {
+            /** @description Session issued; access token (and refresh token for mobile clients) returned */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+            /** @description Validation error (`VALIDATION_ERROR`) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example VALIDATION_ERROR */
+                        code: string;
+                        message: string;
+                        /** @description Optional structured details (validation issues, etc.) */
+                        details?: unknown;
+                    };
+                };
+            };
+            /** @description Unauthenticated (`INVALID_CREDENTIALS` / `UNAUTHENTICATED`) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example VALIDATION_ERROR */
+                        code: string;
+                        message: string;
+                        /** @description Optional structured details (validation issues, etc.) */
+                        details?: unknown;
+                    };
+                };
+            };
+            /** @description Forbidden (`FORBIDDEN`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example VALIDATION_ERROR */
+                        code: string;
+                        message: string;
+                        /** @description Optional structured details (validation issues, etc.) */
+                        details?: unknown;
+                    };
+                };
+            };
+            /** @description Not found (`NOT_FOUND`) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example VALIDATION_ERROR */
+                        code: string;
+                        message: string;
+                        /** @description Optional structured details (validation issues, etc.) */
+                        details?: unknown;
+                    };
+                };
+            };
+            /** @description Conflict (`CONCURRENT_MODIFICATION`, `INVALID_STATE`, `DUPLICATE_*`, …) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example VALIDATION_ERROR */
+                        code: string;
+                        message: string;
+                        /** @description Optional structured details (validation issues, etc.) */
+                        details?: unknown;
+                    };
+                };
+            };
+            /** @description Business rule violation (`EP1-BR-001` / `002` / `003`) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example VALIDATION_ERROR */
+                        code: string;
+                        message: string;
+                        /** @description Optional structured details (validation issues, etc.) */
+                        details?: unknown;
+                    };
+                };
+            };
+            /** @description Rate limited (`RATE_LIMITED`) */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example VALIDATION_ERROR */
+                        code: string;
+                        message: string;
+                        /** @description Optional structured details (validation issues, etc.) */
+                        details?: unknown;
+                    };
+                };
+            };
+            /** @description Not implemented (`NOT_IMPLEMENTED`) */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example VALIDATION_ERROR */
+                        code: string;
+                        message: string;
+                        /** @description Optional structured details (validation issues, etc.) */
+                        details?: unknown;
+                    };
+                };
+            };
+        };
+    };
     AuthController_refresh: {
         parameters: {
             query?: never;
@@ -37316,6 +38507,308 @@ export interface operations {
         };
         responses: {
             /** @description Password changed successfully */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+            /** @description Validation error (`VALIDATION_ERROR`) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example VALIDATION_ERROR */
+                        code: string;
+                        message: string;
+                        /** @description Optional structured details (validation issues, etc.) */
+                        details?: unknown;
+                    };
+                };
+            };
+            /** @description Unauthenticated (`INVALID_CREDENTIALS` / `UNAUTHENTICATED`) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example VALIDATION_ERROR */
+                        code: string;
+                        message: string;
+                        /** @description Optional structured details (validation issues, etc.) */
+                        details?: unknown;
+                    };
+                };
+            };
+            /** @description Forbidden (`FORBIDDEN`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example VALIDATION_ERROR */
+                        code: string;
+                        message: string;
+                        /** @description Optional structured details (validation issues, etc.) */
+                        details?: unknown;
+                    };
+                };
+            };
+            /** @description Not found (`NOT_FOUND`) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example VALIDATION_ERROR */
+                        code: string;
+                        message: string;
+                        /** @description Optional structured details (validation issues, etc.) */
+                        details?: unknown;
+                    };
+                };
+            };
+            /** @description Conflict (`CONCURRENT_MODIFICATION`, `INVALID_STATE`, `DUPLICATE_*`, …) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example VALIDATION_ERROR */
+                        code: string;
+                        message: string;
+                        /** @description Optional structured details (validation issues, etc.) */
+                        details?: unknown;
+                    };
+                };
+            };
+            /** @description Business rule violation (`EP1-BR-001` / `002` / `003`) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example VALIDATION_ERROR */
+                        code: string;
+                        message: string;
+                        /** @description Optional structured details (validation issues, etc.) */
+                        details?: unknown;
+                    };
+                };
+            };
+            /** @description Rate limited (`RATE_LIMITED`) */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example VALIDATION_ERROR */
+                        code: string;
+                        message: string;
+                        /** @description Optional structured details (validation issues, etc.) */
+                        details?: unknown;
+                    };
+                };
+            };
+            /** @description Not implemented (`NOT_IMPLEMENTED`) */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example VALIDATION_ERROR */
+                        code: string;
+                        message: string;
+                        /** @description Optional structured details (validation issues, etc.) */
+                        details?: unknown;
+                    };
+                };
+            };
+        };
+    };
+    ExternalIdentityController_link: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: uuid */
+                    userId: string;
+                    /** @constant */
+                    provider: "firebase";
+                    subject: string;
+                    /** Format: email */
+                    email?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description External identity linked */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+            /** @description Validation error (`VALIDATION_ERROR`) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example VALIDATION_ERROR */
+                        code: string;
+                        message: string;
+                        /** @description Optional structured details (validation issues, etc.) */
+                        details?: unknown;
+                    };
+                };
+            };
+            /** @description Unauthenticated (`INVALID_CREDENTIALS` / `UNAUTHENTICATED`) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example VALIDATION_ERROR */
+                        code: string;
+                        message: string;
+                        /** @description Optional structured details (validation issues, etc.) */
+                        details?: unknown;
+                    };
+                };
+            };
+            /** @description Forbidden (`FORBIDDEN`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example VALIDATION_ERROR */
+                        code: string;
+                        message: string;
+                        /** @description Optional structured details (validation issues, etc.) */
+                        details?: unknown;
+                    };
+                };
+            };
+            /** @description Not found (`NOT_FOUND`) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example VALIDATION_ERROR */
+                        code: string;
+                        message: string;
+                        /** @description Optional structured details (validation issues, etc.) */
+                        details?: unknown;
+                    };
+                };
+            };
+            /** @description Conflict (`CONCURRENT_MODIFICATION`, `INVALID_STATE`, `DUPLICATE_*`, …) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example VALIDATION_ERROR */
+                        code: string;
+                        message: string;
+                        /** @description Optional structured details (validation issues, etc.) */
+                        details?: unknown;
+                    };
+                };
+            };
+            /** @description Business rule violation (`EP1-BR-001` / `002` / `003`) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example VALIDATION_ERROR */
+                        code: string;
+                        message: string;
+                        /** @description Optional structured details (validation issues, etc.) */
+                        details?: unknown;
+                    };
+                };
+            };
+            /** @description Rate limited (`RATE_LIMITED`) */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example VALIDATION_ERROR */
+                        code: string;
+                        message: string;
+                        /** @description Optional structured details (validation issues, etc.) */
+                        details?: unknown;
+                    };
+                };
+            };
+            /** @description Not implemented (`NOT_IMPLEMENTED`) */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example VALIDATION_ERROR */
+                        code: string;
+                        message: string;
+                        /** @description Optional structured details (validation issues, etc.) */
+                        details?: unknown;
+                    };
+                };
+            };
+        };
+    };
+    ExternalIdentityController_unlink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description External identity unlinked */
             200: {
                 headers: {
                     [name: string]: unknown;

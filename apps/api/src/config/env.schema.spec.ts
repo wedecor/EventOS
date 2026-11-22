@@ -7,6 +7,12 @@ import { validateEnv } from './env.schema';
  * invokes during bootstrap (see `configuration.spec.ts` / `bootstrap.spec.ts`
  * for the layers that consume its result).
  */
+// M5-01 — staging/production additionally require the Enquiries feed secret + tenant.
+const feedConfig = {
+  ENQUIRIES_FEED_SECRET: 'f'.repeat(32),
+  ENQUIRIES_FEED_TENANT_ID: '00000000-0000-0000-0000-000000000001',
+};
+
 describe('validateEnv — JWT_SECRET (R1-04)', () => {
   const baseConfig = {
     DATABASE_URL: 'postgresql://eventos:eventos@localhost:5432/eventos',
@@ -78,6 +84,7 @@ describe('validateEnv — JWT_SECRET (R1-04)', () => {
         // R1-06 — production requires an explicit CORS_ORIGIN; irrelevant to
         // this JWT_SECRET-focused assertion, so it's supplied unconditionally.
         CORS_ORIGIN: 'https://app.wedecor.com',
+        ...feedConfig,
       });
       expect(result.JWT_SECRET).toBe(validSecret);
     }
@@ -163,6 +170,7 @@ describe('validateEnv — CORS_ORIGIN (R1-06)', () => {
       ...baseConfig,
       NODE_ENV: 'production',
       CORS_ORIGIN: 'https://app.wedecor.com',
+      ...feedConfig,
     });
 
     expect(result.CORS_ORIGIN).toBe('https://app.wedecor.com');
@@ -205,6 +213,7 @@ describe('validateEnv — CORS_ORIGIN (R1-06)', () => {
       ...baseConfig,
       NODE_ENV: 'staging',
       CORS_ORIGIN: 'https://staging.wedecor.com',
+      ...feedConfig,
     });
 
     expect(result.CORS_ORIGIN).toBe('https://staging.wedecor.com');
@@ -304,4 +313,78 @@ describe('validateEnv — Firebase bridge (M5-01)', () => {
       ).toThrow(/FIREBASE_AUTH_PROVIDER/);
     },
   );
+});
+
+/**
+ * M5-01 — Enquiries → EventOS booking feed configuration. The HMAC secret and the
+ * tenant are required wherever the feed is exposed (staging/production); local
+ * development and tests run without them (the endpoint then rejects every request).
+ */
+describe('validateEnv — Enquiries feed (M5-01)', () => {
+  const baseConfig = {
+    DATABASE_URL: 'postgresql://eventos:eventos@localhost:5432/eventos',
+    JWT_SECRET: 'a'.repeat(32),
+    CORS_ORIGIN: 'https://app.wedecor.com',
+  };
+
+  it('does not require feed settings in development or test', () => {
+    for (const nodeEnv of ['development', 'test']) {
+      const result = validateEnv({ ...baseConfig, NODE_ENV: nodeEnv });
+      expect(result.ENQUIRIES_FEED_SECRET).toBeUndefined();
+      expect(result.ENQUIRIES_FEED_TENANT_ID).toBeUndefined();
+    }
+  });
+
+  it.each(['staging', 'production'])(
+    'requires ENQUIRIES_FEED_SECRET and ENQUIRIES_FEED_TENANT_ID in %s',
+    (nodeEnv) => {
+      expect(() => validateEnv({ ...baseConfig, NODE_ENV: nodeEnv })).toThrow(
+        /ENQUIRIES_FEED_SECRET.*required/s,
+      );
+      expect(() =>
+        validateEnv({
+          ...baseConfig,
+          NODE_ENV: nodeEnv,
+          ENQUIRIES_FEED_SECRET: feedConfig.ENQUIRIES_FEED_SECRET,
+        }),
+      ).toThrow(/ENQUIRIES_FEED_TENANT_ID.*required/s);
+      expect(() =>
+        validateEnv({
+          ...baseConfig,
+          NODE_ENV: nodeEnv,
+          ENQUIRIES_FEED_TENANT_ID: feedConfig.ENQUIRIES_FEED_TENANT_ID,
+        }),
+      ).toThrow(/ENQUIRIES_FEED_SECRET.*required/s);
+    },
+  );
+
+  it('rejects short secrets and a non-UUID tenant', () => {
+    expect(() =>
+      validateEnv({ ...baseConfig, ENQUIRIES_FEED_SECRET: 'short' }),
+    ).toThrow(/at least 32 characters/);
+    expect(() =>
+      validateEnv({ ...baseConfig, ENQUIRIES_FEED_SECRET_NEXT: 'short' }),
+    ).toThrow(/at least 32 characters/);
+    expect(() =>
+      validateEnv({ ...baseConfig, ENQUIRIES_FEED_TENANT_ID: 'not-a-uuid' }),
+    ).toThrow(/must be a UUID/);
+  });
+
+  it('treats blank values as unset and accepts the rotation secret', () => {
+    const blank = validateEnv({
+      ...baseConfig,
+      ENQUIRIES_FEED_SECRET: '   ',
+      ENQUIRIES_FEED_SECRET_NEXT: '',
+    });
+    expect(blank.ENQUIRIES_FEED_SECRET).toBeUndefined();
+    expect(blank.ENQUIRIES_FEED_SECRET_NEXT).toBeUndefined();
+
+    const rotating = validateEnv({
+      ...baseConfig,
+      NODE_ENV: 'production',
+      ...feedConfig,
+      ENQUIRIES_FEED_SECRET_NEXT: 'n'.repeat(40),
+    });
+    expect(rotating.ENQUIRIES_FEED_SECRET_NEXT).toBe('n'.repeat(40));
+  });
 });

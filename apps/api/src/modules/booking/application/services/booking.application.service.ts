@@ -17,7 +17,10 @@ import {
 } from '../../../../shared/events/sprint2-domain.events';
 import { InvoiceRepository } from '../../../finance/domain/repositories/invoice.repository';
 import { QuotationRepository } from '../../../quotation/domain/repositories/quotation.repository';
-import { EventRepository } from '../../domain/repositories/event.repository';
+import {
+  EventRepository,
+  type EventRecord,
+} from '../../domain/repositories/event.repository';
 import { toBookingDto, type BookingDto } from '../dtos/booking.dto';
 
 export type ActivateBookingInput = {
@@ -32,6 +35,33 @@ export type CancelBookingInput = {
 export type CompleteBookingInput = {
   version: number;
 };
+
+/** Fields owned by the source system on synced (non-`eventos`) bookings (M5-01). */
+export type UpdateBookingDetailsInput = {
+  eventType?: string | null;
+  eventStartDate?: Date | null;
+  eventEndDate?: Date | null;
+  venueName?: string | null;
+  guestCount?: number | null;
+  requirementsNotes?: string | null;
+  version: number;
+};
+
+const SOURCE_OWNED_BOOKING_FIELDS = [
+  'eventType',
+  'eventStartDate',
+  'eventEndDate',
+  'venueName',
+  'guestCount',
+  'requirementsNotes',
+] as const;
+
+function sameValue(a: unknown, b: unknown): boolean {
+  if (a instanceof Date && b instanceof Date) {
+    return a.getTime() === b.getTime();
+  }
+  return a === b;
+}
 
 @Injectable()
 export class BookingApplicationService {
@@ -231,6 +261,72 @@ export class BookingApplicationService {
       page: options.page,
       pageSize: options.pageSize,
     });
+  }
+
+  /**
+   * M5-01 — edit booking details. On bookings synced from an external source
+   * (`source !== 'eventos'`) these fields are owned by that source: any real
+   * change is rejected with 409 SOURCE_OWNED. Ops data (workspace, tasks, staff,
+   * inventory, notes) is edited through its own endpoints and is never blocked.
+   */
+  async updateBookingDetails(
+    tenantId: string,
+    bookingId: string,
+    input: UpdateBookingDetailsInput,
+  ): Promise<Result<BookingDto>> {
+    const existing = await this.eventRepository.findById(tenantId, bookingId);
+    if (!existing) {
+      return failure('NOT_FOUND', 'Booking not found.');
+    }
+
+    if (existing.status === 'cancelled' || existing.status === 'completed') {
+      return failure(
+        'INVALID_STATE',
+        'Cannot edit a booking that is cancelled or completed.',
+        { status: existing.status },
+      );
+    }
+
+    const changes: Partial<
+      Pick<EventRecord, (typeof SOURCE_OWNED_BOOKING_FIELDS)[number]>
+    > = {};
+    for (const field of SOURCE_OWNED_BOOKING_FIELDS) {
+      const next = input[field];
+      if (next !== undefined && !sameValue(existing[field], next)) {
+        Object.assign(changes, { [field]: next });
+      }
+    }
+
+    if (existing.source !== 'eventos' && Object.keys(changes).length > 0) {
+      return failure(
+        'SOURCE_OWNED',
+        'This booking is managed by the Enquiries app. Edit this in the Enquiries app.',
+        { bookingId, source: existing.source, fields: Object.keys(changes) },
+      );
+    }
+
+    if (Object.keys(changes).length === 0) {
+      return success(toBookingDto(existing));
+    }
+
+    try {
+      const event = await this.eventRepository.update(
+        tenantId,
+        bookingId,
+        changes,
+        input.version,
+      );
+      return success(toBookingDto(event));
+    } catch (error: unknown) {
+      if (error instanceof ConcurrentModificationError) {
+        return failure(
+          'CONCURRENT_MODIFICATION',
+          'Booking was modified by another request. Reload and retry.',
+          { bookingId },
+        );
+      }
+      throw error;
+    }
   }
 
   async cancelBooking(
