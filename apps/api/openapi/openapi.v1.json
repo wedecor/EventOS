@@ -49547,13 +49547,13 @@
     },
     "/api/v1/integrations/enquiries/sync": {
       "post": {
-        "description": "Machine-to-machine endpoint (no user JWT). Authenticated by `X-EventOS-Signature: v1=<hex HMAC-SHA256(secret, timestamp + \".\" + rawBody)>` with `X-EventOS-Timestamp` (unix seconds, ±300 s) and `X-EventOS-Delivery-Id` (UUID, replay-protected for 24 h). The tenant comes from server config. Responds `200 { ok: true, eventId }`, `{ ok: true, ignored: \"stale\" | \"not_approved_never_synced\" }` or `{ ok: true, duplicate: true }`; 5xx means the sender should retry. Rate limited to 120/min.",
+        "description": "Machine-to-machine endpoint (no user JWT). Authenticated by `X-EventOS-Signature: v1=<hex HMAC-SHA256(secret, timestamp + \".\" + rawBody)>` with `X-EventOS-Timestamp` (unix seconds, ±300 s) and `X-EventOS-Delivery-Id` (opaque id 8–128 chars `[A-Za-z0-9._:-]`, replay-protected for 24 h). The tenant comes from server config. Responds `200 { ok: true, eventId }`, `{ ok: true, ignored: \"stale\" | \"not_approved_never_synced\" }` or `{ ok: true, duplicate: true }`; 5xx means the sender should retry. Rate limited to 300/min (feed throttler only).",
         "operationId": "EnquiriesFeedController_sync",
         "parameters": [
           {
             "name": "X-EventOS-Delivery-Id",
             "in": "header",
-            "description": "UUID; a repeated id returns `{ ok: true, duplicate: true }`.",
+            "description": "Opaque id (UUID or hash-derived); a repeated id returns `{ ok: true, duplicate: true }`.",
             "required": true,
             "schema": {
               "type": "string"
@@ -49958,7 +49958,7 @@
             }
           },
           "400": {
-            "description": "Payload or delivery id failed validation (`VALIDATION_ERROR`)",
+            "description": "Payload or delivery id failed validation (`VALIDATION_ERROR`); `details` lists `{ path, message }` only",
             "content": {
               "application/json": {
                 "schema": {

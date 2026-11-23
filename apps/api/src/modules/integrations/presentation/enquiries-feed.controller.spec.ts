@@ -84,16 +84,38 @@ describe('EnquiriesFeedController (M5-01)', () => {
       });
     });
 
-    it.each([undefined, '', 'not-a-uuid'])(
+    it.each([undefined, '', 'short', 'bad id!', 'id/with/slash'])(
       'rejects delivery id %p with 400 VALIDATION_ERROR before processing',
       async (header) => {
         await expect(controller.sync(header, body)).rejects.toMatchObject({
           status: 400,
+          response: expect.objectContaining({
+            code: 'VALIDATION_ERROR',
+            details: expect.objectContaining({
+              details: expect.arrayContaining([
+                expect.objectContaining({
+                  path: 'X-EventOS-Delivery-Id',
+                  message: expect.any(String),
+                }),
+              ]),
+            }),
+          }),
         });
 
         expect(syncService.sync).not.toHaveBeenCalled();
       },
     );
+
+    it('accepts a hash-formatted opaque delivery id', async () => {
+      syncService.sync.mockResolvedValue(success({ ok: true, eventId: 'e-1' }));
+      const hashId = 'a1b2c3d4e5f6789012345678abcdef01';
+
+      await expect(controller.sync(hashId, body)).resolves.toEqual({
+        ok: true,
+        eventId: 'e-1',
+      });
+      expect(syncService.sync).toHaveBeenCalledWith(hashId, body);
+    });
 
     it('lets processing failures surface as errors so the sender retries (5xx)', async () => {
       syncService.sync.mockRejectedValue(new Error('db down'));

@@ -9,5 +9,5 @@ export const RATE_LIMIT_AUTHENTICATED_PER_MINUTE = 120;
 export const RATE_LIMIT_UNAUTHENTICATED_PER_MINUTE = 30;
 /** `POST /auth/firebase/exchange` — per IP. */
 export const RATE_LIMIT_FIREBASE_EXCHANGE_PER_MINUTE = 10;
-/** `POST /integrations/enquiries/sync` — per IP (the sender's egress). */
-export const RATE_LIMIT_ENQUIRIES_FEED_PER_MINUTE = 120;
+/** `POST /integrations/enquiries/sync` — per IP (HMAC is the real gate). */
+export const RATE_LIMIT_ENQUIRIES_FEED_PER_MINUTE = 300;

@@ -93,7 +93,19 @@ export const enquiriesSyncSchema = z
 
 export type EnquiriesSyncBody = z.infer<typeof enquiriesSyncSchema>;
 
-export const deliveryIdSchema = z.string().uuid();
+/**
+ * Opaque delivery id (replay-protected). Accepts UUID v4 and hash-derived ids
+ * from the Enquiries backfill; Zod 4 `z.string().uuid()` is too strict (RFC 9562
+ * version/variant bits) for those hash-formatted values.
+ */
+export const deliveryIdSchema = z
+  .string()
+  .min(8)
+  .max(128)
+  .regex(
+    /^[A-Za-z0-9._:-]+$/,
+    'Delivery id must be 8–128 chars of A–Z, a–z, 0–9, ".", "_", ":", or "-".',
+  );
 
 export const backfillCheckSchema = z
   .object({
