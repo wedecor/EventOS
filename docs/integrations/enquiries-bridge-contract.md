@@ -51,7 +51,7 @@ request body or header.
 | --- | --- |
 | `X-EventOS-Timestamp` | Unix seconds when the delivery was signed. Rejected if more than **300 s** from server time. |
 | `X-EventOS-Signature` | `v1=<lowercase hex HMAC-SHA256(secret, timestamp + "." + rawBody)>` |
-| `X-EventOS-Delivery-Id` | UUID unique per delivery attempt *series* (reuse the same id when retrying the same payload). Replay-protected for 24 h. |
+| `X-EventOS-Delivery-Id` | Opaque id (8–128 chars of `A–Z a–z 0–9 . _ : -`), unique per delivery attempt *series* (reuse the same id when retrying the same payload). UUID v4 is fine; hash-derived ids are also accepted. Replay-protected for 24 h. |
 
 `rawBody` is the exact byte string sent on the wire — sign it after serialising, do not
 re-serialise. Example (Node):
@@ -149,7 +149,7 @@ against every configured secret for that environment only.
 | 200 | `{ "ok": true, "duplicate": true }` | Same `X-EventOS-Delivery-Id` already processed. Done. |
 | 400 | error envelope `VALIDATION_ERROR` | Payload/headers invalid. **Do not retry unchanged.** |
 | 401 | error envelope `INVALID_SIGNATURE` | Missing/expired/incorrect signature (reason never disclosed). |
-| 429 | `RATE_LIMITED` | Limit is 120/min; back off. |
+| 429 | `RATE_LIMITED` | Limit is 300/min (feed throttler only; HMAC is the auth gate); back off. |
 | 5xx | error envelope | Transient. **Retry** with the same delivery id (processing is idempotent). |
 
 ### Semantics
@@ -191,7 +191,7 @@ against every configured secret for that environment only.
 
 1. In Enquiries, list all approved/completed/cancelled enquiries with their `updatedAt`.
 2. Call `backfill-check` in batches of ≤ 1000.
-3. Re-send each `missing` / `stale` enquiry through the normal signed feed (at most 120/min).
+3. Re-send each `missing` / `stale` enquiry through the normal signed feed (at most 300/min).
 4. Re-run `backfill-check` until `missing` and `stale` are empty.
 
 ---

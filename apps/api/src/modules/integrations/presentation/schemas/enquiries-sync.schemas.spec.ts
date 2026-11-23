@@ -135,13 +135,29 @@ describe('enquiriesSyncSchema (M5-01 contract v1)', () => {
 });
 
 describe('deliveryIdSchema / backfillCheckSchema', () => {
-  it('requires a UUID delivery id', () => {
+  it('accepts UUID v4 and hash-formatted opaque ids; rejects invalid characters', () => {
     expect(
       deliveryIdSchema.safeParse('5b8f6b44-3c58-4e3d-8c1a-0a6e4f1a2b3c')
         .success,
     ).toBe(true);
-    expect(deliveryIdSchema.safeParse('not-a-uuid').success).toBe(false);
+    // Hash-derived backfill id (may lack RFC 9562 version/variant bits).
+    expect(
+      deliveryIdSchema.safeParse('a1b2c3d4e5f6789012345678abcdef01').success,
+    ).toBe(true);
+    expect(
+      deliveryIdSchema.safeParse('957a4c2e-38cf-0123-4567-89abcdef0123')
+        .success,
+    ).toBe(true);
+    expect(deliveryIdSchema.safeParse('short').success).toBe(false);
+    expect(deliveryIdSchema.safeParse('bad id!').success).toBe(false);
+    expect(deliveryIdSchema.safeParse('id/with/slash').success).toBe(false);
     expect(deliveryIdSchema.safeParse(undefined).success).toBe(false);
+  });
+
+  it('rejects 12-hour clock times (HH:mm 24 h only)', () => {
+    const withAmPm = valid();
+    withAmPm.functions[0].time = '6:30 PM';
+    expect(enquiriesSyncSchema.safeParse(withAmPm).success).toBe(false);
   });
 
   it('validates backfill items and caps the list at 1000', () => {

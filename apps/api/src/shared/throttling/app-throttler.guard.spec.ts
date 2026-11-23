@@ -1,9 +1,14 @@
 import { Reflector } from '@nestjs/core';
 import type { ExecutionContext } from '@nestjs/common';
-import { Throttle, type ThrottlerStorage } from '@nestjs/throttler';
+import {
+  SkipThrottle,
+  Throttle,
+  type ThrottlerStorage,
+} from '@nestjs/throttler';
 import { AppThrottlerGuard } from './app-throttler.guard';
 import {
   RATE_LIMIT_AUTHENTICATED_PER_MINUTE,
+  RATE_LIMIT_ENQUIRIES_FEED_PER_MINUTE,
   RATE_LIMIT_FIREBASE_EXCHANGE_PER_MINUTE,
   RATE_LIMIT_UNAUTHENTICATED_PER_MINUTE,
   RATE_LIMIT_WINDOW_MS,
@@ -37,6 +42,17 @@ class DummyController {
     },
   })
   exchange() {
+    return 'ok';
+  }
+
+  @SkipThrottle({ default: true })
+  @Throttle({
+    enquiriesFeed: {
+      limit: RATE_LIMIT_ENQUIRIES_FEED_PER_MINUTE,
+      ttl: RATE_LIMIT_WINDOW_MS,
+    },
+  })
+  enquiriesSync() {
     return 'ok';
   }
 }
@@ -73,6 +89,18 @@ describe('AppThrottlerGuard (M5-01)', () => {
               context.switchToHttp().getRequest<{ user?: unknown }>().user
                 ? RATE_LIMIT_AUTHENTICATED_PER_MINUTE
                 : RATE_LIMIT_UNAUTHENTICATED_PER_MINUTE,
+          },
+          {
+            name: 'enquiriesFeed',
+            ttl: RATE_LIMIT_WINDOW_MS,
+            limit: RATE_LIMIT_ENQUIRIES_FEED_PER_MINUTE,
+            skipIf: (context: ExecutionContext) => {
+              const key = 'THROTTLER:LIMITenquiriesFeed';
+              return (
+                Reflect.getMetadata(key, context.getHandler()) === undefined &&
+                Reflect.getMetadata(key, context.getClass()) === undefined
+              );
+            },
           },
         ],
       },
@@ -142,5 +170,22 @@ describe('AppThrottlerGuard (M5-01)', () => {
         details: { retryAfterSeconds: 30 },
       }),
     });
+  });
+
+  it('allows 100 enquiries-feed requests in a minute (skips global 30/min)', async () => {
+    const ctx = () =>
+      buildContext(DummyController.prototype.enquiriesSync, {
+        ip: '203.0.113.4',
+      });
+
+    for (let i = 0; i < 100; i += 1) {
+      await expect(guard.canActivate(ctx())).resolves.toBe(true);
+    }
+    expect(
+      [...storage.counts.keys()].some((k) => k.startsWith('enquiriesFeed:')),
+    ).toBe(true);
+    expect(
+      [...storage.counts.keys()].some((k) => k.startsWith('default:')),
+    ).toBe(false);
   });
 });

@@ -5,6 +5,7 @@ import {
   Headers,
   HttpCode,
   HttpStatus,
+  Logger,
   Param,
   Post,
   UseGuards,
@@ -16,7 +17,7 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { Throttle } from '@nestjs/throttler';
+import { SkipThrottle, Throttle } from '@nestjs/throttler';
 import { Permissions, Public } from '../../auth';
 import { ZodValidationPipe } from '../../../common/pipes/zod-validation.pipe';
 import { failure } from '../../../shared/application/result';
@@ -48,6 +49,8 @@ import {
 @ApiTags('Integrations')
 @Controller('integrations/enquiries')
 export class EnquiriesFeedController {
+  private readonly logger = new Logger(EnquiriesFeedController.name);
+
   constructor(
     private readonly syncService: EnquiriesSyncApplicationService,
     private readonly adminService: EnquiriesAdminApplicationService,
@@ -56,8 +59,11 @@ export class EnquiriesFeedController {
   @Post('sync')
   @Public()
   @UseGuards(EnquiriesSignatureGuard)
+  // HMAC is the real gate; skip the global unauthenticated 30/min and keep only
+  // the dedicated feed budget (supports backfill bursts).
+  @SkipThrottle({ default: true })
   @Throttle({
-    default: {
+    enquiriesFeed: {
       limit: RATE_LIMIT_ENQUIRIES_FEED_PER_MINUTE,
       ttl: RATE_LIMIT_WINDOW_MS,
     },
@@ -66,7 +72,7 @@ export class EnquiriesFeedController {
   @ApiOperation({
     summary: 'Receive a booking delivery from the Enquiries app (HMAC-signed)',
     description:
-      'Machine-to-machine endpoint (no user JWT). Authenticated by `X-EventOS-Signature: v1=<hex HMAC-SHA256(secret, timestamp + "." + rawBody)>` with `X-EventOS-Timestamp` (unix seconds, ±300 s) and `X-EventOS-Delivery-Id` (UUID, replay-protected for 24 h). The tenant comes from server config. Responds `200 { ok: true, eventId }`, `{ ok: true, ignored: "stale" | "not_approved_never_synced" }` or `{ ok: true, duplicate: true }`; 5xx means the sender should retry. Rate limited to 120/min.',
+      'Machine-to-machine endpoint (no user JWT). Authenticated by `X-EventOS-Signature: v1=<hex HMAC-SHA256(secret, timestamp + "." + rawBody)>` with `X-EventOS-Timestamp` (unix seconds, ±300 s) and `X-EventOS-Delivery-Id` (opaque id 8–128 chars `[A-Za-z0-9._:-]`, replay-protected for 24 h). The tenant comes from server config. Responds `200 { ok: true, eventId }`, `{ ok: true, ignored: "stale" | "not_approved_never_synced" }` or `{ ok: true, duplicate: true }`; 5xx means the sender should retry. Rate limited to 300/min (feed throttler only).',
     security: [],
   })
   @ApiHeader({
@@ -83,7 +89,8 @@ export class EnquiriesFeedController {
   @ApiHeader({
     name: 'X-EventOS-Delivery-Id',
     required: true,
-    description: 'UUID; a repeated id returns `{ ok: true, duplicate: true }`.',
+    description:
+      'Opaque id (UUID or hash-derived); a repeated id returns `{ ok: true, duplicate: true }`.',
   })
   @ApiZodBody(enquiriesSyncSchema)
   @ApiResponse({
@@ -124,7 +131,7 @@ export class EnquiriesFeedController {
   @ApiResponse({
     status: 400,
     description:
-      'Payload or delivery id failed validation (`VALIDATION_ERROR`)',
+      'Payload or delivery id failed validation (`VALIDATION_ERROR`); `details` lists `{ path, message }` only',
     schema: OPENAPI_ERROR_ENVELOPE,
   })
   @ApiResponse({
@@ -143,8 +150,20 @@ export class EnquiriesFeedController {
   ) {
     const deliveryId = deliveryIdSchema.safeParse(deliveryIdHeader);
     if (!deliveryId.success) {
+      const details = deliveryId.error.issues.map((issue) => ({
+        path:
+          issue.path.length > 0
+            ? issue.path.join('.')
+            : 'X-EventOS-Delivery-Id',
+        message: issue.message,
+      }));
+      this.logger.warn('enquiries_feed_delivery_id_invalid', { details });
       return resultToResponse(
-        failure('VALIDATION_ERROR', 'X-EventOS-Delivery-Id must be a UUID.'),
+        failure(
+          'VALIDATION_ERROR',
+          'X-EventOS-Delivery-Id failed validation.',
+          { details },
+        ),
       );
     }
 
