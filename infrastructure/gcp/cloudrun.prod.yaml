@@ -2,6 +2,7 @@
 # substitutes __IMAGE__ and __CORS_ORIGIN__ (plain sed). Deployed with:
 #   gcloud run services replace <rendered.yaml> --project wedecorenquries --region asia-south1
 # No secret values live here — only Secret Manager references (see README step 7).
+# REDIS_URL is intentionally NOT set: Redis is optional and disabled (see README).
 apiVersion: serving.knative.dev/v1
 kind: Service
 metadata:
@@ -16,11 +17,19 @@ spec:
   template:
     metadata:
       annotations:
-        autoscaling.knative.dev/minScale: "1"
-        autoscaling.knative.dev/maxScale: "10"
+        # Low-cost platform: scale to zero when idle, never more than one instance.
+        # maxScale MUST stay 1: with no Redis, rate limiting, login lockout and AI
+        # limits are in-memory per instance (lost on cold start). Raise it only after
+        # setting REDIS_URL (see README §Re-adding Redis).
+        autoscaling.knative.dev/minScale: "0"
+        autoscaling.knative.dev/maxScale: "1"
         run.googleapis.com/cloudsql-instances: wedecorenquries:asia-south1:eventos-pg
-        run.googleapis.com/vpc-access-connector: eventos-connector
+        # Direct VPC egress (no always-on Serverless VPC connector): reaches Cloud SQL
+        # private IP only; public traffic keeps using the default internet path.
+        run.googleapis.com/network-interfaces: '[{"network":"default","subnetwork":"default"}]'
         run.googleapis.com/vpc-access-egress: private-ranges-only
+        # CPU only during requests (the default); never "always allocated".
+        run.googleapis.com/cpu-throttling: "true"
         run.googleapis.com/startup-cpu-boost: "true"
     spec:
       serviceAccountName: eventos-api-prod@wedecorenquries.iam.gserviceaccount.com
@@ -66,11 +75,6 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: eventos-prod-database-url
-                  key: latest
-            - name: REDIS_URL
-              valueFrom:
-                secretKeyRef:
-                  name: eventos-prod-redis-url
                   key: latest
             - name: ENQUIRIES_FEED_SECRET
               valueFrom:

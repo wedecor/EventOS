@@ -11,7 +11,7 @@
 #   CORS_ORIGIN   explicit browser origin(s) for the target environment (no "*")
 # Optional environment (defaults in brackets):
 #   PROJECT_ID [wedecorenquries]  REGION [asia-south1]  AR_REPO [eventos]
-#   SQL_INSTANCE [eventos-pg]     VPC_CONNECTOR [eventos-connector]
+#   SQL_INSTANCE [eventos-pg]     VPC_NETWORK [default]   VPC_SUBNET [default]
 #   IMAGE_TAG [git short SHA / $GITHUB_SHA]   SKIP_BUILD=1 to reuse pushed images
 #   AUTO_ROLLBACK [1]
 #
@@ -31,7 +31,8 @@ PROJECT_ID="${PROJECT_ID:-wedecorenquries}"
 REGION="${REGION:-asia-south1}"
 AR_REPO="${AR_REPO:-eventos}"
 SQL_INSTANCE="${SQL_INSTANCE:-eventos-pg}"
-VPC_CONNECTOR="${VPC_CONNECTOR:-eventos-connector}"
+VPC_NETWORK="${VPC_NETWORK:-default}"
+VPC_SUBNET="${VPC_SUBNET:-default}"
 AUTO_ROLLBACK="${AUTO_ROLLBACK:-1}"
 # Per-environment runtime SA (least privilege: each env accesses only its secrets/bucket).
 RUNTIME_SA="eventos-api-${ENVIRONMENT}@${PROJECT_ID}.iam.gserviceaccount.com"
@@ -68,7 +69,7 @@ gcloud run jobs deploy "$MIGRATE_JOB" \
   --image "$MIGRATOR_IMAGE" \
   --service-account "$RUNTIME_SA" \
   --set-cloudsql-instances "$SQL_CONNECTION" \
-  --vpc-connector "$VPC_CONNECTOR" --vpc-egress private-ranges-only \
+  --network "$VPC_NETWORK" --subnet "$VPC_SUBNET" --vpc-egress private-ranges-only \
   --set-secrets "DATABASE_URL=eventos-${ENVIRONMENT}-database-url:latest" \
   --set-env-vars "NODE_ENV=production" \
   --command node_modules/.bin/prisma --args migrate,deploy \
