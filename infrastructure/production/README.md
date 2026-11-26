@@ -40,7 +40,7 @@ app.eventos.app          api.eventos.app
 | **API** | Image from `apps/api/Dockerfile` | `NODE_ENV=production`, `PORT=4000` |
 | **Admin Portal** | Static files from `apps/web` `pnpm build` → `out/` | Bake `NEXT_PUBLIC_API_BASE_URL` at build time |
 | **PostgreSQL** | Managed + automated backups | `prisma migrate deploy` **before** traffic |
-| **Redis** | Managed | Login throttle, cache, BullMQ |
+| **Redis** | Optional (`REDIS_URL`) | Shared throttle/lockout when enabled; otherwise in-memory |
 | **Object storage** | Private bucket | Prep only; upload SDK later |
 | **Secrets** | Secret manager | Never commit; never bake into images |
 | **TLS** | Edge HTTPS (Cloudflare / LE) | Refresh cookies require Secure tier |
@@ -63,7 +63,7 @@ cp infrastructure/production/.env.production.example infrastructure/production/.
 | `NODE_ENV` | Must be `production` |
 | `PORT` | Prefer `4000` |
 | `DATABASE_URL` | Managed Postgres; prefer `sslmode=require` |
-| `REDIS_HOST` / `REDIS_PORT` / `REDIS_PASSWORD` | Managed Redis |
+| `REDIS_URL` (optional) | Enables Redis; unset = in-memory throttling + Postgres ledger (Cloud Run `maxScale=1`) |
 | `JWT_SECRET` | ≥ 32 characters; unique to production |
 | `CORS_ORIGIN` | Explicit HTTPS Admin Portal origin(s); **no `*`** |
 | `LOG_LEVEL` | Prefer `info` or `warn` |
@@ -101,7 +101,7 @@ These are **inlined into the static bundle**. Rebuild the portal after any API U
 | Endpoint | Purpose | Gate |
 |----------|---------|------|
 | `GET /health` | Liveness | Process up |
-| `GET /health/ready` | Postgres + Redis | Assert JSON `status === "ok"` (HTTP may still be 200 when degraded — docs/16 R3-14) |
+| `GET /health/ready` | Postgres (+ Redis when configured; `redis.status` is `skipped` otherwise) | Assert JSON `status === "ok"` (HTTP may still be 200 when degraded — docs/16 R3-14) |
 
 Swagger (`/docs`) is **disabled** when `NODE_ENV=production`.
 

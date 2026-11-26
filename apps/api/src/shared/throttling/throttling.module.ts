@@ -1,5 +1,8 @@
 import { Module, type ExecutionContext } from '@nestjs/common';
-import { ThrottlerModule } from '@nestjs/throttler';
+import {
+  ThrottlerModule,
+  type ThrottlerModuleOptions,
+} from '@nestjs/throttler';
 import type Redis from 'ioredis';
 import { REDIS_CLIENT } from '../../database/redis.constants';
 import {
@@ -31,7 +34,34 @@ function skipEnquiriesFeedUnlessOptedIn(context: ExecutionContext): boolean {
 }
 
 /**
- * Wires `@nestjs/throttler` to Redis (global REDIS_CLIENT from DatabaseModule).
+ * Redis present → shared {@link RedisThrottlerStorage}. Redis absent → no custom
+ * storage, so Nest's default in-memory ThrottlerStorage is used (per instance;
+ * Cloud Run must run maxScale=1 and counters reset on cold start).
+ */
+export function buildThrottlerOptions(
+  redis: Redis | null,
+): ThrottlerModuleOptions {
+  return {
+    ...(redis ? { storage: new RedisThrottlerStorage(redis) } : {}),
+    throttlers: [
+      {
+        name: 'default',
+        ttl: RATE_LIMIT_WINDOW_MS,
+        limit: resolveDefaultLimit,
+      },
+      {
+        name: 'enquiriesFeed',
+        ttl: RATE_LIMIT_WINDOW_MS,
+        limit: RATE_LIMIT_ENQUIRIES_FEED_PER_MINUTE,
+        skipIf: skipEnquiriesFeedUnlessOptedIn,
+      },
+    ],
+  };
+}
+
+/**
+ * Wires `@nestjs/throttler` to Redis when configured (global REDIS_CLIENT from
+ * DatabaseModule), otherwise to the in-memory default.
  * The guard itself is registered as APP_GUARD in AppModule, after the JWT and
  * permissions guards, so it can key authenticated traffic by user id.
  *
@@ -42,22 +72,7 @@ function skipEnquiriesFeedUnlessOptedIn(context: ExecutionContext): boolean {
   imports: [
     ThrottlerModule.forRootAsync({
       inject: [REDIS_CLIENT],
-      useFactory: (redis: Redis) => ({
-        storage: new RedisThrottlerStorage(redis),
-        throttlers: [
-          {
-            name: 'default',
-            ttl: RATE_LIMIT_WINDOW_MS,
-            limit: resolveDefaultLimit,
-          },
-          {
-            name: 'enquiriesFeed',
-            ttl: RATE_LIMIT_WINDOW_MS,
-            limit: RATE_LIMIT_ENQUIRIES_FEED_PER_MINUTE,
-            skipIf: skipEnquiriesFeedUnlessOptedIn,
-          },
-        ],
-      }),
+      useFactory: (redis: Redis | null) => buildThrottlerOptions(redis),
     }),
   ],
   exports: [ThrottlerModule],

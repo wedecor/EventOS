@@ -109,7 +109,7 @@ import { EnquiriesFeedConfig } from './integrations/application/ports/enquiries-
 import { ConfigEnquiriesFeedConfig } from './integrations/infrastructure/config-enquiries-feed.config';
 import { EnquiriesSyncStore } from './integrations/domain/repositories/enquiries-sync.store';
 import { PrismaEnquiriesSyncStore } from './integrations/infrastructure/persistence/enquiries-sync.store.impl';
-import { RedisEnquiriesDeliveryLog } from './integrations/infrastructure/redis/redis-enquiries-delivery-log';
+import { PostgresEnquiriesDeliveryLog } from './integrations/infrastructure/persistence/postgres-enquiries-delivery-log';
 
 @Module({
   imports: [PrismaModule],
@@ -281,7 +281,12 @@ import { RedisEnquiriesDeliveryLog } from './integrations/infrastructure/redis/r
     },
     // M5-01 — Enquiries feed (temporary bridge)
     { provide: EnquiriesSyncStore, useClass: PrismaEnquiriesSyncStore },
-    { provide: EnquiriesDeliveryLog, useClass: RedisEnquiriesDeliveryLog },
+    // Postgres is the delivery-ledger source of truth (with or without Redis).
+    // RedisEnquiriesDeliveryLog is kept but intentionally not wired.
+    {
+      provide: EnquiriesDeliveryLog,
+      useClass: PostgresEnquiriesDeliveryLog,
+    },
     { provide: EnquiriesFeedConfig, useClass: ConfigEnquiriesFeedConfig },
     {
       provide: AiExecutionRepository,

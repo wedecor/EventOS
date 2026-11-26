@@ -29,11 +29,15 @@ export const envSchema = z
       .default('info'),
     CORS_ORIGIN: z.string().default('*'),
     DATABASE_URL: z.string().min(1),
-    REDIS_HOST: z.string().min(1).default('localhost'),
-    REDIS_PORT: z.coerce.number().int().positive().default(6379),
+    // Redis is OPTIONAL. `REDIS_URL` is the single enable switch: when unset, the
+    // API runs with in-memory throttling / login lockout / AI rate limits and a
+    // Postgres delivery ledger (requires Cloud Run maxScale=1; in-memory state is
+    // lost on cold start). To re-add Memorystore later, set REDIS_URL only
+    // (e.g. `redis://10.0.0.3:6379`, `rediss://…` for TLS) — no code change.
+    // REDIS_HOST / REDIS_PORT are legacy and ignored; local docker uses REDIS_URL.
+    REDIS_HOST: z.string().min(1).optional(),
+    REDIS_PORT: z.coerce.number().int().positive().optional(),
     REDIS_PASSWORD: z.string().optional(),
-    // M5-01 — optional full connection URL (e.g. `redis://10.0.0.3:6379` for
-    // Memorystore, `rediss://…` for TLS). Takes precedence over HOST/PORT/PASSWORD.
     REDIS_URL: optionalTrimmedString.pipe(
       z
         .string()

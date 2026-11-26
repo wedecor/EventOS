@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import Redis from 'ioredis';
+import type Redis from 'ioredis';
 import type { EnvConfig } from '../../../../config/env.schema';
 import { REDIS_CLIENT } from '../../../../database/redis.constants';
 
@@ -12,7 +12,9 @@ export type AiThrottleDecision = {
 };
 
 /**
- * Redis-backed AI usage throttle (M4 market readiness).
+ * AI usage throttle (M4 market readiness). Redis-backed when REDIS_URL is set,
+ * otherwise an in-memory fixed-window counter (per instance; resets on cold
+ * start — Cloud Run must run maxScale=1).
  * Caps Lead Intelligence (and future AI features) per user and per tenant
  * over a fixed hour window to limit cost abuse without blocking core EventOS.
  *
@@ -23,8 +25,13 @@ export type AiThrottleDecision = {
 export class AiUsageThrottleService {
   private readonly logger = new Logger(AiUsageThrottleService.name);
 
+  private readonly windows = new Map<
+    string,
+    { count: number; expiresAt: number }
+  >();
+
   constructor(
-    @Inject(REDIS_CLIENT) private readonly redis: Redis,
+    @Inject(REDIS_CLIENT) private readonly redis: Redis | null,
     private readonly config: ConfigService<EnvConfig, true>,
   ) {}
 
@@ -85,15 +92,46 @@ export class AiUsageThrottleService {
     }
   }
 
-  private async incrementWindow(
+  private incrementWindow(
     key: string,
     windowSeconds: number,
   ): Promise<{ count: number; ttlSeconds: number }> {
-    const count = await this.redis.incr(key);
-    if (count === 1) {
-      await this.redis.expire(key, windowSeconds);
+    return this.redis
+      ? this.incrementRedisWindow(this.redis, key, windowSeconds)
+      : Promise.resolve(this.incrementMemoryWindow(key, windowSeconds));
+  }
+
+  /** Fixed window from the first hit, same semantics as the Redis path. */
+  private incrementMemoryWindow(
+    key: string,
+    windowSeconds: number,
+  ): { count: number; ttlSeconds: number } {
+    const now = Date.now();
+    for (const [k, w] of this.windows) {
+      if (w.expiresAt <= now) this.windows.delete(k);
     }
-    const ttl = await this.redis.ttl(key);
+    const window = this.windows.get(key) ?? {
+      count: 0,
+      expiresAt: now + windowSeconds * 1000,
+    };
+    window.count += 1;
+    this.windows.set(key, window);
+    return {
+      count: window.count,
+      ttlSeconds: Math.max(1, Math.ceil((window.expiresAt - now) / 1000)),
+    };
+  }
+
+  private async incrementRedisWindow(
+    redis: Redis,
+    key: string,
+    windowSeconds: number,
+  ): Promise<{ count: number; ttlSeconds: number }> {
+    const count = await redis.incr(key);
+    if (count === 1) {
+      await redis.expire(key, windowSeconds);
+    }
+    const ttl = await redis.ttl(key);
     return {
       count,
       ttlSeconds: ttl > 0 ? ttl : windowSeconds,

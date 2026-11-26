@@ -34,7 +34,7 @@ export class HealthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary:
-      'Readiness probe — PostgreSQL and Redis connectivity (503 when degraded)',
+      'Readiness probe — PostgreSQL connectivity, plus Redis when configured (503 when degraded)',
     security: [],
   })
   @ApiDataResponse(200, 'Dependency readiness status')

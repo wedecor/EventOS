@@ -5,6 +5,9 @@ import {
   InMemoryEnquiriesDeliveryLog,
   InMemoryEnquiriesSyncStore,
 } from '../../infrastructure/testing/in-memory-enquiries-sync.store';
+import { createFakeIntegrationDeliveryPrisma } from '../../infrastructure/testing/fake-integration-delivery-prisma';
+import { PostgresEnquiriesDeliveryLog } from '../../infrastructure/persistence/postgres-enquiries-delivery-log';
+import type { EnquiriesDeliveryLog } from '../ports/enquiries-delivery-log';
 import { EventFunctionUsageQuery } from '../../../../shared/application/ports/event-function-usage.query';
 import type {
   EnquiriesFunctionInput,
@@ -79,6 +82,9 @@ describe('EnquiriesSyncApplicationService (M5-01)', () => {
   let audit: jest.Mocked<Pick<AuditLogService, 'record'>>;
   let inUse: Set<string>;
   let service: EnquiriesSyncApplicationService;
+  let buildService: (
+    log: EnquiriesDeliveryLog,
+  ) => EnquiriesSyncApplicationService;
 
   const send = async (
     body: EnquiriesSyncPayload,
@@ -115,15 +121,17 @@ describe('EnquiriesSyncApplicationService (M5-01)', () => {
       findInUseFunctionIds: () => Promise.resolve(new Set(inUse)),
     };
 
-    service = new EnquiriesSyncApplicationService(
-      store,
-      deliveryLog,
-      usage,
-      bookingService,
-      publisher,
-      audit as unknown as AuditLogService,
-      { secrets: ['s'.repeat(32)], tenantId: TENANT_ID },
-    );
+    buildService = (log) =>
+      new EnquiriesSyncApplicationService(
+        store,
+        log,
+        usage,
+        bookingService,
+        publisher,
+        audit as unknown as AuditLogService,
+        { secrets: ['s'.repeat(32)], tenantId: TENANT_ID },
+      );
+    service = buildService(deliveryLog);
   });
 
   describe('creating a booking', () => {
@@ -256,6 +264,41 @@ describe('EnquiriesSyncApplicationService (M5-01)', () => {
       expect(response).toEqual({ ok: true, duplicate: true });
       expect(store.transactionCount).toBe(transactions);
       expect(customers()[0].displayName).toBe('Asha Rao');
+    });
+
+    describe('with the Postgres delivery ledger', () => {
+      beforeEach(() => {
+        const { prisma } = createFakeIntegrationDeliveryPrisma();
+        service = buildService(
+          new PostgresEnquiriesDeliveryLog(prisma, {
+            secrets: [],
+            tenantId: TENANT_ID,
+          }),
+        );
+      });
+
+      it('acknowledges a duplicate delivery id with { duplicate: true }', async () => {
+        const deliveryId = nextDeliveryId();
+        await send(payload(), deliveryId);
+        const transactions = store.transactionCount;
+
+        const response = await send(payload(), deliveryId);
+
+        expect(response).toEqual({ ok: true, duplicate: true });
+        expect(store.transactionCount).toBe(transactions);
+      });
+
+      it('processes the sender retry after a failed delivery', async () => {
+        const deliveryId = nextDeliveryId();
+        store.failNextTransactionWith = new Error('connection reset');
+        await expect(service.sync(deliveryId, payload())).rejects.toThrow(
+          'connection reset',
+        );
+
+        const response = await send(payload(), deliveryId);
+
+        expect(response).toEqual({ ok: true, eventId: events()[0].id });
+      });
     });
 
     it('releases the claim when processing fails so the sender retry succeeds', async () => {

@@ -732,6 +732,22 @@ model ExternalRecordLink {
   @@map("external_record_links")
 }
 
+/// Low-cost platform — replay ledger + operational log for Enquiries feed
+/// deliveries (source of truth; Redis is not required). Rows are claimed on
+/// receipt (outcome NULL), completed by `record`, and purged lazily after 7 days.
+model IntegrationDelivery {
+  deliveryId String   @id @map("delivery_id")
+  tenantId   String   @map("tenant_id") @db.Uuid
+  source     String
+  receivedAt DateTime @default(now()) @map("received_at")
+  outcome    String?
+  enquiryId  String?  @map("enquiry_id")
+  detail     String?
+
+  @@index([receivedAt])
+  @@map("integration_deliveries")
+}
+
 // ---------------------------------------------------------------------------
 // Sprint 1 — Payment (EP1-BR-001 advance gating)
 // ---------------------------------------------------------------------------

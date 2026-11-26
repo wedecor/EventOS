@@ -21,12 +21,12 @@ export type DeliverySummary = {
 };
 
 /**
- * Replay ledger + operational log for feed deliveries. Backed by Redis: it is
- * best-effort (fails open) because ordering by `sourceUpdatedAt` already makes
- * processing idempotent — the ledger only avoids redundant work.
+ * Replay ledger + operational log for feed deliveries. Postgres is the source of
+ * truth (`PostgresEnquiriesDeliveryLog`); ordering by `sourceUpdatedAt` already
+ * makes processing idempotent — the ledger only avoids redundant work.
  */
 export abstract class EnquiriesDeliveryLog {
-  /** Claim a delivery id. `true` when first seen; `false` for a duplicate (24 h). */
+  /** Claim a delivery id. `true` when first seen; `false` for a duplicate. */
   abstract claim(deliveryId: string): Promise<boolean>;
 
   /** Release a claim after a failed delivery so the sender's retry is processed. */

@@ -8,6 +8,7 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
 import type { EnvConfig } from '../config';
+import { buildPoolConfig } from './pool-config';
 
 @Injectable()
 export class PrismaService
@@ -21,7 +22,8 @@ export class PrismaService
     const nodeEnv = configService.get('NODE_ENV', { infer: true });
     const isDevelopment = nodeEnv === 'development';
 
-    const adapter = new PrismaPg({ connectionString: databaseUrl });
+    // Cloud SQL db-f1-micro has ~25 max connections: cap the pool (see pool-config.ts).
+    const adapter = new PrismaPg(buildPoolConfig(databaseUrl));
 
     super({
       adapter,

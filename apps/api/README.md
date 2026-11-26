@@ -31,7 +31,7 @@ docker compose -f infrastructure/docker/docker-compose.yml up -d
 This starts:
 
 - **PostgreSQL** on `localhost:5432` (user/password/db: `eventos`)
-- **Redis** on `localhost:6379`
+- **Redis** on `localhost:6379` (optional — set `REDIS_URL=redis://localhost:6379` to use it; unset = in-memory)
 
 Compose also defines an optional **API** service image build (R2-02); for local `pnpm start:dev`, only Postgres/Redis are required.
 
@@ -68,7 +68,7 @@ The API listens on `http://localhost:3000` by default (`PORT`).
 | Method | Path            | Description |
 | ------ | --------------- | ----------- |
 | GET    | `/health`       | Liveness probe |
-| GET    | `/health/ready` | Readiness — PostgreSQL + Redis |
+| GET    | `/health/ready` | Readiness — PostgreSQL (+ Redis when `REDIS_URL` is set) |
 | GET    | `/docs`         | Swagger UI |
 | GET    | `/docs/json`    | OpenAPI JSON (runtime) |
 | *      | `/api/v1/...`   | Authenticated business API (Bearer JWT; see Swagger) |
