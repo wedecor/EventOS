@@ -36,7 +36,7 @@ PostgreSQL    Redis       object storage
 |-----------|---------------------|-------|
 | **API** | Container from `apps/api/Dockerfile` | `NODE_ENV=staging`, listen `PORT=4000` |
 | **PostgreSQL** | Managed instance | Migrations via `pnpm exec prisma migrate deploy` **before** traffic |
-| **Redis** | Managed instance | Login throttle, cache, BullMQ |
+| **Redis** | Optional (`REDIS_URL`) | Shared throttle/lockout when enabled; otherwise in-memory |
 | **Object storage** | S3-compatible bucket | Receipts/proofs — **prep documented in R2-09**; app SDK/upload wiring later |
 | **Secrets** | Secret manager / encrypted env | Never commit real values; never bake into images |
 | **DNS** | `staging.eventos.app` (docs/16) | Provider-specific; out of scope here |
@@ -49,7 +49,7 @@ PostgreSQL    Redis       object storage
 | Endpoint | Purpose | Staging probe |
 |----------|---------|---------------|
 | `GET /health` | Liveness — process up | Every ~30s (docs/16) |
-| `GET /health/ready` | Readiness — PostgreSQL + Redis | Every ~30s (docs/16) |
+| `GET /health/ready` | Readiness — PostgreSQL (+ Redis when configured) | Every ~30s (docs/16) |
 | `GET /docs` | Swagger UI | Optional; restrict in locked-down staging if desired |
 
 A staging host is considered **ready for UAT smoke** only when `/health/ready` returns success after migrations.
@@ -74,7 +74,7 @@ These are validated by `apps/api` `env.schema` when `NODE_ENV=staging`:
 | `NODE_ENV` | Must be `staging` |
 | `PORT` | Prefer `4000` (docs/16) |
 | `DATABASE_URL` | Managed Postgres connection string |
-| `REDIS_HOST` / `REDIS_PORT` / `REDIS_PASSWORD` | Managed Redis (app does **not** use `REDIS_URL` today) |
+| `REDIS_URL` (optional) | Enables Redis; unset = in-memory throttling + Postgres ledger (Cloud Run `maxScale=1`) |
 | `JWT_SECRET` | ≥ 32 characters |
 | `CORS_ORIGIN` | Explicit non-wildcard origin(s), e.g. `https://staging.eventos.app` (app uses `CORS_ORIGIN`, not `CORS_ORIGINS`) |
 | `LOG_LEVEL` | Prefer `info` or `warn` |
@@ -141,7 +141,7 @@ Print the non-destructive deploy preparation steps:
 | docs/16 name | Current API | Staging template |
 |--------------|-------------|------------------|
 | `CORS_ORIGINS` | `CORS_ORIGIN` | Uses `CORS_ORIGIN` |
-| `REDIS_URL` | `REDIS_HOST` + `REDIS_PORT` (+ optional password) | Uses host/port/password |
+| `REDIS_URL` | `REDIS_URL` (optional; the enable switch) | Unset by default |
 | `JWT_REFRESH_SECRET` | Not used | Listed as future / docs-only |
 | Node 20 in Dockerfile snippet | Node 22 image (R2-01) | Node 22 |
 

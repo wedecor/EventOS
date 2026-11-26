@@ -88,4 +88,69 @@ describe('AiUsageThrottleService', () => {
     const decision = await service.consume(tenantId, userId, feature);
     expect(decision.allowed).toBe(true);
   });
+
+  describe('in-memory (no Redis)', () => {
+    function buildMemory(userLimit: number, tenantLimit = 200) {
+      const config = {
+        get: jest.fn((key: string) =>
+          key === 'AI_RATE_LIMIT_PER_USER_PER_HOUR'
+            ? userLimit
+            : key === 'AI_RATE_LIMIT_PER_TENANT_PER_HOUR'
+              ? tenantLimit
+              : 3600,
+        ),
+      };
+      return new AiUsageThrottleService(null, config as never);
+    }
+
+    beforeEach(() => {
+      jest.useFakeTimers();
+      jest.setSystemTime(new Date('2026-01-01T00:00:00Z'));
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it('blocks the per-user limit and reports time until the window resets', async () => {
+      const service = buildMemory(2);
+      expect((await service.consume(tenantId, userId, feature)).allowed).toBe(
+        true,
+      );
+      expect((await service.consume(tenantId, userId, feature)).allowed).toBe(
+        true,
+      );
+      jest.advanceTimersByTime(600_000);
+
+      expect(await service.consume(tenantId, userId, feature)).toEqual({
+        allowed: false,
+        retryAfterSeconds: 3000,
+        scope: 'user',
+      });
+    });
+
+    it('starts a fresh window after expiry', async () => {
+      const service = buildMemory(1);
+      await service.consume(tenantId, userId, feature);
+      expect((await service.consume(tenantId, userId, feature)).allowed).toBe(
+        false,
+      );
+
+      jest.advanceTimersByTime(3_601_000);
+
+      expect((await service.consume(tenantId, userId, feature)).allowed).toBe(
+        true,
+      );
+    });
+
+    it('enforces the per-tenant limit across users', async () => {
+      const service = buildMemory(100, 2);
+      await service.consume(tenantId, 'user-a', feature);
+      await service.consume(tenantId, 'user-b', feature);
+
+      const decision = await service.consume(tenantId, 'user-c', feature);
+
+      expect(decision).toMatchObject({ allowed: false, scope: 'tenant' });
+    });
+  });
 });

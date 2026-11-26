@@ -178,7 +178,7 @@ export class EnquiriesFeedController {
   @ApiOperation({
     summary: 'Enquiries feed status (owner/admin)',
     description:
-      'Last delivery time, delivery counts for the last 24 h (processed / stale / ignored / failed) and the last 20 errors. Backed by Redis: counts reset if Redis is flushed.',
+      'Last delivery time, delivery counts for the last 24 h (processed / stale / ignored / failed) and the last 20 errors. Backed by the Postgres delivery ledger (kept 7 days).',
   })
   @ApiDataResponse(200, 'Feed status retrieved')
   @ApiStandardErrors()

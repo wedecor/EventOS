@@ -2,8 +2,10 @@ import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
+import type Redis from 'ioredis';
 import type { EnvConfig } from '../../config';
 import { PrismaModule } from '../../database/prisma.module';
+import { REDIS_CLIENT } from '../../database/redis.constants';
 import { AuditModule } from '../../shared/audit';
 import { BreachedPasswordChecker } from './application/ports/breached-password.checker';
 import { FirebaseAuthPort } from './application/ports/firebase-auth.port';
@@ -26,6 +28,7 @@ import { HibpBreachedPasswordChecker } from './infrastructure/hibp.breached-pass
 import { JwtStrategy } from './infrastructure/jwt.strategy';
 import { ExternalIdentityRepositoryImpl } from './infrastructure/persistence/external-identity.repository.impl';
 import { LoginAttemptRepositoryImpl } from './infrastructure/persistence/login-attempt.repository.impl';
+import { InMemoryLoginAttemptRepository } from './infrastructure/persistence/in-memory-login-attempt.repository';
 import { PasswordHistoryRepositoryImpl } from './infrastructure/persistence/password-history.repository.impl';
 import { SessionRepositoryImpl } from './infrastructure/persistence/session.repository.impl';
 import { UserRepositoryImpl } from './infrastructure/persistence/user.repository.impl';
@@ -58,8 +61,16 @@ import { ExternalIdentityController } from './presentation/external-identity.con
   providers: [
     { provide: UserRepository, useClass: UserRepositoryImpl },
     { provide: SessionRepository, useClass: SessionRepositoryImpl },
-    // R1-05 — Redis-backed login brute-force state (reuses the global REDIS_CLIENT).
-    { provide: LoginAttemptRepository, useClass: LoginAttemptRepositoryImpl },
+    // R1-05 — login brute-force state: Redis when REDIS_URL is set (global
+    // REDIS_CLIENT), otherwise in-memory (single instance; lost on cold start).
+    {
+      provide: LoginAttemptRepository,
+      inject: [REDIS_CLIENT],
+      useFactory: (redis: Redis | null): LoginAttemptRepository =>
+        redis
+          ? new LoginAttemptRepositoryImpl(redis)
+          : new InMemoryLoginAttemptRepository(),
+    },
     // R1-10 — password history persistence + HIBP breach lookup adapter.
     {
       provide: PasswordHistoryRepository,

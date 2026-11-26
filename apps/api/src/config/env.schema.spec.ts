@@ -473,6 +473,14 @@ describe('validateEnv — REDIS_URL (M5-01)', () => {
     ).toBeUndefined();
   });
 
+  it('does not require REDIS_HOST / REDIS_PORT (Redis disabled)', () => {
+    const config = validateEnv(baseConfig);
+
+    expect(config.REDIS_HOST).toBeUndefined();
+    expect(config.REDIS_PORT).toBeUndefined();
+    expect(config.REDIS_URL).toBeUndefined();
+  });
+
   it('accepts rediss:// and rejects other schemes', () => {
     expect(
       validateEnv({ ...baseConfig, REDIS_URL: 'rediss://host:6380' }).REDIS_URL,

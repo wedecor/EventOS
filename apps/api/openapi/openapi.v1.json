@@ -50048,7 +50048,7 @@
     },
     "/api/v1/integrations/enquiries/status": {
       "get": {
-        "description": "Last delivery time, delivery counts for the last 24 h (processed / stale / ignored / failed) and the last 20 errors. Backed by Redis: counts reset if Redis is flushed.",
+        "description": "Last delivery time, delivery counts for the last 24 h (processed / stale / ignored / failed) and the last 20 errors. Backed by the Postgres delivery ledger (kept 7 days).",
         "operationId": "EnquiriesFeedController_status",
         "parameters": [],
         "responses": {
@@ -68492,7 +68492,7 @@
           }
         },
         "security": [],
-        "summary": "Readiness probe — PostgreSQL and Redis connectivity (503 when degraded)",
+        "summary": "Readiness probe — PostgreSQL connectivity, plus Redis when configured (503 when degraded)",
         "tags": [
           "Health"
         ]

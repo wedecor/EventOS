@@ -49,7 +49,7 @@ Repository preparation only — checkboxes are for the operator executing the de
 ## D. Redis
 
 - [ ] Managed Redis provisioned
-- [ ] `REDIS_HOST` / `REDIS_PORT` / `REDIS_PASSWORD` wired to API
+- [ ] `REDIS_URL` set only if Redis is used (optional; unset requires Cloud Run `maxScale=1`)
 - [ ] Network access restricted to API host / VPC
 
 ---

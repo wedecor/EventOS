@@ -80,10 +80,10 @@ if [[ "${CORS_ORIGIN:-}" == http://* ]]; then
   fail=1
 fi
 require DATABASE_URL
+# Redis is optional (REDIS_URL is the enable switch). Unset → in-memory
+# throttle/lockout + Postgres ledger, which requires Cloud Run maxScale=1.
 if is_placeholder "${REDIS_URL-}"; then
-  # Discrete host/port, or a single REDIS_URL (M5-01, Memorystore on Cloud Run).
-  require REDIS_HOST
-  require REDIS_PORT
+  echo "OK (optional): REDIS_URL unset — in-memory throttling, requires maxScale=1"
 else
   echo "OK: REDIS_URL"
 fi

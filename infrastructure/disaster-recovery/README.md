@@ -163,7 +163,7 @@ Run quarterly (record it in [quarterly-dr-drill-template.md](./quarterly-dr-dril
 ### Redis — recovery procedure
 
 1. If Redis is corrupted/unavailable: provision new managed Redis (or restore last RDB if required).
-2. Update `REDIS_HOST` / `REDIS_PORT` / `REDIS_PASSWORD`.
+2. Update `REDIS_URL` (and `REDIS_PASSWORD` if used). If Redis is not configured, nothing to recover.
 3. Restart API; expect re-warmed cache and reset throttle counters / ephemeral queue state.
 4. Confirm `/health/ready` shows Redis `up`.
 

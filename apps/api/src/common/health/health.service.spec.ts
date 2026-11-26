@@ -60,4 +60,29 @@ describe('HealthService', () => {
 
     expect(result.checks.redis.status).toBe('down');
   });
+
+  describe('without Redis (REDIS_URL unset)', () => {
+    beforeEach(() => {
+      service = new HealthService(prisma as unknown as PrismaService, null);
+    });
+
+    it('is ready on postgres alone and marks redis as skipped', async () => {
+      await expect(service.readiness()).resolves.toEqual({
+        status: 'ok',
+        checks: {
+          postgres: { status: 'up', latencyMs: expect.any(Number) },
+          redis: { status: 'skipped' },
+        },
+      });
+    });
+
+    it('is still degraded when postgres is down', async () => {
+      prisma.$queryRaw.mockRejectedValue(new Error('db down'));
+
+      const result = await service.readiness();
+
+      expect(result.status).toBe('degraded');
+      expect(result.checks.redis.status).toBe('skipped');
+    });
+  });
 });
