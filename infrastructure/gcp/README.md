@@ -400,6 +400,63 @@ done
 Cloud Run YAML already sets `STORAGE_PROVIDER=gcs` and `STORAGE_BUCKET=eventos-<env>-files`.
 Env validation refuses `STORAGE_PROVIDER=local` in staging/production.
 
+## Cost
+
+Everything still billable after the re-platform (approx. monthly, asia-south1, ₹85 ≈ US$1).
+Figures are estimates for a 2-user team; check **Billing → Reports** for actuals.
+
+| Resource | Approx. ₹/month | Notes |
+| --- | --- | --- |
+| Cloud SQL `eventos-pg` — db-f1-micro compute | ₹850–950 | Always on (the one real fixed cost). Shared-core, ~25 connections |
+| Cloud SQL storage (20 GB SSD) | ~₹300 | Disk size can never be shrunk; auto-increase only grows it |
+| Cloud SQL backups + 7-day PITR logs | ₹50–150 | Grows with DB size; 129 bookings is tiny |
+| Cloud Run `eventos-api-staging` / `-prod` (min 0, max 1) | ₹0–50 | Inside the free tier (2M requests, 180k vCPU-s, 360k GiB-s) for this traffic; no idle billing |
+| Cloud Run jobs (migrate/seed) | ₹0 | Seconds per deploy |
+| Artifact Registry (`eventos`) | ₹0–100 | Two images per deploy (~0.3–0.5 GB each); first 0.5 GB free. Add a cleanup policy to keep the last ~5 tags |
+| Secret Manager (~8 secrets) | ₹0–50 | First 6 active versions free; then ~US$0.06/version; access ops free under 10k/month |
+| Cloud Storage (`eventos-*-files`) | ₹0–10 | Pennies per GB; versioning with 30-day noncurrent cleanup |
+| Networking | ~₹0–20 | Direct VPC egress and Cloud SQL private IP are free; internet egress free for the first 1 GiB/month |
+| Firebase Auth / Identity Toolkit | ₹0 | Free tier (login bridge only) |
+| **Total** | **≈ ₹1,300–1,700** | Budget alert below is ₹2,000 |
+
+Removed (no longer billed once deleted): Memorystore Redis `eventos-redis`, Serverless VPC
+access connector `eventos-connector`, always-on prod instance (`minScale: 1`).
+
+### Billing budget guardrail (₹2,000/month, alerts at 50% / 90% / 100%)
+
+Budgets **alert only** — they do not stop spend. Alerts go to billing admins by e-mail.
+Requires `billingbudgets.googleapis.com` and the Billing Account Administrator role; the
+amount currency must match the billing account (INR):
+
+```bash
+gcloud billing budgets create \
+  --billing-account=01B901-8D274C-52490E \
+  --display-name="EventOS monthly budget" \
+  --budget-amount=2000INR \
+  --calendar-period=month \
+  --filter-projects="projects/${PROJECT_ID}" \
+  --threshold-rule=percent=0.5 \
+  --threshold-rule=percent=0.9 \
+  --threshold-rule=percent=1.0
+```
+
+## Decommissioning the old Redis path (one-time)
+
+Memorystore and the VPC connector are already deleted. Remove the now-unused Redis secrets
+and any leftover references (idempotent; `--quiet` skips the prompt):
+
+```bash
+gcloud secrets delete eventos-staging-redis-url --project="$PROJECT_ID" --quiet
+gcloud secrets delete eventos-prod-redis-url    --project="$PROJECT_ID" --quiet
+
+# Confirm nothing billable remains:
+gcloud redis instances list --region="$REGION"
+gcloud compute networks vpc-access connectors list --region="$REGION"
+```
+
+Deploy the new YAMLs **before** (or immediately after) deleting a secret that a running
+revision still references; revisions created from the new YAMLs no longer mount it.
+
 ## Known limitations
 
 - Email and AI providers are `none` in these definitions; enable them via the YAML when
